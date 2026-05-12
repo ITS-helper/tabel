@@ -989,6 +989,99 @@ body[data-mode="edit"] .pill:hover {
   outline-color: var(--accent);
 }
 
+/* Выпадающий список кодов при редактировании ячейки */
+.schedule-cell-picker {
+  position: fixed;
+  z-index: 10050;
+  min-width: 220px;
+  max-width: min(360px, 92vw);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+}
+
+[data-theme="dark"] .schedule-cell-picker {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Диалог пароля режима редактирования */
+.edit-pwd-dialog {
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  max-width: min(400px, 94vw);
+  background: transparent;
+  box-shadow: none;
+}
+
+.edit-pwd-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.edit-pwd-dialog__panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  padding: 18px 20px 16px;
+}
+
+.edit-pwd-dialog__title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.edit-pwd-dialog__hint {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.edit-pwd-dialog__err {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  color: #b91c1c;
+}
+
+[data-theme="dark"] .edit-pwd-dialog__err {
+  color: #fca5a5;
+}
+
+.edit-pwd-dialog__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.edit-pwd-dialog__label-text {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.edit-pwd-dialog__input {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.edit-pwd-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* Диалог «Объекты и состав» */
 .team-dialog {
   padding: 0;

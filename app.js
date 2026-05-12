@@ -40,8 +40,6 @@ const LEGEND = [
   { code: "ИНК", label: "Иркутская нефтяная компания", bg: "#a5b4fc", fg: "#312e81" },
 ];
 
-const CODE_ORDER = LEGEND.map((l) => l.code);
-
 /** Учитываются в строке «Всего на смене» (объекты / выезд, без отпуска и офиса) */
 const ON_SHIFT_CODES = new Set([
   "СПГ",
@@ -75,6 +73,13 @@ const DEFAULT_PILOT_NAMES = new Set([
 
 const STORAGE_SECTION_ASSIGN = "ww-section-overrides";
 const STORAGE_SECTION_TITLES = "ww-section-titles";
+/** Сессия браузера: после ввода пароля режим редактирования доступен до закрытия вкладки */
+const STORAGE_EDIT_SESSION = "ww-edit-session";
+const EDIT_PASSWORD = "2323";
+
+let scheduleCellPickerEl = null;
+let scheduleCellPickerDocFn = null;
+let scheduleCellPickerKeyFn = null;
 
 function loadSectionAssignOverrides() {
   try {
@@ -543,15 +548,213 @@ function isWeekend(year, monthIndex, day) {
   return dow === 0 || dow === 6;
 }
 
-function cycleCode(current) {
-  if (!current) return CODE_ORDER[0];
-  const idx = CODE_ORDER.indexOf(current);
-  if (idx === -1) return CODE_ORDER[0];
-  if (idx === CODE_ORDER.length - 1) return "";
-  return CODE_ORDER[idx + 1];
+const STORAGE_UI_BLOCKS = "ww-ui-blocks";
+
+function isEditSessionUnlocked() {
+  try {
+    return sessionStorage.getItem(STORAGE_EDIT_SESSION) === "1";
+  } catch (_) {
+    return false;
+  }
 }
 
-const STORAGE_UI_BLOCKS = "ww-ui-blocks";
+function unlockEditSession() {
+  try {
+    sessionStorage.setItem(STORAGE_EDIT_SESSION, "1");
+  } catch (_) {}
+}
+
+function applyMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll(".segmented__btn").forEach((b) =>
+    b.classList.toggle("is-active", b.dataset.mode === state.mode)
+  );
+  document.body.dataset.mode = state.mode;
+  if (mode === "view") closeScheduleCellPicker();
+  render();
+}
+
+function bindEditPasswordDialog() {
+  const dlg = document.getElementById("editPwdDialog");
+  const inp = document.getElementById("editPwdInput");
+  const ok = document.getElementById("editPwdOk");
+  const cancel = document.getElementById("editPwdCancel");
+  const err = document.getElementById("editPwdErr");
+  if (!dlg || !inp || !ok || !cancel || !err) return;
+
+  const hideErr = () => {
+    err.hidden = true;
+    err.textContent = "";
+  };
+
+  const trySubmit = () => {
+    hideErr();
+    if (inp.value === EDIT_PASSWORD) {
+      unlockEditSession();
+      dlg.close();
+      inp.value = "";
+      applyMode("edit");
+    } else {
+      err.textContent = "Неверный пароль.";
+      err.hidden = false;
+      inp.select();
+    }
+  };
+
+  ok.addEventListener("click", trySubmit);
+  cancel.addEventListener("click", () => {
+    hideErr();
+    inp.value = "";
+    dlg.close();
+  });
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      trySubmit();
+    }
+  });
+  dlg.addEventListener("close", () => {
+    hideErr();
+    inp.value = "";
+  });
+}
+
+function openEditPasswordDialog() {
+  const dlg = document.getElementById("editPwdDialog");
+  const inp = document.getElementById("editPwdInput");
+  const err = document.getElementById("editPwdErr");
+  if (!dlg || !inp) return;
+  if (err) {
+    err.hidden = true;
+    err.textContent = "";
+  }
+  inp.value = "";
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else alert("Обновите браузер: нужна поддержка диалога для ввода пароля.");
+  setTimeout(() => inp.focus(), 0);
+}
+
+function ensureScheduleCellPicker() {
+  if (scheduleCellPickerEl) return scheduleCellPickerEl;
+  const el = document.createElement("select");
+  el.className = "schedule-cell-picker";
+  el.hidden = true;
+  el.setAttribute("aria-label", "Отметка объекта");
+  document.body.appendChild(el);
+  scheduleCellPickerEl = el;
+  return el;
+}
+
+function closeScheduleCellPicker() {
+  const el = scheduleCellPickerEl;
+  if (!el || el.hidden) return;
+  el.hidden = true;
+  el.onchange = null;
+  if (scheduleCellPickerDocFn) {
+    document.removeEventListener("mousedown", scheduleCellPickerDocFn, true);
+    scheduleCellPickerDocFn = null;
+  }
+  if (scheduleCellPickerKeyFn) {
+    document.removeEventListener("keydown", scheduleCellPickerKeyFn, true);
+    scheduleCellPickerKeyFn = null;
+  }
+}
+
+function openScheduleCellPicker(rowIndex, day, pillEl) {
+  if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
+  const data = getDataset();
+  if (!data) return;
+  closeScheduleCellPicker();
+  const sel = ensureScheduleCellPicker();
+  sel.innerHTML = "";
+  const oEmpty = document.createElement("option");
+  oEmpty.value = "";
+  oEmpty.textContent = "— пусто";
+  sel.appendChild(oEmpty);
+  for (const item of LEGEND) {
+    const o = document.createElement("option");
+    o.value = item.code;
+    o.textContent = `${item.code} — ${item.label}`;
+    sel.appendChild(o);
+  }
+  const current = data.employees[rowIndex].schedule[day] ?? "";
+  sel.value = LEGEND.some((l) => l.code === current) ? current : "";
+
+  const r = pillEl.getBoundingClientRect();
+  const pad = 4;
+  const w = Math.max(220, Math.min(Math.max(r.width, 240), 320));
+  let left = r.left;
+  let top = r.bottom + pad;
+  if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+  if (left < 8) left = 8;
+  const estH = 200;
+  if (top + estH > window.innerHeight - 8) top = Math.max(8, r.top - estH - pad);
+  sel.style.left = `${left}px`;
+  sel.style.top = `${top}px`;
+  sel.style.width = `${w}px`;
+  sel.dataset.rowIndex = String(rowIndex);
+  sel.dataset.day = String(day);
+  sel._pillEl = pillEl;
+  sel.hidden = false;
+
+  scheduleCellPickerKeyFn = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeScheduleCellPicker();
+    }
+  };
+  document.addEventListener("keydown", scheduleCellPickerKeyFn, true);
+
+  setTimeout(() => {
+    scheduleCellPickerDocFn = (e) => {
+      if (e.target === sel || sel.contains(e.target)) return;
+      closeScheduleCellPicker();
+    };
+    document.addEventListener("mousedown", scheduleCellPickerDocFn, true);
+  }, 0);
+
+  sel.onchange = () => {
+    const next = sel.value;
+    const ri = Number(sel.dataset.rowIndex, 10);
+    const d = Number(sel.dataset.day, 10);
+    applyScheduleCellValue(ri, d, next, sel._pillEl);
+    closeScheduleCellPicker();
+  };
+
+  requestAnimationFrame(() => {
+    sel.focus();
+    if (typeof sel.showPicker === "function") {
+      try {
+        sel.showPicker();
+      } catch (_) {}
+    }
+  });
+}
+
+function applyScheduleCellValue(rowIndex, day, next, pillEl) {
+  if (!pillEl) return;
+  if (!state.scheduleOverrides) state.scheduleOverrides = {};
+  if (!state.scheduleOverrides[rowIndex]) state.scheduleOverrides[rowIndex] = {};
+  state.scheduleOverrides[rowIndex][day] = next;
+
+  if (next) {
+    pillEl.textContent = next;
+    pillEl.className = "pill";
+    const st = getLegendStyle(next);
+    pillEl.style.background = st.bg;
+    pillEl.style.color = st.fg;
+    pillEl.setAttribute("aria-label", `Отметка ${next}`);
+    pillEl.title = "Код: " + next + ". Клик — выбрать другой объект из списка";
+  } else {
+    pillEl.textContent = EMPTY_MARK;
+    pillEl.className = "pill pill--empty";
+    pillEl.style.background = "";
+    pillEl.style.color = "";
+    pillEl.setAttribute("aria-label", "Нет отметки");
+    pillEl.title = "Клик — выбрать объект из списка";
+  }
+  updateFooterTotals();
+}
 
 function loadUiBlocks() {
   try {
@@ -650,6 +853,7 @@ function init() {
   buildMonthSelect();
   buildSectionNav();
   bindControls();
+  bindEditPasswordDialog();
   bindStickyTableClick();
   bindTeamDialog();
   bindCollapsiblePanels();
@@ -788,10 +992,12 @@ function bindControls() {
 
   document.querySelectorAll(".segmented__btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      state.mode = btn.dataset.mode;
-      document.querySelectorAll(".segmented__btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mode === state.mode));
-      document.body.dataset.mode = state.mode;
-      render();
+      const m = btn.dataset.mode;
+      if (m === "edit" && !isEditSessionUnlocked()) {
+        openEditPasswordDialog();
+        return;
+      }
+      applyMode(m);
     });
   });
   document.body.dataset.mode = state.mode;
@@ -966,7 +1172,14 @@ function renderSchedule(data) {
 
       pill.dataset.row = String(rowIndex); /* индекс в полном списке — для правок и overrides */
       pill.dataset.day = String(day);
-      pill.title = code ? `Код: ${code}` : "Нет отметки — клик в режиме редактирования";
+      const canPick = state.mode === "edit" && isEditSessionUnlocked();
+      pill.title = canPick
+        ? code
+          ? `Код: ${code}. Клик — выбрать другой объект из списка`
+          : "Клик — выбрать объект из списка"
+        : code
+          ? `Код: ${code}`
+          : "Нет отметки — включите режим редактирования";
       pill.addEventListener("click", () => onPillClick(rowIndex, day, pill));
 
       td.appendChild(pill);
@@ -1009,32 +1222,8 @@ function renderSchedule(data) {
 
 function onPillClick(rowIndex, day, pillEl) {
   if (state.mode !== "edit") return;
-  const data = getDataset();
-  if (!data) return;
-  const current = data.employees[rowIndex].schedule[day] ?? "";
-  const next = cycleCode(current);
-
-  if (!state.scheduleOverrides) state.scheduleOverrides = {};
-  if (!state.scheduleOverrides[rowIndex]) state.scheduleOverrides[rowIndex] = {};
-  state.scheduleOverrides[rowIndex][day] = next;
-
-  if (next) {
-    pillEl.textContent = next;
-    pillEl.className = "pill";
-    const st = getLegendStyle(next);
-    pillEl.style.background = st.bg;
-    pillEl.style.color = st.fg;
-    pillEl.setAttribute("aria-label", `Отметка ${next}`);
-    pillEl.title = `Код: ${next}`;
-  } else {
-    pillEl.textContent = EMPTY_MARK;
-    pillEl.className = "pill pill--empty";
-    pillEl.style.background = "";
-    pillEl.style.color = "";
-    pillEl.setAttribute("aria-label", "Нет отметки");
-    pillEl.title = "Нет отметки — клик в режиме редактирования";
-  }
-  updateFooterTotals();
+  if (!isEditSessionUnlocked()) return;
+  openScheduleCellPicker(rowIndex, day, pillEl);
 }
 
 function updateFooterTotals() {
@@ -1067,6 +1256,7 @@ function updateFooterTotals() {
 }
 
 function render() {
+  closeScheduleCellPicker();
   buildLegend();
   const data = getDataset();
   document.getElementById("yearLabel").textContent = "2026";

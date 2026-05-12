@@ -192,6 +192,22 @@
         </footer>
       </div>
     </dialog>
+
+    <dialog id="editPwdDialog" class="edit-pwd-dialog">
+      <div class="edit-pwd-dialog__panel">
+        <h2 class="edit-pwd-dialog__title">Режим редактирования</h2>
+        <p class="edit-pwd-dialog__hint">Введите пароль, чтобы менять отметки в табеле.</p>
+        <p class="edit-pwd-dialog__err" id="editPwdErr" hidden></p>
+        <label class="edit-pwd-dialog__label">
+          <span class="edit-pwd-dialog__label-text">Пароль</span>
+          <input type="password" id="editPwdInput" class="edit-pwd-dialog__input" autocomplete="off" />
+        </label>
+        <footer class="edit-pwd-dialog__footer">
+          <button type="button" class="btn btn--outline" id="editPwdCancel">Отмена</button>
+          <button type="button" class="btn btn--primary" id="editPwdOk">Войти</button>
+        </footer>
+      </div>
+    </dialog>
   </div>
   <script src="scripts/parsed-employees-may.js"></script>
   <script src="app.js"></script>
