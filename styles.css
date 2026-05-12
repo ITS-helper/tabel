@@ -757,6 +757,35 @@ body {
   font-size: 0.9rem;
 }
 
+.vacation-panel-hint {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.card__item--vacation {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+
+.card__item--vacation .card__item-vac-when {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.card__item--vacation .card__meta {
+  grid-column: 1 / -1;
+}
+
+.card__item-vac-tn {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Schedule table */
 .table-wrap {
   padding: 0;

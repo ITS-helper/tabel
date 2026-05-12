@@ -580,8 +580,8 @@ const DATABASE = {
     employees: typeof PARSED_EMPLOYEES_MAY !== "undefined" ? PARSED_EMPLOYEES_MAY : [],
   },
   "2026-6": {
-    vacationsOut: [{ name: "Петров Д.О.", daysLeft: 8, start: "18.06.2026", duration: 10 }],
-    vacationsIn: [{ name: "Соколов А.В.", daysLeft: 4, date: "14.06.2026" }],
+    vacationsOut: [],
+    vacationsIn: [],
     employees: [],
   },
 };
@@ -728,6 +728,69 @@ function parseMonthKey(key) {
 
 function daysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** Код дня в графике для отпуска (совпадает с LEGEND). */
+const VACATION_SCHED_MARK = "ОТ";
+
+function formatRuDate(year, monthIndex, day) {
+  return `${pad(day)}.${pad(monthIndex + 1)}.${year}`;
+}
+
+/**
+ * По объединённому графику: начало отпуска в месяце (первый ОТ после не-ОТ),
+ * возврат — первый день после блока ОТ, если он ещё в этом месяце.
+ */
+function computeVacationSummaryFromSchedules(data, year, monthIndex) {
+  const dim = daysInMonth(year, monthIndex);
+  const departures = [];
+  const returns = [];
+  const emps = data?.employees;
+  if (!Array.isArray(emps) || emps.length === 0) {
+    return { departures, returns };
+  }
+
+  for (const emp of emps) {
+    const schedule = emp.schedule || {};
+    const isVac = (day) => (schedule[day] ?? "") === VACATION_SCHED_MARK;
+
+    let d = 1;
+    while (d <= dim) {
+      while (d <= dim && !isVac(d)) d++;
+      if (d > dim) break;
+      const start = d;
+      while (d <= dim && isVac(d)) d++;
+      const end = d - 1;
+
+      const prevWasVac = start > 1 && isVac(start - 1);
+      if (!prevWasVac) {
+        const nDays = end - start + 1;
+        departures.push({
+          name: emp.name,
+          tn: emp.tn,
+          startDay: start,
+          endDay: end,
+          startLabel: formatRuDate(year, monthIndex, start),
+          endLabel: formatRuDate(year, monthIndex, end),
+          nDays,
+        });
+      }
+
+      if (d <= dim && !isVac(d)) {
+        returns.push({
+          name: emp.name,
+          tn: emp.tn,
+          returnDay: d,
+          dateLabel: formatRuDate(year, monthIndex, d),
+        });
+      }
+    }
+  }
+
+  const byName = (a, b) => a.name.localeCompare(b.name, "ru");
+  departures.sort((a, b) => a.startDay - b.startDay || byName(a, b));
+  returns.sort((a, b) => a.returnDay - b.returnDay || byName(a, b));
+  return { departures, returns };
 }
 
 /** День 1..dim, если календарное «сегодня» в этом году/месяце, иначе null */
@@ -1627,39 +1690,89 @@ function bindControls() {
 
 }
 
+function appendVacationCardRow(ul, { name, tn, mainText, metaText }) {
+  const li = document.createElement("li");
+  li.className = "card__item card__item--vacation";
+  const strong = document.createElement("strong");
+  strong.textContent = name;
+  li.appendChild(strong);
+  if (tn != null && String(tn).trim() !== "") {
+    const tnEl = document.createElement("span");
+    tnEl.className = "card__item-vac-tn";
+    tnEl.textContent = String(tn).trim();
+    li.appendChild(tnEl);
+  }
+  const when = document.createElement("span");
+  when.className = "card__item-vac-when";
+  when.textContent = mainText;
+  li.appendChild(when);
+  if (metaText) {
+    const meta = document.createElement("span");
+    meta.className = "card__meta";
+    meta.textContent = metaText;
+    li.appendChild(meta);
+  }
+  ul.appendChild(li);
+}
+
 function renderVacationCards(data) {
   const outEl = document.getElementById("vacationOut");
   const inEl = document.getElementById("vacationIn");
+  if (!outEl || !inEl) return;
+
+  const { year, monthIndex } = parseMonthKey(state.monthKey);
+  const monthTitle = `${MONTH_NAMES[monthIndex]} ${year}`;
+  const titleOut = document.querySelector(".card--vac-out .card__title");
+  const titleIn = document.querySelector(".card--vac-in .card__title");
+  if (titleOut) titleOut.textContent = `Уезжают в отпуск — ${monthTitle}`;
+  if (titleIn) titleIn.textContent = `Возвращаются с отпуска — ${monthTitle}`;
+
   outEl.innerHTML = "";
   inEl.innerHTML = "";
 
-  if (!data.vacationsOut?.length) {
-    outEl.innerHTML = '<li class="card__empty">Нет записей на выбранный месяц</li>';
+  if (!data?.employees?.length) {
+    const empty = '<li class="card__empty">Нет данных сотрудников для выбранного месяца</li>';
+    outEl.innerHTML = empty;
+    inEl.innerHTML = empty;
+    return;
+  }
+
+  const { rows } = getFilteredEmployeesForView(data);
+  const slice = { employees: rows };
+
+  if (!rows.length) {
+    const empty =
+      '<li class="card__empty">По текущему разделу и фильтру нет строк в графике — отпуска не показаны</li>';
+    outEl.innerHTML = empty;
+    inEl.innerHTML = empty;
+    return;
+  }
+
+  const { departures, returns } = computeVacationSummaryFromSchedules(slice, year, monthIndex);
+
+  if (!departures.length) {
+    outEl.innerHTML =
+      '<li class="card__empty">Нет начала отпуска (ОТ) среди видимых строк в этом месяце</li>';
   } else {
-    data.vacationsOut.forEach((v) => {
-      const li = document.createElement("li");
-      li.className = "card__item";
-      li.innerHTML = `
-        <strong>${v.name}</strong>
-        <span>${v.daysLeft} дн.</span>
-        <span class="card__meta">Старт ${v.start}, ${v.duration} календ. дн.</span>
-      `;
-      outEl.appendChild(li);
+    departures.forEach((v) => {
+      const sameDay = v.startDay === v.endDay;
+      const range = sameDay ? v.startLabel : `${v.startLabel} — ${v.endLabel}`;
+      const mainText = `${range} · ${v.nDays} календ. дн.`;
+      appendVacationCardRow(outEl, { name: v.name, tn: v.tn, mainText, metaText: "" });
     });
   }
 
-  if (!data.vacationsIn?.length) {
-    inEl.innerHTML = '<li class="card__empty">Нет записей на выбранный месяц</li>';
+  if (!returns.length) {
+    inEl.innerHTML =
+      '<li class="card__empty">Нет выхода на работу после ОТ в этом месяце (отпуск до конца месяца или нет ОТ)</li>';
   } else {
-    data.vacationsIn.forEach((v) => {
-      const li = document.createElement("li");
-      li.className = "card__item";
-      li.innerHTML = `
-        <strong>${v.name}</strong>
-        <span>${v.daysLeft} дн.</span>
-        <span class="card__meta">Возврат ${v.date}</span>
-      `;
-      inEl.appendChild(li);
+    returns.forEach((v) => {
+      appendVacationCardRow(inEl, {
+        name: v.name,
+        tn: v.tn,
+        mainText: `Выход на работу ${v.dateLabel}`,
+        metaText: "",
+      });
     });
   }
 }
@@ -1874,8 +1987,7 @@ function render() {
   if (!data || !data.employees.length) {
     const tbl = document.getElementById("scheduleTable");
     tbl.querySelectorAll("colgroup").forEach((el) => el.remove());
-    document.getElementById("vacationOut").innerHTML = "";
-    document.getElementById("vacationIn").innerHTML = "";
+    renderVacationCards(data || { employees: [] });
     const msg =
       "Нет данных для этого месяца — выберите май или июнь 2026 либо добавьте записи в app.js.";
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">${msg}</td></tr>`;
