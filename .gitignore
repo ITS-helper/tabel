@@ -1,0 +1,10 @@
+# Сохранённая копия старого сайта (не часть проекта)
+TimeFlow*.html
+*_files/
+
+# Редактор / ОС
+.cursor/
+.vscode/
+Thumbs.db
+.DS_Store
+*.log

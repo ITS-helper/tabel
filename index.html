@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WORK WATCH — График работ</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="header">
+      <div class="header__brand">
+        <div class="logo" aria-hidden="true">
+          <span class="logo__mark">W</span>
+        </div>
+        <div class="header__titles">
+          <span class="header__product">WORK WATCH</span>
+          <h1 class="header__page">График работ <span id="yearLabel">2026</span></h1>
+        </div>
+      </div>
+      <div class="header__sync" role="status">
+        <span class="sync-dot" aria-hidden="true"></span>
+        <span>Синхронизация…</span>
+      </div>
+      <div class="header__actions">
+        <button type="button" class="btn btn--ghost" id="themeToggle" title="Тёмная тема" aria-pressed="false">
+          <span class="icon-moon" aria-hidden="true"></span>
+        </button>
+        <div class="segmented" role="group" aria-label="Режим просмотра">
+          <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
+          <button type="button" class="segmented__btn" data-mode="edit">Редактирование</button>
+        </div>
+        <button type="button" class="btn btn--primary" id="exportBtn">
+          <span class="icon-download" aria-hidden="true"></span>
+          Экспорт для 1С
+        </button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="toolbar surface-card surface-card--pad" aria-label="Табель и объект">
+        <div class="toolbar__cluster">
+          <div class="toolbar__title">
+            <h2 class="toolbar__heading">Табель</h2>
+            <span class="badge" id="employeeCount">6 сотр.</span>
+          </div>
+          <nav class="section-tabs toolbar__sections" aria-label="Объект">
+            <ul class="section-tabs__list" id="sectionNav"></ul>
+          </nav>
+        </div>
+        <div class="toolbar__controls">
+          <button type="button" class="btn btn--outline" id="archiveBtn">Архив</button>
+          <label class="select-wrap">
+            <span class="visually-hidden">Месяц</span>
+            <select id="monthSelect" class="select"></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="control-strip control-strip--legend surface-card surface-card--pad" aria-label="Легенда">
+        <div class="legend-bubble" aria-labelledby="legendBubbleTitle">
+          <div class="legend-bubble__head">
+            <h3 class="legend-bubble__title" id="legendBubbleTitle">Легенда</h3>
+            <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
+              Показать всех
+            </button>
+          </div>
+          <p class="legend-bubble__hint">
+            Нажмите код отметки — в табеле останутся только сотрудники, у которых в этом месяце есть хотя бы один такой день.
+          </p>
+          <div class="legend-strip" id="legendList" role="list"></div>
+        </div>
+      </section>
+
+      <span id="currentSectionTitle" class="visually-hidden">Пилотные проекты</span>
+
+      <section class="cards surface-card surface-card--pad" aria-label="Краткая сводка по отпускам">
+        <article class="card card--vac-out">
+          <h3 class="card__title">Уезжают в отпуск</h3>
+          <ul class="card__list" id="vacationOut"></ul>
+        </article>
+        <article class="card card--vac-in">
+          <h3 class="card__title">Возвращаются с отпуска</h3>
+          <ul class="card__list" id="vacationIn"></ul>
+        </article>
+      </section>
+
+      <div
+        class="hidden-columns-bar surface-card surface-card--pad"
+        id="hiddenColumnsBar"
+        hidden
+        aria-live="polite"
+      ></div>
+
+      <section class="table-wrap surface-card" aria-label="График смен">
+        <div class="table-scroll">
+          <table class="schedule" id="scheduleTable">
+            <thead id="scheduleHead"></thead>
+            <tbody id="scheduleBody"></tbody>
+            <tfoot id="scheduleFoot"></tfoot>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
