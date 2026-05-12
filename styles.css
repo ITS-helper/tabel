@@ -441,44 +441,13 @@ body {
   color: var(--text);
 }
 
-.object-summary__stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.object-summary__stat {
-  flex: 1 1 120px;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.object-summary__stat--day {
-  background: color-mix(in srgb, var(--accent-soft) 90%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
-}
-
-.object-summary__stat--night {
-  background: color-mix(in srgb, #cffafe 70%, var(--surface));
-  border: 1px solid color-mix(in srgb, #0e7490 22%, var(--border));
-}
-
-.object-summary__stat-value {
-  font-size: 1.65rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+.object-summary__shifts-line {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text);
-}
-
-.object-summary__stat-label {
-  font-size: 0.75rem;
-  color: var(--muted);
-  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .object-summary__block {
@@ -510,15 +479,6 @@ body {
     var(--surface) 55%
   );
   border-top-color: var(--border);
-}
-
-[data-theme="dark"] .object-summary__stat--day {
-  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
-}
-
-[data-theme="dark"] .object-summary__stat--night {
-  background: color-mix(in srgb, #134e4a 55%, var(--surface));
-  border-color: color-mix(in srgb, #2dd4bf 28%, var(--border));
 }
 
 /* Раскрывающиеся блоки (паттерн guide-group — ITS workarounds) */

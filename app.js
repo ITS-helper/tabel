@@ -1676,16 +1676,7 @@ function renderObjectSummary() {
     <div class="object-summary__columns">
       <div class="object-summary__col object-summary__col--today">
         <h3 class="object-summary__col-title">Сегодня <span class="object-summary__col-date">${formatCalendarDateLongRu(todayNorm)}, ${wdToday}</span></h3>
-        <div class="object-summary__stats">
-          <div class="object-summary__stat object-summary__stat--day">
-            <span class="object-summary__stat-value">${dayShift}</span>
-            <span class="object-summary__stat-label">день (СПГ и др. смена)</span>
-          </div>
-          <div class="object-summary__stat object-summary__stat--night">
-            <span class="object-summary__stat-value">${nightShift}</span>
-            <span class="object-summary__stat-label">ночь (СПГ.)</span>
-          </div>
-        </div>
+        <p class="object-summary__shifts-line">День: ${dayShift} Ночь: ${nightShift}</p>
         <div class="object-summary__block">
           <span class="object-summary__block-label">Выходной (ВХ)</span>
           <p class="object-summary__block-text">${formatNameList(weekendToday)}</p>
