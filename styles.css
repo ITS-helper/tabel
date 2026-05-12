@@ -30,8 +30,8 @@
   --sched-w-pos: 148px;
   --sched-w-days: 88px;
   --sched-sticky-edge: 8px 0 14px -6px rgba(15, 23, 42, 0.18);
-  /* Высота блока над табелем (шапка + легенда/отпуска) — для закреплённой строки дат */
-  --sched-scroll-offset: 400px;
+  /* Высота блока над табелем (шапка + сводка/легенда/отпуска) — меньше значение = выше область графика */
+  --sched-scroll-offset: 230px;
 
   --stack-gap: 12px;
   --stack-pad: 12px 14px;
@@ -980,7 +980,7 @@ body {
   overflow: auto;
   max-height: calc(100vh - var(--sched-scroll-offset));
   max-height: calc(100dvh - var(--sched-scroll-offset));
-  min-height: 220px;
+  min-height: 320px;
   -webkit-overflow-scrolling: touch;
   border-radius: var(--radius);
   scrollbar-gutter: stable;
@@ -1022,6 +1022,10 @@ body {
   border-right: 1px solid var(--border);
   text-align: center;
   vertical-align: middle;
+}
+
+.schedule tbody td {
+  padding: 6px 5px;
 }
 
 .schedule__pos {
@@ -1071,7 +1075,7 @@ body {
   align-items: center;
   gap: 2px;
   line-height: 1.15;
-  min-height: 2.5rem;
+  min-height: 2.2rem;
   justify-content: flex-end;
 }
 
