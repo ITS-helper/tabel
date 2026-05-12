@@ -18,8 +18,9 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Легенда — как в Google Таблице «График работы на объектах».
- * Колонка «СПГ» / «СПГ.» — табель объекта Усть-Луга (не путать с ИНК и др.).
+ * Коды отметок (как в Google Таблице «График работы на объектах»).
+ * Панель «Объекты» — множественный фильтр по этим кодам.
+ * «СПГ» / «СПГ.» — табель объекта Усть-Луга (не путать с ИНК и др.).
  */
 const LEGEND = [
   { code: "ОТ", label: "Отпуск", bg: "#e9d5ff", fg: "#6b21a8" },
@@ -571,8 +572,8 @@ let state = {
   theme: localStorage.getItem("ww-theme") || "light",
   /** Видимость закреплённых столбцов (дни месяца не относятся сюда) */
   stickyVisibility: loadStickyVisibility(),
-  /** Фильтр табеля по коду легенды (null — все сотрудники) */
-  legendFilterCode: null,
+  /** Фильтр табеля: набор кодов отметок (пусто — все сотрудники; OR по выбранным) */
+  legendFilterCodes: new Set(),
   /** копия расписаний для редактирования */
   scheduleOverrides: null,
   /** Переназначение объекта (ФИО → ust | pilot), только отличия от DEFAULT_PILOT_NAMES */
@@ -701,7 +702,7 @@ function buildSectionNav() {
     btn.addEventListener("click", () => {
       state.sectionId = sec.id;
       state.scheduleOverrides = null;
-      state.legendFilterCode = null;
+      state.legendFilterCodes.clear();
       ul.querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b.dataset.section === sec.id));
       document.getElementById("currentSectionTitle").textContent = sectionTabTitle(sec.id);
       render();
@@ -721,22 +722,25 @@ function employeeHasLegendCodeInMonth(emp, code, dim) {
   return false;
 }
 
-/** Сотрудники вкладки с учётом фильтра легенды */
+/** Сотрудники вкладки с учётом фильтра «Объекты» (несколько кодов, логика ИЛИ) */
 function getFilteredEmployeesForView(data) {
   const { year, monthIndex } = parseMonthKey(state.monthKey);
   const dim = daysInMonth(year, monthIndex);
   const baseRows = employeesForSection(data.employees, state.sectionId);
   const total = baseRows.length;
-  const code = state.legendFilterCode;
-  const rows = code
-    ? baseRows.filter((emp) => employeeHasLegendCodeInMonth(emp, code, dim))
-    : baseRows;
+  const codes = [...state.legendFilterCodes];
+  const rows =
+    codes.length === 0
+      ? baseRows
+      : baseRows.filter((emp) =>
+          codes.some((c) => employeeHasLegendCodeInMonth(emp, c, dim))
+        );
   return { rows, total, dim };
 }
 
 function syncLegendChrome() {
   const clearBtn = document.getElementById("legendClearBtn");
-  if (clearBtn) clearBtn.hidden = !state.legendFilterCode;
+  if (clearBtn) clearBtn.hidden = state.legendFilterCodes.size === 0;
 }
 
 function buildLegend() {
@@ -748,18 +752,19 @@ function buildLegend() {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "legend-chip";
-    if (state.legendFilterCode === item.code) chip.classList.add("legend-chip--active");
+    const selected = state.legendFilterCodes.has(item.code);
+    if (selected) chip.classList.add("legend-chip--active");
     chip.setAttribute("role", "listitem");
     chip.dataset.legendCode = item.code;
-    chip.title = `${item.label}. Нажмите, чтобы отфильтровать табель; ещё раз — снять фильтр.`;
-    chip.setAttribute("aria-pressed", state.legendFilterCode === item.code ? "true" : "false");
+    chip.title = `${item.label}. Нажмите, чтобы включить или выключить код в фильтре. Можно выбрать несколько отметок (например СПГ и СПГ.).`;
+    chip.setAttribute("aria-pressed", selected ? "true" : "false");
     chip.innerHTML = `
       <span class="legend-chip__dot" style="background:${item.bg};border:1px solid ${item.fg}40" aria-hidden="true"></span>
       <span class="legend-chip__code">${item.code}</span>
       <span class="legend-chip__name">${item.label}</span>`;
     chip.addEventListener("click", () => {
-      state.legendFilterCode =
-        state.legendFilterCode === item.code ? null : item.code;
+      if (state.legendFilterCodes.has(item.code)) state.legendFilterCodes.delete(item.code);
+      else state.legendFilterCodes.add(item.code);
       render();
     });
     list.appendChild(chip);
@@ -771,7 +776,7 @@ function bindControls() {
   document.getElementById("monthSelect").addEventListener("change", (e) => {
     state.monthKey = e.target.value;
     state.scheduleOverrides = null;
-    state.legendFilterCode = null;
+    state.legendFilterCodes.clear();
     render();
   });
 
@@ -798,7 +803,7 @@ function bindControls() {
   const legendClear = document.getElementById("legendClearBtn");
   if (legendClear) {
     legendClear.addEventListener("click", () => {
-      state.legendFilterCode = null;
+      state.legendFilterCodes.clear();
       render();
     });
   }
@@ -876,9 +881,10 @@ function renderSchedule(data) {
   const fullEmployees = data.employees;
   const { rows: employees, total: totalEmployees } = getFilteredEmployeesForView(data);
   const badge = document.getElementById("employeeCount");
-  if (state.legendFilterCode) {
+  if (state.legendFilterCodes.size > 0) {
+    const label = [...state.legendFilterCodes].join(", ");
     badge.textContent = `${employees.length} из ${totalEmployees} сотр.`;
-    badge.title = `Фильтр по отметке «${state.legendFilterCode}»`;
+    badge.title = `Фильтр: есть хотя бы один день с одной из отметок: ${label}`;
   } else {
     badge.textContent = `${employees.length} сотр.`;
     badge.removeAttribute("title");
@@ -1080,12 +1086,13 @@ function render() {
   }
 
   const { rows: filteredRows } = getFilteredEmployeesForView(data);
-  if (state.legendFilterCode && filteredRows.length === 0) {
+  if (state.legendFilterCodes.size > 0 && filteredRows.length === 0) {
     renderVacationCards(data);
     const tbl = document.getElementById("scheduleTable");
     tbl.querySelectorAll("colgroup").forEach((el) => el.remove());
     document.getElementById("scheduleHead").innerHTML = "";
-    document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">В этом месяце ни у кого нет отметки «${state.legendFilterCode}». Выберите другой код или нажмите «Показать всех».</td></tr>`;
+    const codesLabel = [...state.legendFilterCodes].join(", ");
+    document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">В этом месяце нет сотрудников с отметками: ${codesLabel}. Измените выбор или нажмите «Показать всех».</td></tr>`;
     document.getElementById("scheduleFoot").innerHTML = "";
     document.getElementById("employeeCount").textContent = `0 из ${employeesForSection(data.employees, state.sectionId).length} сотр.`;
     renderHiddenColumnsBar();
@@ -1111,7 +1118,7 @@ function exportFor1C() {
     generatedAt: new Date().toISOString(),
     period: { year, month: monthIndex + 1 },
     section: state.sectionId,
-    legendFilter: state.legendFilterCode,
+    legendFilter: [...state.legendFilterCodes],
     employees: rows.map((e) => ({
       tn: e.tn,
       name: e.name,
