@@ -159,14 +159,36 @@
           <div class="team-dialog__fields">
             <label class="team-dialog__label">
               <span class="team-dialog__label-text">Первый объект</span>
-              <input type="text" class="input team-dialog__input" id="titleUstInput" maxlength="80" autocomplete="off" />
+              <input
+                type="text"
+                class="input team-dialog__input"
+                id="titleUstInput"
+                maxlength="80"
+                readonly
+                autocomplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-bwignore
+              />
             </label>
             <label class="team-dialog__label">
               <span class="team-dialog__label-text">Второй объект</span>
-              <input type="text" class="input team-dialog__input" id="titlePilotInput" maxlength="80" autocomplete="off" />
+              <input
+                type="text"
+                class="input team-dialog__input"
+                id="titlePilotInput"
+                maxlength="80"
+                readonly
+                autocomplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-bwignore
+              />
             </label>
           </div>
-          <p class="team-dialog__hint">Пустое поле — подставится название по умолчанию.</p>
+          <p class="team-dialog__hint">
+            Пустое поле — название по умолчанию. Названия вкладок применяются по кнопке «Готово» (не во время ввода), чтобы браузер не подставлял чужие логины в поля.
+          </p>
         </div>
         <div class="team-dialog__section">
           <h3 class="team-dialog__subtitle">Сотрудники</h3>

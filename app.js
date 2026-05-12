@@ -128,6 +128,18 @@ function loadSectionTitleOverrides() {
     const out = {};
     if (typeof o.ust === "string") out.ust = o.ust;
     if (typeof o.pilot === "string") out.pilot = o.pilot;
+    let fixed = false;
+    for (const key of ["ust", "pilot"]) {
+      if (typeof out[key] === "string" && out[key].trim().toLowerCase() === "admin") {
+        delete out[key];
+        fixed = true;
+      }
+    }
+    if (fixed) {
+      try {
+        localStorage.setItem(STORAGE_SECTION_TITLES, JSON.stringify(out));
+      } catch (_) {}
+    }
     return out;
   } catch (_) {
     return {};
@@ -460,6 +472,10 @@ function openTeamDialog() {
     alert("Нет списка сотрудников для выбранного месяца.");
     return;
   }
+  const ustIn = document.getElementById("titleUstInput");
+  const pilIn = document.getElementById("titlePilotInput");
+  if (ustIn) ustIn.removeAttribute("readonly");
+  if (pilIn) pilIn.removeAttribute("readonly");
   fillTeamDialogTitleInputs();
   populateTeamAssignTable();
   const dlg = document.getElementById("teamDialog");
@@ -473,18 +489,29 @@ function bindTeamDialog() {
   const dismiss = document.getElementById("teamDialogDismiss");
   const resetAssign = document.getElementById("teamAssignReset");
   const resetTitles = document.getElementById("teamTitlesReset");
-  const ustIn = document.getElementById("titleUstInput");
-  const pilIn = document.getElementById("titlePilotInput");
 
   if (btn) btn.addEventListener("click", () => openTeamDialog());
   if (done)
     done.addEventListener("click", () => {
+      const u = document.getElementById("titleUstInput");
+      const p = document.getElementById("titlePilotInput");
+      if (u) applyTitleInput("ust", u.value);
+      if (p) applyTitleInput("pilot", p.value);
       if (dlg) dlg.close();
     });
   if (dismiss)
     dismiss.addEventListener("click", () => {
       if (dlg) dlg.close();
     });
+  if (dlg) {
+    dlg.addEventListener("close", () => {
+      const u = document.getElementById("titleUstInput");
+      const p = document.getElementById("titlePilotInput");
+      fillTeamDialogTitleInputs();
+      if (u) u.setAttribute("readonly", "");
+      if (p) p.setAttribute("readonly", "");
+    });
+  }
   if (resetAssign)
     resetAssign.addEventListener("click", () => {
       if (!confirm("Сбросить состав команд к значениям по умолчанию?")) return;
@@ -497,14 +524,6 @@ function bindTeamDialog() {
     });
   const addEmpBtn = document.getElementById("teamAddEmployeeBtn");
   if (addEmpBtn) addEmpBtn.addEventListener("click", () => handleAddEmployeeClick());
-  if (ustIn)
-    ustIn.addEventListener("input", () => {
-      applyTitleInput("ust", ustIn.value);
-    });
-  if (pilIn)
-    pilIn.addEventListener("input", () => {
-      applyTitleInput("pilot", pilIn.value);
-    });
 }
 
 function sortEmployeesForSection(rows, sectionId) {
@@ -1201,8 +1220,8 @@ function applySharedPayload(payload) {
   if (payload.sectionTitleOverrides && typeof payload.sectionTitleOverrides === "object") {
     state.sectionTitleOverrides = {};
     const o = payload.sectionTitleOverrides;
-    if (typeof o.ust === "string") state.sectionTitleOverrides.ust = o.ust;
-    if (typeof o.pilot === "string") state.sectionTitleOverrides.pilot = o.pilot;
+    if (typeof o.ust === "string" && o.ust.trim().toLowerCase() !== "admin") state.sectionTitleOverrides.ust = o.ust;
+    if (typeof o.pilot === "string" && o.pilot.trim().toLowerCase() !== "admin") state.sectionTitleOverrides.pilot = o.pilot;
     try {
       localStorage.setItem(STORAGE_SECTION_TITLES, JSON.stringify(state.sectionTitleOverrides));
     } catch (_) {}
