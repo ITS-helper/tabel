@@ -772,6 +772,9 @@ function pillUnderPoint(clientX, clientY) {
 
 function clearFillDragPreview() {
   document.querySelectorAll(".pill--fill-range").forEach((p) => p.classList.remove("pill--fill-range"));
+  document.querySelectorAll(".schedule-td--fill-range").forEach((td) => td.classList.remove("schedule-td--fill-range"));
+  document.querySelectorAll(".schedule-tr--fill-active").forEach((tr) => tr.classList.remove("schedule-tr--fill-active"));
+  updateFillDragHint(null);
 }
 
 function updateFillDragPreview() {
@@ -781,10 +784,53 @@ function updateFillDragPreview() {
   const lo = Math.min(pi.day0, pi.day1);
   const hi = Math.max(pi.day0, pi.day1);
   const row = String(pi.rowIndex);
+  let trEl = null;
   document.querySelectorAll(`#scheduleBody .pill[data-row="${row}"]`).forEach((pill) => {
     const d = Number(pill.dataset.day, 10);
-    if (!Number.isNaN(d) && d >= lo && d <= hi) pill.classList.add("pill--fill-range");
+    if (!Number.isNaN(d) && d >= lo && d <= hi) {
+      pill.classList.add("pill--fill-range");
+      const td = pill.closest("td");
+      if (td) {
+        td.classList.add("schedule-td--fill-range");
+        if (!trEl) trEl = td.closest("tr");
+      }
+    }
   });
+  if (trEl) trEl.classList.add("schedule-tr--fill-active");
+  updateFillDragHint(pi);
+}
+
+let scheduleFillHintEl = null;
+
+function ensureScheduleFillHintEl() {
+  if (scheduleFillHintEl) return scheduleFillHintEl;
+  const el = document.createElement("div");
+  el.id = "scheduleFillHint";
+  el.className = "schedule-fill-hint";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  el.hidden = true;
+  document.body.appendChild(el);
+  scheduleFillHintEl = el;
+  return el;
+}
+
+/** Подсказка внизу экрана: что копируется и диапазон дней */
+function updateFillDragHint(pi) {
+  const el = ensureScheduleFillHintEl();
+  if (!pi || !pi.dragging) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  const lo = Math.min(pi.day0, pi.day1);
+  const hi = Math.max(pi.day0, pi.day1);
+  const val = pi.code ? `«${pi.code}»` : "пустую ячейку";
+  el.textContent =
+    lo === hi
+      ? `Протягивание: ${val} — день ${lo}. Ведите в сторону, чтобы охватить несколько дней. Отпустите — применить.`
+      : `Протягивание: ${val} — дни ${lo}–${hi}. Отпустите кнопку мыши — применить.`;
+  el.hidden = false;
 }
 
 function cancelPillFillInteraction() {
@@ -830,6 +876,7 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl) {
       pi.dragging = true;
       document.body.classList.add("pill-fill-dragging");
       closeScheduleCellPicker();
+      updateFillDragPreview();
     }
     if (!pi.dragging) return;
     const p = pillUnderPoint(e.clientX, e.clientY);
