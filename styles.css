@@ -30,6 +30,8 @@
   --sched-w-pos: 148px;
   --sched-w-days: 88px;
   --sched-sticky-edge: 8px 0 14px -6px rgba(15, 23, 42, 0.18);
+  /* Высота блока над табелем (шапка + легенда/отпуска) — для закреплённой строки дат */
+  --sched-scroll-offset: 280px;
 
   --stack-gap: 12px;
   --stack-pad: 12px 14px;
@@ -740,12 +742,15 @@ body {
 /* Schedule table */
 .table-wrap {
   padding: 0;
-  overflow: hidden;
+  /* не hidden — иначе position:sticky у thead не работает относительно прокрутки */
+  overflow: visible;
 }
 
 .table-scroll {
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: auto;
+  max-height: calc(100vh - var(--sched-scroll-offset));
+  max-height: calc(100dvh - var(--sched-scroll-offset));
+  min-height: 220px;
   -webkit-overflow-scrolling: touch;
   border-radius: var(--radius);
   scrollbar-gutter: stable;
@@ -819,13 +824,15 @@ body {
   font-weight: 650;
   position: sticky;
   top: 0;
-  z-index: 5;
+  /* выше ячеек тела (закреплённые слева ~12–16), чтобы строка дат не «уезжала» под строки */
+  z-index: 20;
   vertical-align: bottom;
   padding: 6px 4px 8px;
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .schedule thead th.schedule-day-th {
-  z-index: 5;
+  z-index: 19;
 }
 
 .schedule-day-head {
