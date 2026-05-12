@@ -77,6 +77,16 @@ const STORAGE_SECTION_TITLES = "ww-section-titles";
 const STORAGE_EDIT_SESSION = "ww-edit-session";
 const EDIT_PASSWORD = "2323";
 
+/** Supabase: общая синхронизация (см. supabase-schema.sql в репозитории) */
+const SUPABASE_URL = "https://owcuvcshwtivqueftiuk.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_zMRDhywx67zYK6SLGAyg-A_4KXV_Ujc";
+const TABEL_STATE_ROW_ID = "global";
+const STORAGE_SCHEDULE_BY_MONTH = "ww-schedule-by-month";
+const SUPABASE_PUSH_DEBOUNCE_MS = 900;
+
+let supabasePushTimer = null;
+
 let scheduleCellPickerEl = null;
 let scheduleCellPickerDocFn = null;
 let scheduleCellPickerKeyFn = null;
@@ -221,18 +231,21 @@ function setEmployeeSection(name, sectionId) {
   if (defaultSectionForName(name) === sectionId) delete state.sectionAssignOverrides[name];
   else state.sectionAssignOverrides[name] = sectionId;
   persistSectionAssignOverrides();
+  scheduleRemotePersistDebounced();
   render();
 }
 
 function resetSectionAssignOverrides() {
   state.sectionAssignOverrides = {};
   persistSectionAssignOverrides();
+  scheduleRemotePersistDebounced();
   render();
 }
 
 function resetSectionTitleOverrides() {
   state.sectionTitleOverrides = {};
   persistSectionTitleOverrides();
+  scheduleRemotePersistDebounced();
   fillTeamDialogTitleInputs();
   buildSectionNav();
   syncCurrentSectionTitle();
@@ -270,6 +283,7 @@ function applyTitleInput(kind, rawValue) {
   if (!v || v === defTitle) delete state.sectionTitleOverrides[kind];
   else state.sectionTitleOverrides[kind] = v;
   persistSectionTitleOverrides();
+  scheduleRemotePersistDebounced();
   const inputEl = document.getElementById(kind === "ust" ? "titleUstInput" : "titlePilotInput");
   if (inputEl && (!v || v === defTitle)) inputEl.value = sectionTabTitle(kind);
   refreshTeamAssignSelectLabels();
@@ -737,9 +751,9 @@ function openScheduleCellPicker(rowIndex, day, pillEl) {
 
 function applyScheduleCellValue(rowIndex, day, next, pillEl) {
   if (!pillEl) return;
-  if (!state.scheduleOverrides) state.scheduleOverrides = {};
-  if (!state.scheduleOverrides[rowIndex]) state.scheduleOverrides[rowIndex] = {};
-  state.scheduleOverrides[rowIndex][day] = next;
+  const bucket = scheduleOverridesBucket();
+  if (!bucket[rowIndex]) bucket[rowIndex] = {};
+  bucket[rowIndex][day] = next;
 
   if (next) {
     pillEl.textContent = next;
@@ -757,6 +771,8 @@ function applyScheduleCellValue(rowIndex, day, next, pillEl) {
     pillEl.setAttribute("aria-label", "Нет отметки");
     pillEl.title = "Клик — список; тяните — очистить диапазон";
   }
+  persistScheduleByMonthLocal();
+  scheduleRemotePersistDebounced();
   updateFooterTotals();
 }
 
@@ -850,11 +866,13 @@ function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
   const dim = daysInMonth(year, monthIndex);
   const lo = Math.max(1, Math.min(Math.min(dayA, dayB), dim));
   const hi = Math.min(dim, Math.max(Math.max(dayA, dayB), 1));
-  if (!state.scheduleOverrides) state.scheduleOverrides = {};
-  if (!state.scheduleOverrides[rowIndex]) state.scheduleOverrides[rowIndex] = {};
+  const bucket = scheduleOverridesBucket();
+  if (!bucket[rowIndex]) bucket[rowIndex] = {};
   for (let d = lo; d <= hi; d++) {
-    state.scheduleOverrides[rowIndex][d] = code;
+    bucket[rowIndex][d] = code;
   }
+  persistScheduleByMonthLocal();
+  scheduleRemotePersistDebounced();
   render();
 }
 
@@ -932,6 +950,17 @@ function loadUiBlocks() {
   }
 }
 
+function loadScheduleByMonthFromLocal() {
+  try {
+    const r = localStorage.getItem(STORAGE_SCHEDULE_BY_MONTH);
+    if (!r) return {};
+    const o = JSON.parse(r);
+    return typeof o === "object" && o !== null && !Array.isArray(o) ? o : {};
+  } catch (_) {
+    return {};
+  }
+}
+
 let state = {
   monthKey: "2026-5",
   sectionId: "ust",
@@ -941,8 +970,8 @@ let state = {
   stickyVisibility: loadStickyVisibility(),
   /** Фильтр табеля: набор кодов отметок (пусто — все сотрудники; OR по выбранным) */
   legendFilterCodes: new Set(),
-  /** копия расписаний для редактирования */
-  scheduleOverrides: null,
+  /** правки ячеек: ключ месяца "YYYY-M" → индекс строки → день → код */
+  scheduleByMonth: loadScheduleByMonthFromLocal(),
   /** Переназначение объекта (ФИО → ust | pilot), только отличия от DEFAULT_PILOT_NAMES */
   sectionAssignOverrides: loadSectionAssignOverrides(),
   /** Переименование вкладок ust / pilot */
@@ -950,6 +979,113 @@ let state = {
   /** Легенда / отпуска: true = панель развёрнута (localStorage ww-ui-blocks) */
   uiBlocks: loadUiBlocks(),
 };
+
+function scheduleOverridesBucket() {
+  const k = state.monthKey;
+  if (!state.scheduleByMonth[k]) state.scheduleByMonth[k] = {};
+  return state.scheduleByMonth[k];
+}
+
+function persistScheduleByMonthLocal() {
+  try {
+    localStorage.setItem(STORAGE_SCHEDULE_BY_MONTH, JSON.stringify(state.scheduleByMonth));
+  } catch (_) {}
+}
+
+function supabaseRestHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    "Content-Type": "application/json",
+    ...extra,
+  };
+}
+
+function buildSharedPayload() {
+  return {
+    sectionAssignOverrides: { ...state.sectionAssignOverrides },
+    sectionTitleOverrides: { ...state.sectionTitleOverrides },
+    scheduleByMonth: JSON.parse(JSON.stringify(state.scheduleByMonth)),
+  };
+}
+
+function applySharedPayload(payload) {
+  if (!payload || typeof payload !== "object") return;
+  if (payload.sectionAssignOverrides && typeof payload.sectionAssignOverrides === "object") {
+    state.sectionAssignOverrides = {};
+    for (const k of Object.keys(payload.sectionAssignOverrides)) {
+      const v = payload.sectionAssignOverrides[k];
+      if (v === "pilot" || v === "ust") state.sectionAssignOverrides[k] = v;
+    }
+    try {
+      localStorage.setItem(STORAGE_SECTION_ASSIGN, JSON.stringify(state.sectionAssignOverrides));
+    } catch (_) {}
+  }
+  if (payload.sectionTitleOverrides && typeof payload.sectionTitleOverrides === "object") {
+    state.sectionTitleOverrides = {};
+    const o = payload.sectionTitleOverrides;
+    if (typeof o.ust === "string") state.sectionTitleOverrides.ust = o.ust;
+    if (typeof o.pilot === "string") state.sectionTitleOverrides.pilot = o.pilot;
+    try {
+      localStorage.setItem(STORAGE_SECTION_TITLES, JSON.stringify(state.sectionTitleOverrides));
+    } catch (_) {}
+  }
+  if (payload.scheduleByMonth && typeof payload.scheduleByMonth === "object") {
+    state.scheduleByMonth = JSON.parse(JSON.stringify(payload.scheduleByMonth));
+    persistScheduleByMonthLocal();
+  }
+}
+
+async function pullTabelRemoteState() {
+  const url = `${SUPABASE_URL}/rest/v1/tabel_state?id=eq.${encodeURIComponent(
+    TABEL_STATE_ROW_ID
+  )}&select=payload`;
+  const res = await fetch(url, { headers: supabaseRestHeaders() });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`${res.status} ${errText}`);
+  }
+  const rows = await res.json();
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const p = rows[0].payload;
+  if (p != null && typeof p === "object") applySharedPayload(p);
+}
+
+async function pushTabelRemoteState() {
+  const row = {
+    id: TABEL_STATE_ROW_ID,
+    payload: buildSharedPayload(),
+    updated_at: new Date().toISOString(),
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/tabel_state`, {
+    method: "POST",
+    headers: supabaseRestHeaders({
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    }),
+    body: JSON.stringify([row]),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.warn("Supabase push failed", res.status, errText);
+  }
+}
+
+function scheduleRemotePersistDebounced() {
+  if (supabasePushTimer) clearTimeout(supabasePushTimer);
+  supabasePushTimer = setTimeout(() => {
+    supabasePushTimer = null;
+    void pushTabelRemoteState();
+  }, SUPABASE_PUSH_DEBOUNCE_MS);
+}
+
+async function initRemoteSync() {
+  try {
+    await pullTabelRemoteState();
+    render();
+  } catch (e) {
+    console.warn("Supabase pull:", e?.message || e);
+  }
+}
 
 function persistStickyVisibility() {
   localStorage.setItem("ww-sticky-cols", JSON.stringify(state.stickyVisibility));
@@ -995,7 +1131,7 @@ function bindCollapsiblePanels() {
 function getDataset() {
   const base = DATABASE[state.monthKey];
   if (!base) return null;
-  const overrides = state.scheduleOverrides;
+  const overrides = state.scheduleByMonth[state.monthKey];
   const employees = base.employees.map((emp, i) => {
     let e = emp;
     if (overrides && overrides[i]) {
@@ -1021,6 +1157,7 @@ function init() {
   bindCollapsiblePanels();
   syncCollapsiblePanels();
   render();
+  void initRemoteSync();
 }
 
 /** Клик по заголовку закреплённого столбца — скрыть (−) */
@@ -1069,7 +1206,6 @@ function buildSectionNav() {
     if (sec.id === state.sectionId) btn.classList.add("is-active");
     btn.addEventListener("click", () => {
       state.sectionId = sec.id;
-      state.scheduleOverrides = null;
       state.legendFilterCodes.clear();
       ul.querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b.dataset.section === sec.id));
       document.getElementById("currentSectionTitle").textContent = sectionTabTitle(sec.id);
@@ -1143,7 +1279,6 @@ function buildLegend() {
 function bindControls() {
   document.getElementById("monthSelect").addEventListener("change", (e) => {
     state.monthKey = e.target.value;
-    state.scheduleOverrides = null;
     state.legendFilterCodes.clear();
     render();
   });
