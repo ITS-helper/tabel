@@ -14,47 +14,43 @@
 </head>
 <body>
   <div class="app" id="app">
-    <header class="header">
-      <div class="header__brand">
-        <div class="logo" aria-hidden="true">
-          <span class="logo__mark">W</span>
-        </div>
-        <div class="header__titles">
-          <span class="header__product">WORK WATCH</span>
+    <header class="header header--unified" aria-label="График работ и навигация">
+      <div class="header__row header__row--top">
+        <div class="header__brand">
+          <div class="header__logo-wrap">
+            <img
+              class="header__logo"
+              src="assets/logo-workwatch.png"
+              width="200"
+              height="48"
+              alt="Work Watch by ITS"
+            />
+          </div>
           <h1 class="header__page">График работ <span id="yearLabel">2026</span></h1>
         </div>
-      </div>
-      <div class="header__sync" role="status">
-        <span class="sync-dot" aria-hidden="true"></span>
-        <span>Синхронизация…</span>
-      </div>
-      <div class="header__actions">
-        <button type="button" class="btn btn--ghost" id="themeToggle" title="Тёмная тема" aria-pressed="false">
-          <span class="icon-moon" aria-hidden="true"></span>
-        </button>
-        <div class="segmented" role="group" aria-label="Режим просмотра">
-          <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
-          <button type="button" class="segmented__btn" data-mode="edit">Редактирование</button>
-        </div>
-        <button type="button" class="btn btn--primary" id="exportBtn">
-          <span class="icon-download" aria-hidden="true"></span>
-          Экспорт для 1С
-        </button>
-      </div>
-    </header>
-
-    <main class="main">
-      <section class="toolbar surface-card surface-card--pad" aria-label="Табель и объект">
-        <div class="toolbar__cluster">
-          <div class="toolbar__title">
-            <h2 class="toolbar__heading">Табель</h2>
-            <span class="badge" id="employeeCount">6 сотр.</span>
+        <div class="header__actions">
+          <button type="button" class="btn btn--ghost" id="themeToggle" title="Тёмная тема" aria-pressed="false">
+            <span class="icon-moon" aria-hidden="true"></span>
+          </button>
+          <div class="segmented" role="group" aria-label="Режим просмотра">
+            <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
+            <button type="button" class="segmented__btn" data-mode="edit">Редактирование</button>
           </div>
-          <nav class="section-tabs toolbar__sections" aria-label="Объект">
+          <button type="button" class="btn btn--primary" id="exportBtn">
+            <span class="icon-download" aria-hidden="true"></span>
+            Экспорт для 1С
+          </button>
+        </div>
+      </div>
+      <hr class="header__divider" aria-hidden="true" />
+      <div class="header__row header__row--bottom">
+        <div class="header__toolbar-left">
+          <span class="badge" id="employeeCount">6 сотр.</span>
+          <nav class="section-tabs header__section-tabs" aria-label="Объект">
             <ul class="section-tabs__list" id="sectionNav"></ul>
           </nav>
         </div>
-        <div class="toolbar__controls">
+        <div class="header__toolbar-controls">
           <button type="button" class="btn btn--outline" id="teamDialogBtn" title="Кто в каком объекте, названия вкладок">
             Объекты и состав
           </button>
@@ -64,7 +60,10 @@
             <select id="monthSelect" class="select"></select>
           </label>
         </div>
-      </section>
+      </div>
+    </header>
+
+    <main class="main">
 
       <section id="legendSection" class="ww-guide-group open" aria-label="Легенда">
         <div class="ww-panel-head">
