@@ -22,9 +22,15 @@ const LEGEND = [
   { code: "OT", label: "Отпуск", bg: "#e9d5ff", fg: "#6b21a8" },
   { code: "BX", label: "Выходной", bg: "#fecaca", fg: "#991b1b" },
   { code: "Б", label: "Больничный", bg: "#fed7aa", fg: "#9a3412" },
+  { code: "ВП", label: "Вых. перед отпуском", bg: "#fce7f3", fg: "#9d174d" },
+  { code: "О", label: "Отгул / офис (О)", bg: "#e5e7eb", fg: "#374151" },
   { code: "УР", label: "Удалённо", bg: "#bfdbfe", fg: "#1e40af" },
   { code: "ИНК", label: "Инженер (вахта)", bg: "#c7d2fe", fg: "#3730a3" },
   { code: "ГАЛС", label: "Галс", bg: "#a5f3fc", fg: "#0e7490" },
+  { code: "ТСБ", label: "ТСБ", bg: "#ddd6fe", fg: "#5b21b6" },
+  { code: "М", label: "Мобилизация / М", bg: "#fbcfe8", fg: "#9d174d" },
+  { code: "АПК", label: "АПК", bg: "#cffafe", fg: "#155e75" },
+  { code: "ЗЛ", label: "Зелёная линия", bg: "#bbf7d0", fg: "#166534" },
 ];
 
 const CODE_ORDER = LEGEND.map((l) => l.code);
@@ -48,136 +54,10 @@ const SECTIONS = [
 const DATABASE = {
   "2026-5": {
     sectionId: "pilot",
-    vacationsOut: [
-      { name: "Соколов А.В.", daysLeft: 3, start: "02.06.2026", duration: 14 },
-      { name: "Мельникова Е.П.", daysLeft: 11, start: "10.06.2026", duration: 7 },
-    ],
-    vacationsIn: [
-      { name: "Иванов П.С.", daysLeft: 2, date: "28.05.2026" },
-      { name: "Кузнецова Н.И.", daysLeft: 5, date: "31.05.2026" },
-    ],
-    employees: [
-      {
-        tn: "4821",
-        name: "Иванов Пётр Сергеевич",
-        position: "Руководитель проекта",
-        daysOnShift: 18,
-        schedule: fillSchedule({
-          25: "ИНК",
-          26: "ИНК",
-          27: "УР",
-          28: "УР",
-          29: "",
-          30: "",
-          31: "ИНК",
-          1: "ИНК",
-          2: "ИНК",
-          3: "ГАЛС",
-          4: "ГАЛС",
-          5: "ИНК",
-        }),
-      },
-      {
-        tn: "4822",
-        name: "Соколов Алексей Викторович",
-        position: "Главный инженер",
-        daysOnShift: 22,
-        schedule: fillSchedule({
-          25: "УР",
-          26: "ИНК",
-          27: "ИНК",
-          28: "ИНК",
-          29: "",
-          30: "",
-          31: "УР",
-          1: "УР",
-          2: "OT",
-          3: "OT",
-          4: "OT",
-          5: "ИНК",
-        }),
-      },
-      {
-        tn: "5103",
-        name: "Мельникова Елена Павловна",
-        position: "Инженер ПТО",
-        daysOnShift: 15,
-        schedule: fillSchedule({
-          25: "ГАЛС",
-          26: "ГАЛС",
-          27: "ИНК",
-          28: "ИНК",
-          29: "",
-          30: "",
-          31: "ГАЛС",
-          1: "УР",
-          2: "УР",
-          3: "ИНК",
-          4: "ИНК",
-          5: "ИНК",
-        }),
-      },
-      {
-        tn: "5104",
-        name: "Кузнецова Наталья Игоревна",
-        position: "Метролог",
-        daysOnShift: 12,
-        schedule: fillSchedule({
-          25: "",
-          26: "Б",
-          27: "Б",
-          28: "ИНК",
-          29: "",
-          30: "",
-          31: "ИНК",
-          1: "ИНК",
-          2: "ИНК",
-          3: "BX",
-          4: "BX",
-          5: "УР",
-        }),
-      },
-      {
-        tn: "5200",
-        name: "Петров Дмитрий Олегович",
-        position: "Мастер участка",
-        daysOnShift: 20,
-        schedule: fillSchedule({
-          25: "ИНК",
-          26: "ИНК",
-          27: "ИНК",
-          28: "ГАЛС",
-          29: "",
-          30: "",
-          31: "ИНК",
-          1: "ИНК",
-          2: "ИНК",
-          3: "ИНК",
-          4: "ИНК",
-          5: "ГАЛС",
-        }),
-      },
-      {
-        tn: "5201",
-        name: "Волков Станислав Ильич",
-        position: "Электромонтажник",
-        daysOnShift: 16,
-        schedule: fillSchedule({
-          25: "УР",
-          26: "УР",
-          27: "",
-          28: "ИНК",
-          29: "",
-          30: "",
-          31: "",
-          1: "ИНК",
-          2: "ИНК",
-          3: "ИНК",
-          4: "УР",
-          5: "УР",
-        }),
-      },
-    ],
+    vacationsOut: [],
+    vacationsIn: [],
+    /** Данные из выгрузки Google Таблицы (scripts/parsed-employees-may.js) */
+    employees: typeof PARSED_EMPLOYEES_MAY !== "undefined" ? PARSED_EMPLOYEES_MAY : [],
   },
   "2026-6": {
     sectionId: "pilot",
@@ -186,15 +66,6 @@ const DATABASE = {
     employees: [],
   },
 };
-
-/** Заполняет только переданные дни мая 2026 для демо (остальные пустые) */
-function fillSchedule(partial) {
-  const s = {};
-  for (let d = 1; d <= 31; d++) {
-    s[d] = partial[d] !== undefined ? partial[d] : "";
-  }
-  return s;
-}
 
 function pad(n) {
   return String(n).padStart(2, "0");
