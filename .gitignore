@@ -6,7 +6,9 @@ TimeFlow*.html
 google_sheet_raw.csv
 
 # Редактор / ОС
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .vscode/
 Thumbs.db
 .DS_Store
