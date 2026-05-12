@@ -150,23 +150,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a0a0a;
-  border-radius: 10px;
-  padding: 6px 12px;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
   line-height: 0;
 }
 
 .header__logo {
   display: block;
-  height: 36px;
+  height: 40px;
   width: auto;
-  max-width: min(220px, 46vw);
+  max-width: min(240px, 50vw);
   object-fit: contain;
 }
 
 [data-theme="dark"] .header__logo-wrap {
-  background: #020617;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: transparent;
+  box-shadow: none;
 }
 
 .header__page {
