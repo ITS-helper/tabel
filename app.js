@@ -55,13 +55,11 @@ const ON_SHIFT_CODES = new Set([
 /** Визуальная пустая ячейка (нет отметки в табеле; в «на смене» не входит) */
 const EMPTY_MARK = "\u2014";
 
-/** Нет «смены» в смысле табеля: пустая ячейка или явное «Отсутствует» (-) */
-const ABSENT_LIKE_CODES = new Set(["", "-"]);
-
-function employeeIsAbsentWholeMonth(emp, dim) {
+/** Нет ни одного дня «на смене» (те же коды, что в строке «Всего на смене») — в табеле не показываем */
+function employeeHasNoShiftsInMonth(emp, dim) {
   for (let d = 1; d <= dim; d++) {
     const c = emp.schedule[d] ?? "";
-    if (!ABSENT_LIKE_CODES.has(c)) return false;
+    if (ON_SHIFT_CODES.has(c)) return false;
   }
   return true;
 }
@@ -1237,12 +1235,12 @@ function employeeHasLegendCodeInMonth(emp, code, dim) {
   return false;
 }
 
-/** Сотрудники вкладки с учётом: скрыть «только отсутствует/пусто» за месяц; фильтр легенды (ИЛИ) */
+/** Сотрудники вкладки: без строк, если за месяц не было смен (см. ON_SHIFT_CODES); фильтр легенды (ИЛИ) */
 function getFilteredEmployeesForView(data) {
   const { year, monthIndex } = parseMonthKey(state.monthKey);
   const dim = daysInMonth(year, monthIndex);
   const baseRows = employeesForSection(data.employees, state.sectionId);
-  const withPresence = baseRows.filter((emp) => !employeeIsAbsentWholeMonth(emp, dim));
+  const withPresence = baseRows.filter((emp) => !employeeHasNoShiftsInMonth(emp, dim));
   const total = withPresence.length;
   const codes = [...state.legendFilterCodes];
   const rows =
