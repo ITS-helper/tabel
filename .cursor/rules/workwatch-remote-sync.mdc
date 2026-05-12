@@ -1,0 +1,42 @@
+---
+description: WORK WATCH — синхронизация состояния с Supabase (обязательно учитывать при правках данных)
+alwaysApply: true
+---
+
+# Синхронизация (Supabase)
+
+## Где в коде
+
+- `app.js`: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `TABEL_STATE_ROW_ID` (`"global"`), `SUPABASE_PUSH_DEBOUNCE_MS` (**900** мс).
+- **`initRemoteSync()`** — при загрузке страницы: **`pullTabelRemoteState()`** → затем **`render()`**.
+- **`scheduleRemotePersistDebounced()`** — после локальных изменений общего состояния ставит отложенный **`pushTabelRemoteState()`** (debounce).
+
+## Что уходит в облако (`buildSharedPayload`)
+
+В таблицу **`tabel_state`** (REST), строка с `id = global`, поле **`payload`** — JSON:
+
+- `sectionAssignOverrides` — ФИО → `ust` | `pilot`
+- `sectionTitleOverrides` — переименование вкладок Усть-Луга / Пилоты
+- `scheduleByMonth` — правки ячеек графика по месяцам (`YYYY-M` → индекс строки → день → код)
+- `employeeFieldOverridesByMonth` — ТН / должность по месяцу и ФИО
+- `addedEmployeesByMonth` — вручную добавленные сотрудники
+- `legendIncludeNoShifts` — флаг «Показать всех»
+
+После успешного pull **`applySharedPayload`** обновляет `state` и **дублирует** часть данных в **localStorage** (см. вызовы `persist*` внутри).
+
+## Что в облако НЕ попадает (только локально)
+
+- Выбранный **месяц** (`state.monthKey`), **вкладка объекта** (`state.sectionId`), **фильтр легенды** (`legendFilterCodes`), **режим** просмотр/редактирование
+- **Сворачивание панелей** (`uiBlocks` в `ww-ui-blocks`)
+- **Видимость закреплённых колонок** (`ww-sticky-cols`)
+- **Тема** (`ww-theme`)
+
+При новых фичах: если данные должны жить между устройствами — добавить в **`buildSharedPayload`** / **`applySharedPayload`** и описать в **`supabase-schema.sql`** при изменении схемы.
+
+## Схема БД
+
+Файл в репозитории: **`supabase-schema.sql`**.
+
+## Ошибки сети
+
+Pull/push при сбое пишут в консоль (`console.warn`); UI не блокируется. Не удалять «тихие» предупреждения без замены на понятную обратную связь, если дорабатываете синхронизацию.
