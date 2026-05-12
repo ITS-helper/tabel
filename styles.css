@@ -156,25 +156,25 @@ body {
   line-height: 0;
 }
 
-/* Файл из брендбука — горизонталь на чёрном фоне; плашка совпадает с фоном макета */
-.header__logo-wrap--brand {
-  background: #000;
-  border-radius: 10px;
-  padding: 6px 12px;
-}
-
 .header__logo {
   display: block;
   height: 40px;
   width: auto;
-  max-width: min(280px, 52vw);
+  max-width: min(240px, 50vw);
   object-fit: contain;
 }
 
-[data-theme="dark"] .header__logo-wrap--brand {
-  background: #000;
-  outline: 1px solid rgba(255, 255, 255, 0.14);
-  outline-offset: -1px;
+[data-theme="dark"] .header__logo-wrap {
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .header__logo .header__logo-word {
+  fill: #bbdefb;
+}
+
+[data-theme="dark"] .header__logo .header__logo-stroke {
+  stroke: #bbdefb;
 }
 
 .header__page {

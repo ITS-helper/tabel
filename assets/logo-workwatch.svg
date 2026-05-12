@@ -2,6 +2,7 @@
   <title id="logoTitle">Work Watch by ITS</title>
   <g transform="translate(0.5,2)" aria-hidden="true">
     <path
+      class="header__logo-stroke"
       d="M3.5 31 L15.5 5.5 L27.5 31"
       fill="none"
       stroke="#0047BB"
@@ -12,6 +13,7 @@
     <path d="M11.5 31 L23.5 7 L35.5 28.5 L32 31.5 L22 12.5 L15 22.5 Z" fill="#00D1B2" />
   </g>
   <text
+    class="header__logo-word"
     x="44"
     y="17"
     font-family="'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif"
@@ -20,6 +22,7 @@
     fill="#0047BB"
   >work</text>
   <text
+    class="header__logo-word"
     x="44"
     y="34"
     font-family="'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif"
@@ -28,6 +31,7 @@
     fill="#0047BB"
   >watch</text>
   <text
+    class="header__logo-word"
     x="88"
     y="34"
     font-family="'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif"
