@@ -156,12 +156,44 @@ body {
   line-height: 0;
 }
 
-.header__logo {
+.header__logo-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  max-width: min(300px, 54vw);
+  min-width: 0;
+}
+
+.header__logo-mark {
   display: block;
   height: 40px;
   width: auto;
-  max-width: min(240px, 50vw);
   object-fit: contain;
+  flex-shrink: 0;
+}
+
+.header__logo-type {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.05;
+  font-family: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0047bb;
+}
+
+.header__logo-type-line--row2 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.header__logo-type-by {
+  font-size: 9.25px;
+  font-weight: 500;
 }
 
 [data-theme="dark"] .header__logo-wrap {
@@ -169,12 +201,8 @@ body {
   box-shadow: none;
 }
 
-[data-theme="dark"] .header__logo .header__logo-word {
-  fill: #bbdefb;
-}
-
-[data-theme="dark"] .header__logo .header__logo-stroke {
-  stroke: #bbdefb;
+[data-theme="dark"] .header__logo-type {
+  color: #bbdefb;
 }
 
 .header__page {
