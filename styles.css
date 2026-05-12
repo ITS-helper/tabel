@@ -881,14 +881,7 @@ body {
 }
 
 .sticky-th__main {
-  margin-right: 2px;
-}
-
-.sticky-th__hint {
-  opacity: 0.4;
-  font-weight: 800;
-  font-size: 0.9em;
-  vertical-align: 0.05em;
+  display: inline-block;
 }
 
 .schedule__tn {

@@ -1415,8 +1415,7 @@ function renderSchedule(data) {
     th.dataset.stickyKey = key;
     th.className = `sticky-col sticky-${key} ${STICKY_CELL_CLASS[key]} sticky-th-toggle`;
     if (slot === 0) th.classList.add("schedule__corner");
-    th.innerHTML = `
-      <span class="sticky-th__main">${STICKY_LABEL[key]}</span><span class="sticky-th__hint" aria-hidden="true">\u2212</span>`;
+    th.innerHTML = `<span class="sticky-th__main">${STICKY_LABEL[key]}</span>`;
     th.title = `Скрыть столбец «${STICKY_LABEL[key]}»`;
     applyStickyGeometry(th, slot, "thead", layout.left[key]);
     if (key === lastKey) th.classList.add("sticky-col--edge");
