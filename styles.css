@@ -318,12 +318,49 @@ body {
 }
 
 .ww-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 12px 4px 4px;
+  padding: 10px 14px 12px;
   border-bottom: 1px solid var(--portal-border);
   background: var(--portal-card);
+}
+
+.ww-panel-head-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px 4px 6px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(33, 150, 243, 0.22);
+  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .ww-panel-head-inner {
+  background: linear-gradient(180deg, rgba(30, 58, 138, 0.25) 0%, rgba(30, 58, 138, 0.12) 100%);
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.ww-group-header--legend {
+  flex: 1;
+  min-width: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.ww-group-header--legend:hover {
+  background: rgba(255, 255, 255, 0.65);
+}
+
+[data-theme="dark"] .ww-group-header--legend:hover {
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.ww-panel-head .legend-bubble__clear {
+  flex-shrink: 0;
+  font-size: 0.78rem !important;
+  padding: 6px 10px !important;
+  white-space: nowrap;
+  margin: 0;
 }
 
 .ww-group-header {

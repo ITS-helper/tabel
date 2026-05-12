@@ -20,9 +20,9 @@
           <div class="header__logo-wrap">
             <img
               class="header__logo"
-              src="assets/logo-workwatch.png"
-              width="200"
-              height="48"
+              src="assets/logo-workwatch.svg"
+              width="236"
+              height="40"
               alt="Work Watch by ITS"
             />
           </div>
@@ -67,19 +67,21 @@
 
       <section id="legendSection" class="ww-guide-group open" aria-label="Легенда">
         <div class="ww-panel-head">
-          <button
-            type="button"
-            class="ww-group-header"
-            id="legendPanelToggle"
-            aria-expanded="true"
-            aria-controls="legendPanelBody"
-          >
-            <span class="ww-group-title">Легенда</span>
-            <span class="ww-group-chevron" aria-hidden="true">▼</span>
-          </button>
-          <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
-            Показать всех
-          </button>
+          <div class="ww-panel-head-inner">
+            <button
+              type="button"
+              class="ww-group-header ww-group-header--legend"
+              id="legendPanelToggle"
+              aria-expanded="true"
+              aria-controls="legendPanelBody"
+            >
+              <span class="ww-group-title">Легенда</span>
+              <span class="ww-group-chevron" aria-hidden="true">▼</span>
+            </button>
+            <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
+              Показать всех
+            </button>
+          </div>
         </div>
         <div class="ww-guide-body" id="legendPanelBody">
           <div class="legend-bubble ww-guide-inner">
