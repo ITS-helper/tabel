@@ -93,9 +93,24 @@ const SUPABASE_PUBLISHABLE_KEY =
 const TABEL_STATE_ROW_ID = "global";
 const STORAGE_SCHEDULE_BY_MONTH = "ww-schedule-by-month";
 const STORAGE_ROSTER_EXTRAS = "ww-roster-extras";
+const STORAGE_LEGEND_INCLUDE_NO_SHIFTS = "ww-legend-include-no-shifts";
 const SUPABASE_PUSH_DEBOUNCE_MS = 900;
 
 let supabasePushTimer = null;
+
+function loadLegendIncludeNoShifts() {
+  try {
+    return localStorage.getItem(STORAGE_LEGEND_INCLUDE_NO_SHIFTS) === "1";
+  } catch (_) {
+    return false;
+  }
+}
+
+function persistLegendIncludeNoShifts() {
+  try {
+    localStorage.setItem(STORAGE_LEGEND_INCLUDE_NO_SHIFTS, state.legendIncludeNoShifts ? "1" : "0");
+  } catch (_) {}
+}
 
 let scheduleCellPickerEl = null;
 let scheduleCellPickerDocFn = null;
@@ -1185,6 +1200,8 @@ let state = {
   stickyVisibility: loadStickyVisibility(),
   /** Фильтр табеля: набор кодов отметок (пусто — все сотрудники; OR по выбранным) */
   legendFilterCodes: new Set(),
+  /** Показывать всех по вкладке, в т.ч. без смен на объектах в этом месяце */
+  legendIncludeNoShifts: loadLegendIncludeNoShifts(),
   /** правки ячеек: ключ месяца "YYYY-M" → индекс строки → день → код */
   scheduleByMonth: loadScheduleByMonthFromLocal(),
   /** Переназначение объекта (ФИО → ust | pilot), только отличия от DEFAULT_PILOT_NAMES */
@@ -1239,6 +1256,7 @@ function buildSharedPayload() {
     scheduleByMonth: JSON.parse(JSON.stringify(state.scheduleByMonth)),
     employeeFieldOverridesByMonth: JSON.parse(JSON.stringify(state.employeeFieldOverridesByMonth)),
     addedEmployeesByMonth: JSON.parse(JSON.stringify(state.addedEmployeesByMonth)),
+    legendIncludeNoShifts: !!state.legendIncludeNoShifts,
   };
 }
 
@@ -1278,6 +1296,10 @@ function applySharedPayload(payload) {
     (payload.addedEmployeesByMonth != null && typeof payload.addedEmployeesByMonth === "object")
   ) {
     persistRosterExtrasLocal();
+  }
+  if (typeof payload.legendIncludeNoShifts === "boolean") {
+    state.legendIncludeNoShifts = payload.legendIncludeNoShifts;
+    persistLegendIncludeNoShifts();
   }
 }
 
@@ -1499,13 +1521,15 @@ function getFilteredEmployeesForView(data) {
   const { year, monthIndex } = parseMonthKey(state.monthKey);
   const dim = daysInMonth(year, monthIndex);
   const baseRows = employeesForSection(data.employees, state.sectionId);
-  const withPresence = baseRows.filter((emp) => employeeRowShownInSchedule(emp, dim));
-  const total = withPresence.length;
+  const pool = state.legendIncludeNoShifts
+    ? baseRows
+    : baseRows.filter((emp) => employeeRowShownInSchedule(emp, dim));
+  const total = pool.length;
   const codes = [...state.legendFilterCodes];
   const rows =
     codes.length === 0
-      ? withPresence
-      : withPresence.filter((emp) =>
+      ? pool
+      : pool.filter((emp) =>
           codes.some((c) => employeeHasLegendCodeInMonth(emp, c, dim))
         );
   return { rows, total, dim };
@@ -1514,6 +1538,12 @@ function getFilteredEmployeesForView(data) {
 function syncLegendChrome() {
   const clearBtn = document.getElementById("legendClearBtn");
   if (clearBtn) clearBtn.hidden = state.legendFilterCodes.size === 0;
+  const allBtn = document.getElementById("legendIncludeNoShiftsBtn");
+  if (allBtn) {
+    allBtn.textContent = state.legendIncludeNoShifts ? "Только со сменами" : "Показать всех";
+    allBtn.classList.toggle("is-active", state.legendIncludeNoShifts);
+    allBtn.setAttribute("aria-pressed", state.legendIncludeNoShifts ? "true" : "false");
+  }
 }
 
 function buildLegend() {
@@ -1550,6 +1580,8 @@ function bindControls() {
     scheduleScrollToTodayAppliedForMonthKey = null;
     state.monthKey = e.target.value;
     state.legendFilterCodes.clear();
+    state.legendIncludeNoShifts = false;
+    persistLegendIncludeNoShifts();
     render();
   });
 
@@ -1579,6 +1611,16 @@ function bindControls() {
   if (legendClear) {
     legendClear.addEventListener("click", () => {
       state.legendFilterCodes.clear();
+      render();
+    });
+  }
+
+  const legendIncludeBtn = document.getElementById("legendIncludeNoShiftsBtn");
+  if (legendIncludeBtn) {
+    legendIncludeBtn.addEventListener("click", () => {
+      state.legendIncludeNoShifts = !state.legendIncludeNoShifts;
+      persistLegendIncludeNoShifts();
+      scheduleRemotePersistDebounced();
       render();
     });
   }

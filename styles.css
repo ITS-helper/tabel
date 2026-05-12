@@ -456,6 +456,24 @@ body {
   margin: 0;
 }
 
+.legend-bubble__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.legend-bubble__shift-toggle.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+[data-theme="dark"] .legend-bubble__shift-toggle.is-active {
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--surface));
+}
+
 .ww-cards-inner {
   padding: 8px 16px 18px;
   display: grid;

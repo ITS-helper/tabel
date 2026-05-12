@@ -91,10 +91,21 @@
             <div class="legend-bubble__row">
               <p class="legend-bubble__hint">
                 Включите один или несколько кодов — в табеле останутся сотрудники, у которых в этом месяце есть хотя бы один день с любой из выбранных отметок. Повторное нажатие снимает выбор.
+                Кнопка «Показать всех» добавляет в табель людей без смен на объектах в этом месяце (только ВХ, О, отпуск и т.п.).
               </p>
-              <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
-                Показать всех
-              </button>
+              <div class="legend-bubble__actions">
+                <button
+                  type="button"
+                  class="btn btn--outline legend-bubble__shift-toggle"
+                  id="legendIncludeNoShiftsBtn"
+                  aria-pressed="false"
+                >
+                  Показать всех
+                </button>
+                <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
+                  Снять выбор отметок
+                </button>
+              </div>
             </div>
             <div class="legend-strip" id="legendList" role="list"></div>
           </div>
