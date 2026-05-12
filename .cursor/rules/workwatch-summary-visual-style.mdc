@@ -1,0 +1,45 @@
+---
+description: Визуальный язык блока «Сводка» WORK WATCH — цвета, тени, анимации (повторять для похожих hero-панелей)
+globs: styles.css,index.html,app.js
+alwaysApply: false
+---
+
+# Стиль «Сводка» (эталон UI)
+
+При добавлении или доработке **похожих** информационных панелей (карточки сверху, метрики, две колонки «сегодня/завтра») ориентируйся на реализацию **`.object-summary-*`** в `styles.css` и разметку в `app.js` (`renderObjectSummary`).
+
+## Палитра и акценты
+
+- **Основной акцент**: `var(--accent)` (синий Material / тема).
+- **Второй акцент (ночь / «завтра»)**: `#14b8a6` (teal), плюс `#22d3ee`, `#38bdf8`, `#3b82f6` в градиентах верхней полоски.
+- **Фон**: слои через **`color-mix(in srgb, …)`** с `var(--accent-soft)`, `var(--surface)`, `var(--bg)` — не плоский один цвет.
+- **Светлые «морозные» зоны**: `#eff6ff`, `#f0fdfa`, `#cffafe`, `#ccfbf1` для капсул день/ночь и полоски смен.
+
+## Тени и глубина
+
+- **Карточка секции** (`.object-summary-group.ww-guide-group`): мягкая базовая тень + **размытая цветная** (`rgba(33, 150, 243, 0.07)`) + тонкая обводка `color-mix(..., var(--accent) 8%, var(--portal-border))`.
+- **Внутренние колонки**: `box-shadow` с **inset** `rgba(255,255,255,0.65)` (светлая тема) для «поднятой» пластины.
+- **Капсулы метрик**: обводка `0 0 0 1px` через `color-mix` + внешняя тень; пульсация именно **тенью**, без дергания layout.
+
+## Градиенты
+
+- **Фон inner**: два **radial-gradient** (вправо-вверх синий блик, влево-вниз teal) + **linear-gradient** по диагонали ~168deg.
+- **Верхняя полоска** (`::before`): **многостопный** `linear-gradient(90deg, …)` с `background-size: 220%` и анимацией сдвига `background-position` (перелив, не opacity-моргание).
+
+## Анимации (пульс)
+
+- **Медленный перелив полоски**: `@keyframes object-summary-shimmer`, **10s** `ease-in-out` `infinite`.
+- **Свечение колонок**: `object-summary-col-glow-day` / `object-summary-col-glow-night`, **5s**, у ночной **задержка 0.6s** чтобы фазы не совпадали.
+- **Капсулы день/ночь**: `object-summary-metric-pulse-day` / `object-summary-metric-pulse-night`, **3s**, у ночной **0.45s** задержка.
+- **Разделитель между метриками**: `object-summary-dot-pulse` — лёгкий **scale** + свечение, **2.4s**.
+
+## Обязательно
+
+- Для всех перечисленных анимаций в блоке сводки задано отключение в **`@media (prefers-reduced-motion: reduce)`** (`animation: none`, у полоски ещё `background-size: 100%`).
+- **Тёмная тема**: отдельные правила `[data-theme="dark"]` для тех же блоков — те же идеи (радиальные блики, тени глубже, inset слабее).
+
+## Имена ключевых классов (не переименовывать без причины)
+
+`object-summary-group`, `object-summary__inner`, `object-summary__col`, `object-summary__col--today`, `object-summary__col--tomorrow`, `object-summary__shifts-strip`, `object-summary__metric`, `object-summary__metric--day`, `object-summary__metric--night`, `object-summary__metric-sep`, `object-summary__block`.
+
+Новые похожие блоки: **наследуй паттерн** (градиент + слой теней + одна спокойная «дышащая» анимация), не копируй слепо все keyframes — только если блок визуально того же класса.
