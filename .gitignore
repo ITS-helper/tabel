@@ -2,6 +2,9 @@
 TimeFlow*.html
 *_files/
 
+# Дубликат выгрузки (в репозитории хранится tabel-sheet.csv)
+google_sheet_raw.csv
+
 # Редактор / ОС
 .cursor/
 .vscode/
