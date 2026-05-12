@@ -8,12 +8,22 @@
 
 ## GitHub Pages
 
-1. Репозиторий → **Settings** → **Pages**.
-2. **Build and deployment**: Source — **Deploy from a branch**.
-3. Branch **main**, folder **/ (root)**.
+### Вариант A — через GitHub Actions (рекомендуется)
 
-После публикации сайт будет доступен по адресу вида  
-`https://its-helper.github.io/tabel/` (имя пользователя и репозиторий замените на свои).
+В репозитории есть workflow `.github/workflows/pages.yml`. После пуша в `main`:
+
+1. **Settings** → **Pages** → раздел **Build and deployment**.
+2. **Source**: выберите **GitHub Actions** (не «Deploy from a branch»).
+3. Во вкладке **Actions** дождитесь зелёного прогона **Deploy Pages**.
+
+Сайт: `https://its-helper.github.io/tabel/`
+
+### Вариант B — только ветка, без Actions
+
+1. **Settings** → **Pages** → Source: **Deploy from a branch**.
+2. Branch: **main**, folder: **/ (root)** → Save.
+
+Если видите **404 There isn't a GitHub Pages site here**, чаще всего Pages ещё не включали или не сохранили источник. Для **приватного** репозитория на бесплатном тарифе Pages недоступен — репозиторий должен быть **public**.
 
 ## Структура
 
