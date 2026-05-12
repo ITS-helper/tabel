@@ -431,6 +431,11 @@ body {
   max-height: 3200px;
 }
 
+/* Тело блока «Отпуска»: отступ от линии под заголовком, чтобы подсказка не наезжала на border */
+#vacationPanelBody {
+  padding: 14px 16px 0;
+}
+
 .ww-guide-inner {
   padding: 6px 16px 16px;
 }
@@ -475,7 +480,7 @@ body {
 }
 
 .ww-cards-inner {
-  padding: 8px 16px 18px;
+  padding: 6px 0 18px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
@@ -759,9 +764,10 @@ body {
 
 .vacation-panel-hint {
   margin: 0 0 12px;
+  padding: 0;
   font-size: 0.82rem;
   color: var(--muted);
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
 .card__item--vacation {
