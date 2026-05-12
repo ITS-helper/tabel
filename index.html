@@ -169,20 +169,49 @@
           <p class="team-dialog__hint">Пустое поле — подставится название по умолчанию.</p>
         </div>
         <div class="team-dialog__section">
-          <h3 class="team-dialog__subtitle">Сотрудник → объект</h3>
+          <h3 class="team-dialog__subtitle">Сотрудники</h3>
           <p class="team-dialog__hint">
-            Перенос между «Усть-Луга» и «Пилотные проекты». Хранится только в этом браузере.
+            ТН, должность и новые сотрудники — в режиме «Редактирование» (пароль). Данные синхронизируются вместе с табелем.
           </p>
           <div class="team-dialog__scroll">
             <table class="team-dialog__table">
               <thead>
                 <tr>
+                  <th scope="col">ТН</th>
                   <th scope="col">ФИО</th>
+                  <th scope="col">Должность</th>
                   <th scope="col">Объект</th>
                 </tr>
               </thead>
               <tbody id="teamAssignBody"></tbody>
             </table>
+          </div>
+          <div id="teamRosterAddPanel" class="team-dialog__add-panel" hidden>
+            <p class="team-dialog__subtitle team-dialog__subtitle--compact">Новый сотрудник (текущий месяц)</p>
+            <div class="team-dialog__add-grid">
+              <label class="team-dialog__label">
+                <span class="team-dialog__label-text">ТН</span>
+                <input type="text" id="teamAddTn" class="input" maxlength="32" autocomplete="off" />
+              </label>
+              <label class="team-dialog__label">
+                <span class="team-dialog__label-text">ФИО</span>
+                <input type="text" id="teamAddName" class="input" maxlength="120" autocomplete="off" />
+              </label>
+              <label class="team-dialog__label team-dialog__label--span2">
+                <span class="team-dialog__label-text">Должность</span>
+                <input type="text" id="teamAddPos" class="input" maxlength="160" autocomplete="off" />
+              </label>
+              <label class="team-dialog__label">
+                <span class="team-dialog__label-text">Объект</span>
+                <select id="teamAddSection" class="select">
+                  <option value="ust">Усть-Луга</option>
+                  <option value="pilot">Пилотные проекты</option>
+                </select>
+              </label>
+              <div class="team-dialog__add-actions">
+                <button type="button" class="btn btn--outline" id="teamAddEmployeeBtn">Добавить</button>
+              </div>
+            </div>
           </div>
         </div>
         <footer class="team-dialog__footer">

@@ -92,6 +92,7 @@ const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_zMRDhywx67zYK6SLGAyg-A_4KXV_Ujc";
 const TABEL_STATE_ROW_ID = "global";
 const STORAGE_SCHEDULE_BY_MONTH = "ww-schedule-by-month";
+const STORAGE_ROSTER_EXTRAS = "ww-roster-extras";
 const SUPABASE_PUSH_DEBOUNCE_MS = 900;
 
 let supabasePushTimer = null;
@@ -300,16 +301,137 @@ function applyTitleInput(kind, rawValue) {
   syncCurrentSectionTitle();
 }
 
+function rosterFieldBucketForMonth(monthKey) {
+  if (!state.employeeFieldOverridesByMonth[monthKey]) state.employeeFieldOverridesByMonth[monthKey] = {};
+  return state.employeeFieldOverridesByMonth[monthKey];
+}
+
+function updateBaseEmployeeFieldsFromDialog(empName, tn, position) {
+  const mk = state.monthKey;
+  const b = rosterFieldBucketForMonth(mk);
+  b[empName] = { ...(b[empName] || {}), tn, position };
+  persistRosterExtrasLocal();
+  scheduleRemotePersistDebounced();
+  render();
+}
+
+function updateAddedEmployeeFieldsFromDialog(empName, tn, position) {
+  const mk = state.monthKey;
+  const list = state.addedEmployeesByMonth[mk];
+  if (!list) return;
+  const i = list.findIndex((a) => a.name === empName);
+  if (i < 0) return;
+  list[i] = { ...list[i], tn: String(tn).trim(), position: String(position).trim() };
+  persistRosterExtrasLocal();
+  scheduleRemotePersistDebounced();
+  render();
+}
+
+function handleAddEmployeeClick() {
+  if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
+  const tnEl = document.getElementById("teamAddTn");
+  const nameEl = document.getElementById("teamAddName");
+  const posEl = document.getElementById("teamAddPos");
+  const secEl = document.getElementById("teamAddSection");
+  const tn = tnEl ? tnEl.value.trim() : "";
+  const name = nameEl ? nameEl.value.trim() : "";
+  const position = posEl ? posEl.value.trim() : "";
+  const sectionId = secEl && (secEl.value === "pilot" || secEl.value === "ust") ? secEl.value : "ust";
+  if (!name) {
+    alert("Введите ФИО.");
+    return;
+  }
+  const data = getDataset();
+  if (!data) return;
+  const lower = name.toLowerCase();
+  if (data.employees.some((e) => String(e.name).trim().toLowerCase() === lower)) {
+    alert("Сотрудник с таким ФИО уже есть в списке.");
+    return;
+  }
+  const mk = state.monthKey;
+  if (!state.addedEmployeesByMonth[mk]) state.addedEmployeesByMonth[mk] = [];
+  state.addedEmployeesByMonth[mk].push({
+    tn,
+    name,
+    position,
+    daysOnShift: 0,
+    schedule: {},
+  });
+  persistRosterExtrasLocal();
+  scheduleRemotePersistDebounced();
+  setEmployeeSection(name, sectionId);
+  if (tnEl) tnEl.value = "";
+  if (nameEl) nameEl.value = "";
+  if (posEl) posEl.value = "";
+  populateTeamAssignTable();
+}
+
 function populateTeamAssignTable() {
   const data = getDataset();
   const tbody = document.getElementById("teamAssignBody");
+  const addPanel = document.getElementById("teamRosterAddPanel");
   if (!data || !tbody) return;
   tbody.innerHTML = "";
   const sorted = [...data.employees].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const monthKey = state.monthKey;
+  const addedList = state.addedEmployeesByMonth[monthKey] || [];
+  const addedNames = new Set(addedList.map((a) => a.name));
+  const canEditPeople = state.mode === "edit" && isEditSessionUnlocked();
+  if (addPanel) addPanel.hidden = !canEditPeople;
+  const secAdd = document.getElementById("teamAddSection");
+  if (secAdd) {
+    secAdd.querySelectorAll("option").forEach((opt) => {
+      if (opt.value === "ust" || opt.value === "pilot") opt.textContent = sectionTabTitle(opt.value);
+    });
+  }
   sorted.forEach((emp) => {
+    const isAdded = addedNames.has(emp.name);
     const tr = document.createElement("tr");
+    tr.dataset.empName = emp.name;
+    tr.dataset.addedRow = isAdded ? "1" : "";
+
+    const tdTn = document.createElement("td");
+    if (canEditPeople) {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "input team-dialog__cell-input";
+      inp.value = emp.tn ?? "";
+      inp.maxLength = 32;
+      inp.autocomplete = "off";
+      inp.addEventListener("change", () => {
+        const posInp = tr.querySelector('input[data-field="position"]');
+        const posVal = posInp ? posInp.value : emp.position ?? "";
+        if (isAdded) updateAddedEmployeeFieldsFromDialog(emp.name, inp.value, posVal);
+        else updateBaseEmployeeFieldsFromDialog(emp.name, inp.value, posVal);
+      });
+      tdTn.appendChild(inp);
+    } else {
+      tdTn.textContent = emp.tn ?? "";
+    }
+
     const tdName = document.createElement("td");
     tdName.textContent = emp.name;
+
+    const tdPos = document.createElement("td");
+    if (canEditPeople) {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "input team-dialog__cell-input";
+      inp.dataset.field = "position";
+      inp.value = emp.position ?? "";
+      inp.maxLength = 160;
+      inp.autocomplete = "off";
+      inp.addEventListener("change", () => {
+        const tnInp = tr.querySelector("td:first-child input");
+        const tnVal = tnInp ? tnInp.value : emp.tn ?? "";
+        if (isAdded) updateAddedEmployeeFieldsFromDialog(emp.name, tnVal, inp.value);
+        else updateBaseEmployeeFieldsFromDialog(emp.name, tnVal, inp.value);
+      });
+      tdPos.appendChild(inp);
+    } else {
+      tdPos.textContent = emp.position != null && String(emp.position).trim() !== "" ? String(emp.position) : "";
+    }
+
     const tdSel = document.createElement("td");
     const sel = document.createElement("select");
     sel.className = "select team-dialog__select";
@@ -320,9 +442,13 @@ function populateTeamAssignTable() {
       if (sid === sectionIdForEmployee(emp.name)) opt.selected = true;
       sel.appendChild(opt);
     });
+    sel.disabled = !canEditPeople;
     sel.addEventListener("change", () => setEmployeeSection(emp.name, sel.value));
     tdSel.appendChild(sel);
+
+    tr.appendChild(tdTn);
     tr.appendChild(tdName);
+    tr.appendChild(tdPos);
     tr.appendChild(tdSel);
     tbody.appendChild(tr);
   });
@@ -369,6 +495,8 @@ function bindTeamDialog() {
     resetTitles.addEventListener("click", () => {
       if (confirm("Сбросить названия вкладок к умолчанию?")) resetSectionTitleOverrides();
     });
+  const addEmpBtn = document.getElementById("teamAddEmployeeBtn");
+  if (addEmpBtn) addEmpBtn.addEventListener("click", () => handleAddEmployeeClick());
   if (ustIn)
     ustIn.addEventListener("input", () => {
       applyTitleInput("ust", ustIn.value);
@@ -970,6 +1098,28 @@ function loadScheduleByMonthFromLocal() {
   }
 }
 
+function loadRosterExtrasFromLocal() {
+  try {
+    const r = localStorage.getItem(STORAGE_ROSTER_EXTRAS);
+    if (!r) return { employeeFieldOverridesByMonth: {}, addedEmployeesByMonth: {} };
+    const o = JSON.parse(r);
+    return {
+      employeeFieldOverridesByMonth:
+        typeof o.employeeFieldOverridesByMonth === "object" && o.employeeFieldOverridesByMonth != null
+          ? o.employeeFieldOverridesByMonth
+          : {},
+      addedEmployeesByMonth:
+        typeof o.addedEmployeesByMonth === "object" && o.addedEmployeesByMonth != null
+          ? o.addedEmployeesByMonth
+          : {},
+    };
+  } catch (_) {
+    return { employeeFieldOverridesByMonth: {}, addedEmployeesByMonth: {} };
+  }
+}
+
+const _rosterInit = loadRosterExtrasFromLocal();
+
 let state = {
   monthKey: "2026-5",
   sectionId: "ust",
@@ -987,6 +1137,10 @@ let state = {
   sectionTitleOverrides: loadSectionTitleOverrides(),
   /** Легенда / отпуска: true = панель развёрнута (localStorage ww-ui-blocks) */
   uiBlocks: loadUiBlocks(),
+  /** Месяц → ФИО из базы → правки ТН и должности */
+  employeeFieldOverridesByMonth: _rosterInit.employeeFieldOverridesByMonth,
+  /** Месяц → добавленные вручную записи (в конец списка) */
+  addedEmployeesByMonth: _rosterInit.addedEmployeesByMonth,
 };
 
 function scheduleOverridesBucket() {
@@ -998,6 +1152,18 @@ function scheduleOverridesBucket() {
 function persistScheduleByMonthLocal() {
   try {
     localStorage.setItem(STORAGE_SCHEDULE_BY_MONTH, JSON.stringify(state.scheduleByMonth));
+  } catch (_) {}
+}
+
+function persistRosterExtrasLocal() {
+  try {
+    localStorage.setItem(
+      STORAGE_ROSTER_EXTRAS,
+      JSON.stringify({
+        employeeFieldOverridesByMonth: state.employeeFieldOverridesByMonth,
+        addedEmployeesByMonth: state.addedEmployeesByMonth,
+      })
+    );
   } catch (_) {}
 }
 
@@ -1015,6 +1181,8 @@ function buildSharedPayload() {
     sectionAssignOverrides: { ...state.sectionAssignOverrides },
     sectionTitleOverrides: { ...state.sectionTitleOverrides },
     scheduleByMonth: JSON.parse(JSON.stringify(state.scheduleByMonth)),
+    employeeFieldOverridesByMonth: JSON.parse(JSON.stringify(state.employeeFieldOverridesByMonth)),
+    addedEmployeesByMonth: JSON.parse(JSON.stringify(state.addedEmployeesByMonth)),
   };
 }
 
@@ -1042,6 +1210,18 @@ function applySharedPayload(payload) {
   if (payload.scheduleByMonth && typeof payload.scheduleByMonth === "object") {
     state.scheduleByMonth = JSON.parse(JSON.stringify(payload.scheduleByMonth));
     persistScheduleByMonthLocal();
+  }
+  if (payload.employeeFieldOverridesByMonth != null && typeof payload.employeeFieldOverridesByMonth === "object") {
+    state.employeeFieldOverridesByMonth = JSON.parse(JSON.stringify(payload.employeeFieldOverridesByMonth));
+  }
+  if (payload.addedEmployeesByMonth != null && typeof payload.addedEmployeesByMonth === "object") {
+    state.addedEmployeesByMonth = JSON.parse(JSON.stringify(payload.addedEmployeesByMonth));
+  }
+  if (
+    (payload.employeeFieldOverridesByMonth != null && typeof payload.employeeFieldOverridesByMonth === "object") ||
+    (payload.addedEmployeesByMonth != null && typeof payload.addedEmployeesByMonth === "object")
+  ) {
+    persistRosterExtrasLocal();
   }
 }
 
@@ -1140,8 +1320,10 @@ function bindCollapsiblePanels() {
 function getDataset() {
   const base = DATABASE[state.monthKey];
   if (!base) return null;
-  const overrides = state.scheduleByMonth[state.monthKey];
-  const employees = base.employees.map((emp, i) => {
+  const monthKey = state.monthKey;
+  const overrides = state.scheduleByMonth[monthKey];
+  const fieldAll = state.employeeFieldOverridesByMonth[monthKey] || {};
+  const employeesBase = base.employees.map((emp, i) => {
     let e = emp;
     if (overrides && overrides[i]) {
       e = { ...emp, schedule: { ...emp.schedule, ...overrides[i] } };
@@ -1150,8 +1332,23 @@ function getDataset() {
     if (pos != null && String(pos).trim() !== "") {
       e = { ...e, position: pos };
     }
+    const fo = fieldAll[e.name];
+    if (fo) {
+      if (fo.tn !== undefined) e = { ...e, tn: String(fo.tn).trim() };
+      if (fo.position !== undefined) e = { ...e, position: String(fo.position).trim() };
+    }
     return e;
   });
+  const rawAdded = state.addedEmployeesByMonth[monthKey] || [];
+  const addedMapped = rawAdded.map((a) => ({
+    tn: a.tn != null ? String(a.tn).trim() : "",
+    name: a.name,
+    position: a.position != null ? String(a.position).trim() : "",
+    daysOnShift: Number(a.daysOnShift) || 0,
+    schedule: a.schedule && typeof a.schedule === "object" ? { ...a.schedule } : {},
+    __fromManualAdd: true,
+  }));
+  const employees = [...employeesBase, ...addedMapped];
   return { ...base, employees };
 }
 
@@ -1235,12 +1432,18 @@ function employeeHasLegendCodeInMonth(emp, code, dim) {
   return false;
 }
 
+/** Вручную добавленные показываем в табеле даже без смен; остальных — только при наличии смен */
+function employeeRowShownInSchedule(emp, dim) {
+  if (emp.__fromManualAdd) return true;
+  return !employeeHasNoShiftsInMonth(emp, dim);
+}
+
 /** Сотрудники вкладки: без строк, если за месяц не было смен (см. ON_SHIFT_CODES); фильтр легенды (ИЛИ) */
 function getFilteredEmployeesForView(data) {
   const { year, monthIndex } = parseMonthKey(state.monthKey);
   const dim = daysInMonth(year, monthIndex);
   const baseRows = employeesForSection(data.employees, state.sectionId);
-  const withPresence = baseRows.filter((emp) => !employeeHasNoShiftsInMonth(emp, dim));
+  const withPresence = baseRows.filter((emp) => employeeRowShownInSchedule(emp, dim));
   const total = withPresence.length;
   const codes = [...state.legendFilterCodes];
   const rows =
@@ -1612,13 +1815,16 @@ function exportFor1C() {
     period: { year, month: monthIndex + 1 },
     section: state.sectionId,
     legendFilter: [...state.legendFilterCodes],
-    employees: rows.map((e) => ({
-      tn: e.tn,
-      name: e.name,
-      position: e.position,
-      daysOnShift: e.daysOnShift,
-      schedule: e.schedule,
-    })),
+    employees: rows.map((e) => {
+      const { __fromManualAdd: _m, ...rest } = e;
+      return {
+        tn: rest.tn,
+        name: rest.name,
+        position: rest.position,
+        daysOnShift: rest.daysOnShift,
+        schedule: rest.schedule,
+      };
+    }),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
   const a = document.createElement("a");
