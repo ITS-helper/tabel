@@ -1226,14 +1226,15 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl) {
 function loadUiBlocks() {
   try {
     const r = localStorage.getItem(STORAGE_UI_BLOCKS);
-    if (!r) return { legend: true, vacations: true };
+    if (!r) return { legend: true, vacations: true, summary: true };
     const o = JSON.parse(r);
     return {
       legend: o.legend !== false,
       vacations: o.vacations !== false,
+      summary: o.summary !== false,
     };
   } catch (_) {
-    return { legend: true, vacations: true };
+    return { legend: true, vacations: true, summary: true };
   }
 }
 
@@ -1447,17 +1448,22 @@ function persistUiBlocks() {
 function syncCollapsiblePanels() {
   const legSec = document.getElementById("legendSection");
   const vacSec = document.getElementById("vacationCardsSection");
+  const sumSec = document.getElementById("objectSummarySection");
   const legBtn = document.getElementById("legendPanelToggle");
   const vacBtn = document.getElementById("vacationPanelToggle");
+  const sumBtn = document.getElementById("objectSummaryPanelToggle");
   if (legSec) legSec.classList.toggle("open", state.uiBlocks.legend);
   if (vacSec) vacSec.classList.toggle("open", state.uiBlocks.vacations);
+  if (sumSec) sumSec.classList.toggle("open", state.uiBlocks.summary);
   if (legBtn) legBtn.setAttribute("aria-expanded", state.uiBlocks.legend ? "true" : "false");
   if (vacBtn) vacBtn.setAttribute("aria-expanded", state.uiBlocks.vacations ? "true" : "false");
+  if (sumBtn) sumBtn.setAttribute("aria-expanded", state.uiBlocks.summary ? "true" : "false");
 }
 
 function bindCollapsiblePanels() {
   const legBtn = document.getElementById("legendPanelToggle");
   const vacBtn = document.getElementById("vacationPanelToggle");
+  const sumBtn = document.getElementById("objectSummaryPanelToggle");
   if (legBtn) {
     legBtn.addEventListener("click", () => {
       state.uiBlocks.legend = !state.uiBlocks.legend;
@@ -1468,6 +1474,13 @@ function bindCollapsiblePanels() {
   if (vacBtn) {
     vacBtn.addEventListener("click", () => {
       state.uiBlocks.vacations = !state.uiBlocks.vacations;
+      persistUiBlocks();
+      syncCollapsiblePanels();
+    });
+  }
+  if (sumBtn) {
+    sumBtn.addEventListener("click", () => {
+      state.uiBlocks.summary = !state.uiBlocks.summary;
       persistUiBlocks();
       syncCollapsiblePanels();
     });

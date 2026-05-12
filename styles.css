@@ -344,55 +344,44 @@ body {
   max-width: 100%;
 }
 
-/* Сводка: сегодня / завтра по текущей вкладке объекта */
-.object-summary {
-  margin-bottom: var(--stack-gap);
+/* Сводка: тело панели внутри ww-guide-group (как «Объекты» / «Отпуска») */
+#objectSummaryPanelBody {
+  padding: 0;
 }
 
-.object-summary__card {
+.object-summary-group .object-summary__inner {
   position: relative;
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 85%, var(--surface)) 0%, var(--surface) 48%, var(--surface) 100%);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  box-shadow: 0 2px 12px rgba(33, 150, 243, 0.08);
-  overflow: hidden;
+  padding: 14px 16px 18px;
+  padding-top: 16px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-soft) 85%, var(--surface)) 0%,
+    var(--surface) 50%,
+    var(--surface) 100%
+  );
+  border-top: 1px solid var(--border);
 }
 
-.object-summary__card::before {
+.object-summary-group .object-summary__inner::before {
   content: "";
   position: absolute;
   left: 0;
   top: 0;
   right: 0;
-  height: 4px;
+  height: 3px;
   background: linear-gradient(90deg, var(--accent), #14b8a6);
   opacity: 0.95;
 }
 
-.object-summary__head {
-  padding: 16px 18px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.object-summary__title {
-  margin: 0 0 4px;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--portal-primary);
-}
-
 .object-summary__context {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 0.84rem;
   color: var(--muted);
   line-height: 1.35;
 }
 
 .object-summary__mount {
-  padding: 14px 16px 18px;
+  padding: 0;
 }
 
 .object-summary__empty {
@@ -514,14 +503,13 @@ body {
   word-wrap: break-word;
 }
 
-[data-theme="dark"] .object-summary__card {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 35%, var(--surface)) 0%, var(--surface) 55%);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
-}
-
-[data-theme="dark"] .object-summary__title {
-  color: var(--accent);
+[data-theme="dark"] .object-summary-group .object-summary__inner {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-soft) 35%, var(--surface)) 0%,
+    var(--surface) 55%
+  );
+  border-top-color: var(--border);
 }
 
 [data-theme="dark"] .object-summary__stat--day {

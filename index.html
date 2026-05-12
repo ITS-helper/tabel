@@ -75,13 +75,26 @@
 
     <main class="main">
 
-      <section class="object-summary" id="objectSummarySection" aria-label="Сводка на сегодня и завтра">
-        <div class="object-summary__card">
-          <header class="object-summary__head">
-            <h2 class="object-summary__title">Сводка</h2>
+      <section
+        id="objectSummarySection"
+        class="ww-guide-group object-summary-group open"
+        aria-label="Сводка на сегодня и завтра"
+      >
+        <button
+          type="button"
+          class="ww-group-header ww-group-header--full"
+          id="objectSummaryPanelToggle"
+          aria-expanded="true"
+          aria-controls="objectSummaryPanelBody"
+        >
+          <span class="ww-group-title">Сводка</span>
+          <span class="ww-group-chevron" aria-hidden="true">▼</span>
+        </button>
+        <div class="ww-guide-body" id="objectSummaryPanelBody">
+          <div class="object-summary__inner">
             <p class="object-summary__context" id="objectSummaryContext"></p>
-          </header>
-          <div id="objectSummaryMount" class="object-summary__mount"></div>
+            <div id="objectSummaryMount" class="object-summary__mount"></div>
+          </div>
         </div>
       </section>
 
