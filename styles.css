@@ -914,6 +914,41 @@ body {
   background: color-mix(in srgb, var(--weekend-bg) 88%, var(--bg));
 }
 
+/* Колонка «сегодня» в выбранном месяце */
+.schedule col.schedule-col-day--today {
+  background: color-mix(in srgb, var(--accent-soft) 18%, transparent);
+}
+
+.schedule thead th.schedule-day-col--today,
+.schedule tbody td.schedule-day-col--today,
+.schedule tfoot td.schedule-day-col--today {
+  background: color-mix(in srgb, var(--accent-soft) 52%, var(--bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.schedule thead th.schedule-day-col--today.weekend,
+.schedule tbody td.schedule-day-col--today.weekend,
+.schedule tfoot td.schedule-day-col--today.weekend {
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--weekend-bg));
+}
+
+[data-theme="dark"] .schedule col.schedule-col-day--today {
+  background: color-mix(in srgb, var(--accent-soft) 14%, transparent);
+}
+
+[data-theme="dark"] .schedule thead th.schedule-day-col--today,
+[data-theme="dark"] .schedule tbody td.schedule-day-col--today,
+[data-theme="dark"] .schedule tfoot td.schedule-day-col--today {
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+[data-theme="dark"] .schedule thead th.schedule-day-col--today.weekend,
+[data-theme="dark"] .schedule tbody td.schedule-day-col--today.weekend,
+[data-theme="dark"] .schedule tfoot td.schedule-day-col--today.weekend {
+  background: color-mix(in srgb, var(--accent-soft) 32%, var(--weekend-bg));
+}
+
 .schedule tbody tr:hover .sticky-col {
   background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface));
 }

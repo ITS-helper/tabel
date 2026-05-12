@@ -656,7 +656,7 @@ function showStickyCol(key) {
   render();
 }
 
-function injectScheduleColgroup(table, dayCount, vis) {
+function injectScheduleColgroup(table, dayCount, vis, todayDay) {
   table.querySelectorAll("colgroup").forEach((el) => el.remove());
   const cg = document.createElement("colgroup");
   const addCol = (cls) => {
@@ -668,7 +668,11 @@ function injectScheduleColgroup(table, dayCount, vis) {
   if (vis.name) addCol("col-name");
   if (vis.pos) addCol("col-pos");
   if (vis.days) addCol("col-days");
-  for (let i = 0; i < dayCount; i++) addCol("schedule-col-day");
+  for (let d = 1; d <= dayCount; d++) {
+    const col = document.createElement("col");
+    col.className = "schedule-col-day" + (todayDay === d ? " schedule-col-day--today" : "");
+    cg.appendChild(col);
+  }
   table.insertBefore(cg, table.firstChild);
 }
 
@@ -709,6 +713,39 @@ function parseMonthKey(key) {
 
 function daysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** День 1..dim, если календарное «сегодня» в этом году/месяце, иначе null */
+function todayDayIfCalendarMonthMatches(year, monthIndex) {
+  const n = new Date();
+  if (n.getFullYear() !== year || n.getMonth() !== monthIndex) return null;
+  const dim = daysInMonth(year, monthIndex);
+  const d = n.getDate();
+  if (d < 1 || d > dim) return null;
+  return d;
+}
+
+/** Один раз на выбранный месяц: прокрутить горизонтальный скролл к колонке «сегодня» */
+let scheduleScrollToTodayAppliedForMonthKey = null;
+
+function queueScheduleScrollToTodayColumn() {
+  const { year, monthIndex } = parseMonthKey(state.monthKey);
+  const todayD = todayDayIfCalendarMonthMatches(year, monthIndex);
+  if (todayD == null) return;
+  if (scheduleScrollToTodayAppliedForMonthKey === state.monthKey) return;
+  scheduleScrollToTodayAppliedForMonthKey = state.monthKey;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const wrap = document.querySelector(".table-scroll");
+      const th = document.querySelector(`#scheduleHead th.schedule-day-th[data-schedule-day="${todayD}"]`);
+      if (!wrap || !th) return;
+      const wr = wrap.getBoundingClientRect();
+      const hr = th.getBoundingClientRect();
+      const targetCenter = hr.left + hr.width / 2;
+      const wrapCenter = wr.left + wr.width / 2;
+      wrap.scrollLeft += targetCenter - wrapCenter;
+    });
+  });
 }
 
 function getLegendStyle(code) {
@@ -1510,6 +1547,7 @@ function buildLegend() {
 
 function bindControls() {
   document.getElementById("monthSelect").addEventListener("change", (e) => {
+    scheduleScrollToTodayAppliedForMonthKey = null;
     state.monthKey = e.target.value;
     state.legendFilterCodes.clear();
     render();
@@ -1613,7 +1651,8 @@ function renderSchedule(data) {
   head.innerHTML = "";
   body.innerHTML = "";
   foot.innerHTML = "";
-  injectScheduleColgroup(table, dim, vis);
+  const todayD = todayDayIfCalendarMonthMatches(year, monthIndex);
+  injectScheduleColgroup(table, dim, vis, todayD);
 
   const fullEmployees = data.employees;
   const { rows: employees, total: totalEmployees } = getFilteredEmployeesForView(data);
@@ -1659,6 +1698,8 @@ function renderSchedule(data) {
       "aria-label",
       `${day} ${MONTH_NAMES[monthIndex]} ${year}, ${wd}`
     );
+    th.dataset.scheduleDay = String(day);
+    if (todayD === day) th.classList.add("schedule-day-col--today");
     headerRow.appendChild(th);
   }
   head.appendChild(headerRow);
@@ -1683,7 +1724,9 @@ function renderSchedule(data) {
       const w = isWeekend(year, monthIndex, day);
       const code = emp.schedule[day] ?? "";
       const td = document.createElement("td");
-      td.className = w ? "weekend" : "";
+      td.className = (w ? "weekend " : "").trim();
+      if (todayD === day) td.classList.add("schedule-day-col--today");
+      td.dataset.scheduleDay = String(day);
       const pill = document.createElement("span");
       pill.className = "pill" + (code ? "" : " pill--empty");
       if (code) {
@@ -1741,6 +1784,8 @@ function renderSchedule(data) {
     const w = isWeekend(year, monthIndex, day);
     const td = document.createElement("td");
     td.className = `${w ? "weekend " : ""}sticky-footer-num`.trim();
+    if (todayD === day) td.classList.add("schedule-day-col--today");
+    td.dataset.scheduleDay = String(day);
     td.textContent = String(onShiftCount[day]);
     td.setAttribute("aria-label", `На смене ${onShiftCount[day]} чел.`);
     footRow.appendChild(td);
@@ -1819,6 +1864,7 @@ function render() {
   renderSchedule(data);
   renderHiddenColumnsBar();
   syncLegendChrome();
+  queueScheduleScrollToTodayColumn();
 }
 
 function exportFor1C() {
