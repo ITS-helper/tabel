@@ -81,6 +81,10 @@ let scheduleCellPickerEl = null;
 let scheduleCellPickerDocFn = null;
 let scheduleCellPickerKeyFn = null;
 
+/** Левый клик + протягивание по дням — копировать отметку как в Excel */
+const PILL_FILL_DRAG_THRESHOLD_PX = 6;
+let pillFillInteraction = null;
+
 function loadSectionAssignOverrides() {
   try {
     const r = localStorage.getItem(STORAGE_SECTION_ASSIGN);
@@ -744,16 +748,127 @@ function applyScheduleCellValue(rowIndex, day, next, pillEl) {
     pillEl.style.background = st.bg;
     pillEl.style.color = st.fg;
     pillEl.setAttribute("aria-label", `Отметка ${next}`);
-    pillEl.title = "Код: " + next + ". Клик — выбрать другой объект из списка";
+    pillEl.title = "Код: " + next + ". Клик — список; тяните — копировать на дни";
   } else {
     pillEl.textContent = EMPTY_MARK;
     pillEl.className = "pill pill--empty";
     pillEl.style.background = "";
     pillEl.style.color = "";
     pillEl.setAttribute("aria-label", "Нет отметки");
-    pillEl.title = "Клик — выбрать объект из списка";
+    pillEl.title = "Клик — список; тяните — очистить диапазон";
   }
   updateFooterTotals();
+}
+
+function pillUnderPoint(clientX, clientY) {
+  const stack = document.elementsFromPoint(clientX, clientY);
+  for (const node of stack) {
+    if (node.nodeType !== 1) continue;
+    const el = node.classList.contains("pill") ? node : node.closest(".pill");
+    if (el && el.dataset.row != null && el.dataset.day != null) return el;
+  }
+  return null;
+}
+
+function clearFillDragPreview() {
+  document.querySelectorAll(".pill--fill-range").forEach((p) => p.classList.remove("pill--fill-range"));
+}
+
+function updateFillDragPreview() {
+  clearFillDragPreview();
+  const pi = pillFillInteraction;
+  if (!pi || !pi.dragging) return;
+  const lo = Math.min(pi.day0, pi.day1);
+  const hi = Math.max(pi.day0, pi.day1);
+  const row = String(pi.rowIndex);
+  document.querySelectorAll(`#scheduleBody .pill[data-row="${row}"]`).forEach((pill) => {
+    const d = Number(pill.dataset.day, 10);
+    if (!Number.isNaN(d) && d >= lo && d <= hi) pill.classList.add("pill--fill-range");
+  });
+}
+
+function cancelPillFillInteraction() {
+  if (!pillFillInteraction) return;
+  document.removeEventListener("pointermove", pillFillInteraction.onMove);
+  document.removeEventListener("pointerup", pillFillInteraction.onUp);
+  document.removeEventListener("pointercancel", pillFillInteraction.onUp);
+  document.body.classList.remove("pill-fill-dragging");
+  clearFillDragPreview();
+  pillFillInteraction = null;
+}
+
+function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
+  const data = getDataset();
+  if (!data || rowIndex < 0 || rowIndex >= data.employees.length) return;
+  const { year, monthIndex } = parseMonthKey(state.monthKey);
+  const dim = daysInMonth(year, monthIndex);
+  const lo = Math.max(1, Math.min(Math.min(dayA, dayB), dim));
+  const hi = Math.min(dim, Math.max(Math.max(dayA, dayB), 1));
+  if (!state.scheduleOverrides) state.scheduleOverrides = {};
+  if (!state.scheduleOverrides[rowIndex]) state.scheduleOverrides[rowIndex] = {};
+  for (let d = lo; d <= hi; d++) {
+    state.scheduleOverrides[rowIndex][d] = code;
+  }
+  render();
+}
+
+function startPillFillInteraction(ev, rowIndex, day, pillEl) {
+  if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
+  if (ev.button !== 0) return;
+  const data = getDataset();
+  if (!data) return;
+  if (pillFillInteraction) cancelPillFillInteraction();
+
+  const code = data.employees[rowIndex].schedule[day] ?? "";
+
+  const onMove = (e) => {
+    if (!pillFillInteraction) return;
+    const pi = pillFillInteraction;
+    const dx = e.clientX - pi.startX;
+    const dy = e.clientY - pi.startY;
+    if (!pi.dragging && dx * dx + dy * dy >= PILL_FILL_DRAG_THRESHOLD_PX * PILL_FILL_DRAG_THRESHOLD_PX) {
+      pi.dragging = true;
+      document.body.classList.add("pill-fill-dragging");
+      closeScheduleCellPicker();
+    }
+    if (!pi.dragging) return;
+    const p = pillUnderPoint(e.clientX, e.clientY);
+    if (p && p.dataset.row === String(pi.rowIndex)) {
+      const d = Number(p.dataset.day, 10);
+      if (!Number.isNaN(d) && pi.day1 !== d) {
+        pi.day1 = d;
+        updateFillDragPreview();
+      }
+    }
+  };
+
+  const onUp = () => {
+    if (!pillFillInteraction) return;
+    const pi = pillFillInteraction;
+    cancelPillFillInteraction();
+    if (pi.dragging) {
+      applyScheduleRowDayRange(pi.rowIndex, pi.day0, pi.day1, pi.code);
+    } else {
+      openScheduleCellPicker(pi.rowIndex, pi.day0, pi.pillEl);
+    }
+  };
+
+  pillFillInteraction = {
+    rowIndex,
+    day0: day,
+    day1: day,
+    code,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    dragging: false,
+    pillEl,
+    onMove,
+    onUp,
+  };
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", onUp);
+  ev.preventDefault();
 }
 
 function loadUiBlocks() {
@@ -1175,12 +1290,12 @@ function renderSchedule(data) {
       const canPick = state.mode === "edit" && isEditSessionUnlocked();
       pill.title = canPick
         ? code
-          ? `Код: ${code}. Клик — выбрать другой объект из списка`
-          : "Клик — выбрать объект из списка"
+          ? `Код: ${code}. Клик — список; зажмите и тяните по дням — заполнить как в Excel`
+          : "Клик — список; зажмите и тяните — очистить диапазон дней"
         : code
           ? `Код: ${code}`
           : "Нет отметки — включите режим редактирования";
-      pill.addEventListener("click", () => onPillClick(rowIndex, day, pill));
+      pill.addEventListener("pointerdown", (e) => startPillFillInteraction(e, rowIndex, day, pill));
 
       td.appendChild(pill);
       tr.appendChild(td);
@@ -1220,12 +1335,6 @@ function renderSchedule(data) {
   foot.appendChild(footRow);
 }
 
-function onPillClick(rowIndex, day, pillEl) {
-  if (state.mode !== "edit") return;
-  if (!isEditSessionUnlocked()) return;
-  openScheduleCellPicker(rowIndex, day, pillEl);
-}
-
 function updateFooterTotals() {
   const data = getDataset();
   if (!data) return;
@@ -1257,6 +1366,7 @@ function updateFooterTotals() {
 
 function render() {
   closeScheduleCellPicker();
+  cancelPillFillInteraction();
   buildLegend();
   const data = getDataset();
   document.getElementById("yearLabel").textContent = "2026";

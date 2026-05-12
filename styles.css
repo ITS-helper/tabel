@@ -983,6 +983,25 @@ body {
 body[data-mode="edit"] .pill {
   cursor: pointer;
   outline: 1px dashed transparent;
+  touch-action: none;
+}
+
+body.pill-fill-dragging,
+body.pill-fill-dragging .pill {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.pill--fill-range {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  z-index: 1;
+  position: relative;
+}
+
+[data-theme="dark"] .pill--fill-range {
+  outline-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35);
 }
 
 body[data-mode="edit"] .pill:hover {
