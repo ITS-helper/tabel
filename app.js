@@ -579,7 +579,7 @@ let state = {
   sectionAssignOverrides: loadSectionAssignOverrides(),
   /** Переименование вкладок ust / pilot */
   sectionTitleOverrides: loadSectionTitleOverrides(),
-  /** Блоки легенды и сводки по отпускам на странице */
+  /** Легенда / отпуска: true = панель развёрнута (localStorage ww-ui-blocks) */
   uiBlocks: loadUiBlocks(),
 };
 
@@ -593,15 +593,35 @@ function persistUiBlocks() {
   } catch (_) {}
 }
 
-function applyUiBlockVisibility() {
-  const leg = document.getElementById("legendSection");
-  const vac = document.getElementById("vacationCardsSection");
-  const cbLeg = document.getElementById("toggleLegendBlock");
-  const cbVac = document.getElementById("toggleVacationsBlock");
-  if (leg) leg.hidden = !state.uiBlocks.legend;
-  if (vac) vac.hidden = !state.uiBlocks.vacations;
-  if (cbLeg) cbLeg.checked = state.uiBlocks.legend;
-  if (cbVac) cbVac.checked = state.uiBlocks.vacations;
+/** Состояние панелей: true = развёрнуто (как чекбоксы «показать» раньше) */
+function syncCollapsiblePanels() {
+  const legSec = document.getElementById("legendSection");
+  const vacSec = document.getElementById("vacationCardsSection");
+  const legBtn = document.getElementById("legendPanelToggle");
+  const vacBtn = document.getElementById("vacationPanelToggle");
+  if (legSec) legSec.classList.toggle("open", state.uiBlocks.legend);
+  if (vacSec) vacSec.classList.toggle("open", state.uiBlocks.vacations);
+  if (legBtn) legBtn.setAttribute("aria-expanded", state.uiBlocks.legend ? "true" : "false");
+  if (vacBtn) vacBtn.setAttribute("aria-expanded", state.uiBlocks.vacations ? "true" : "false");
+}
+
+function bindCollapsiblePanels() {
+  const legBtn = document.getElementById("legendPanelToggle");
+  const vacBtn = document.getElementById("vacationPanelToggle");
+  if (legBtn) {
+    legBtn.addEventListener("click", () => {
+      state.uiBlocks.legend = !state.uiBlocks.legend;
+      persistUiBlocks();
+      syncCollapsiblePanels();
+    });
+  }
+  if (vacBtn) {
+    vacBtn.addEventListener("click", () => {
+      state.uiBlocks.vacations = !state.uiBlocks.vacations;
+      persistUiBlocks();
+      syncCollapsiblePanels();
+    });
+  }
 }
 
 function getDataset() {
@@ -629,7 +649,8 @@ function init() {
   bindControls();
   bindStickyTableClick();
   bindTeamDialog();
-  applyUiBlockVisibility();
+  bindCollapsiblePanels();
+  syncCollapsiblePanels();
   render();
 }
 
@@ -782,22 +803,6 @@ function bindControls() {
     });
   }
 
-  const tLeg = document.getElementById("toggleLegendBlock");
-  const tVac = document.getElementById("toggleVacationsBlock");
-  if (tLeg) {
-    tLeg.addEventListener("change", () => {
-      state.uiBlocks.legend = tLeg.checked;
-      persistUiBlocks();
-      applyUiBlockVisibility();
-    });
-  }
-  if (tVac) {
-    tVac.addEventListener("change", () => {
-      state.uiBlocks.vacations = tVac.checked;
-      persistUiBlocks();
-      applyUiBlockVisibility();
-    });
-  }
 }
 
 function renderVacationCards(data) {

@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WORK WATCH — График работ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -49,16 +55,6 @@
           </nav>
         </div>
         <div class="toolbar__controls">
-          <div class="toolbar__toggles" role="group" aria-label="Видимость блоков страницы">
-            <label class="toolbar-toggle">
-              <input type="checkbox" id="toggleLegendBlock" checked />
-              <span>Легенда</span>
-            </label>
-            <label class="toolbar-toggle">
-              <input type="checkbox" id="toggleVacationsBlock" checked />
-              <span>Отпуска</span>
-            </label>
-          </div>
           <button type="button" class="btn btn--outline" id="teamDialogBtn" title="Кто в каком объекте, названия вкладок">
             Объекты и состав
           </button>
@@ -70,40 +66,57 @@
         </div>
       </section>
 
-      <section
-        id="legendSection"
-        class="control-strip control-strip--legend surface-card surface-card--pad"
-        aria-label="Легенда"
-      >
-        <div class="legend-bubble" aria-labelledby="legendBubbleTitle">
-          <div class="legend-bubble__head">
-            <h3 class="legend-bubble__title" id="legendBubbleTitle">Легенда</h3>
-            <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
-              Показать всех
-            </button>
+      <section id="legendSection" class="ww-guide-group open" aria-label="Легенда">
+        <div class="ww-panel-head">
+          <button
+            type="button"
+            class="ww-group-header"
+            id="legendPanelToggle"
+            aria-expanded="true"
+            aria-controls="legendPanelBody"
+          >
+            <span class="ww-group-title">Легенда</span>
+            <span class="ww-group-chevron" aria-hidden="true">▼</span>
+          </button>
+          <button type="button" class="legend-bubble__clear btn btn--outline" id="legendClearBtn" hidden>
+            Показать всех
+          </button>
+        </div>
+        <div class="ww-guide-body" id="legendPanelBody">
+          <div class="legend-bubble ww-guide-inner">
+            <p class="legend-bubble__hint">
+              Нажмите код отметки — в табеле останутся только сотрудники, у которых в этом месяце есть хотя бы один такой день.
+            </p>
+            <div class="legend-strip" id="legendList" role="list"></div>
           </div>
-          <p class="legend-bubble__hint">
-            Нажмите код отметки — в табеле останутся только сотрудники, у которых в этом месяце есть хотя бы один такой день.
-          </p>
-          <div class="legend-strip" id="legendList" role="list"></div>
         </div>
       </section>
 
       <span id="currentSectionTitle" class="visually-hidden">Усть-Луга</span>
 
-      <section
-        id="vacationCardsSection"
-        class="cards surface-card surface-card--pad"
-        aria-label="Краткая сводка по отпускам"
-      >
-        <article class="card card--vac-out">
-          <h3 class="card__title">Уезжают в отпуск</h3>
-          <ul class="card__list" id="vacationOut"></ul>
-        </article>
-        <article class="card card--vac-in">
-          <h3 class="card__title">Возвращаются с отпуска</h3>
-          <ul class="card__list" id="vacationIn"></ul>
-        </article>
+      <section id="vacationCardsSection" class="ww-guide-group open" aria-label="Краткая сводка по отпускам">
+        <button
+          type="button"
+          class="ww-group-header ww-group-header--full"
+          id="vacationPanelToggle"
+          aria-expanded="true"
+          aria-controls="vacationPanelBody"
+        >
+          <span class="ww-group-title">Отпуска</span>
+          <span class="ww-group-chevron" aria-hidden="true">▼</span>
+        </button>
+        <div class="ww-guide-body" id="vacationPanelBody">
+          <div class="ww-cards-inner">
+            <article class="card card--vac-out">
+              <h3 class="card__title">Уезжают в отпуск</h3>
+              <ul class="card__list" id="vacationOut"></ul>
+            </article>
+            <article class="card card--vac-in">
+              <h3 class="card__title">Возвращаются с отпуска</h3>
+              <ul class="card__list" id="vacationIn"></ul>
+            </article>
+          </div>
+        </div>
       </section>
 
       <div
