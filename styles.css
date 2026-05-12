@@ -31,7 +31,7 @@
   --sched-w-days: 88px;
   --sched-sticky-edge: 8px 0 14px -6px rgba(15, 23, 42, 0.18);
   /* Высота блока над табелем (шапка + легенда/отпуска) — для закреплённой строки дат */
-  --sched-scroll-offset: 280px;
+  --sched-scroll-offset: 400px;
 
   --stack-gap: 12px;
   --stack-pad: 12px 14px;
@@ -342,6 +342,195 @@ body {
 .main {
   min-width: 0;
   max-width: 100%;
+}
+
+/* Сводка: сегодня / завтра по текущей вкладке объекта */
+.object-summary {
+  margin-bottom: var(--stack-gap);
+}
+
+.object-summary__card {
+  position: relative;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 85%, var(--surface)) 0%, var(--surface) 48%, var(--surface) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  box-shadow: 0 2px 12px rgba(33, 150, 243, 0.08);
+  overflow: hidden;
+}
+
+.object-summary__card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), #14b8a6);
+  opacity: 0.95;
+}
+
+.object-summary__head {
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.object-summary__title {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--portal-primary);
+}
+
+.object-summary__context {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.object-summary__mount {
+  padding: 14px 16px 18px;
+}
+
+.object-summary__empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.object-summary__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+}
+
+@media (max-width: 720px) {
+  .object-summary__columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.object-summary__col {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.object-summary__col--today {
+  border-left: 3px solid var(--accent);
+}
+
+.object-summary__col--tomorrow {
+  border-left: 3px solid #14b8a6;
+}
+
+.object-summary__col-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.object-summary__col-date {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+
+.object-summary__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.object-summary__stat {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.object-summary__stat--day {
+  background: color-mix(in srgb, var(--accent-soft) 90%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+.object-summary__stat--night {
+  background: color-mix(in srgb, #cffafe 70%, var(--surface));
+  border: 1px solid color-mix(in srgb, #0e7490 22%, var(--border));
+}
+
+.object-summary__stat-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.object-summary__stat-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.object-summary__block {
+  margin: 0;
+}
+
+.object-summary__block-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.object-summary__block-text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--text);
+  word-wrap: break-word;
+}
+
+[data-theme="dark"] .object-summary__card {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 35%, var(--surface)) 0%, var(--surface) 55%);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .object-summary__title {
+  color: var(--accent);
+}
+
+[data-theme="dark"] .object-summary__stat--day {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+
+[data-theme="dark"] .object-summary__stat--night {
+  background: color-mix(in srgb, #134e4a 55%, var(--surface));
+  border-color: color-mix(in srgb, #2dd4bf 28%, var(--border));
 }
 
 /* Раскрывающиеся блоки (паттерн guide-group — ITS workarounds) */

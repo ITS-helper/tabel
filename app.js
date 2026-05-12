@@ -1474,10 +1474,9 @@ function bindCollapsiblePanels() {
   }
 }
 
-function getDataset() {
-  const base = DATABASE[state.monthKey];
+function getDatasetForMonthKey(monthKey) {
+  const base = DATABASE[monthKey];
   if (!base) return null;
-  const monthKey = state.monthKey;
   const overrides = state.scheduleByMonth[monthKey];
   const fieldAll = state.employeeFieldOverridesByMonth[monthKey] || {};
   const employeesBase = base.employees.map((emp, i) => {
@@ -1507,6 +1506,194 @@ function getDataset() {
   }));
   const employees = [...employeesBase, ...addedMapped];
   return { ...base, employees };
+}
+
+function getDataset() {
+  return getDatasetForMonthKey(state.monthKey);
+}
+
+/** Год графика из выбранного месяца — тот же, что в табеле (сопоставление «сегодня» по числу и месяцу). */
+function summaryDataYear() {
+  return parseMonthKey(state.monthKey).year;
+}
+
+const NIGHT_SHIFT_CODE = "СПГ.";
+const ON_SHIFT_DAY_CODES = new Set([...ON_SHIFT_CODES].filter((c) => c !== NIGHT_SHIFT_CODE));
+const WEEKEND_CODE = "ВХ";
+const SICK_CODES = new Set(["Б", "БЛ"]);
+
+function findEmployeeByNameInData(data, name) {
+  if (!data?.employees) return null;
+  return data.employees.find((e) => e.name === name) || null;
+}
+
+/** Отметка в календарную дату (месяц/год из dataYear табеля). */
+function scheduleCodeOnCalendarDate(name, date, dataYear) {
+  const mk = monthKey(dataYear, date.getMonth());
+  const data = getDatasetForMonthKey(mk);
+  const emp = findEmployeeByNameInData(data, name);
+  if (!emp) return "";
+  const dim = daysInMonth(dataYear, date.getMonth());
+  const d = date.getDate();
+  if (d < 1 || d > dim) return "";
+  return dayScheduleCode(emp.schedule, d);
+}
+
+function expandVacationSegmentCalendar(name, anchor, dataYear) {
+  const a = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const c0 = scheduleCodeOnCalendarDate(name, a, dataYear);
+  if (c0 !== VACATION_OT && c0 !== VACATION_TRAVEL) return null;
+  let start = new Date(a);
+  let end = new Date(a);
+  while (true) {
+    const p = new Date(start);
+    p.setDate(p.getDate() - 1);
+    const c = scheduleCodeOnCalendarDate(name, p, dataYear);
+    if (c !== VACATION_OT && c !== VACATION_TRAVEL) break;
+    start = p;
+  }
+  while (true) {
+    const n = new Date(end);
+    n.setDate(n.getDate() + 1);
+    const c = scheduleCodeOnCalendarDate(name, n, dataYear);
+    if (c !== VACATION_OT && c !== VACATION_TRAVEL) break;
+    end = n;
+  }
+  return { start, end };
+}
+
+function vacationSegmentHasOT(name, start, end, dataYear) {
+  const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endD = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  while (cur <= endD) {
+    if (scheduleCodeOnCalendarDate(name, cur, dataYear) === VACATION_OT) return true;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return false;
+}
+
+/** Первый календарный день отпуска (ВП/ОТ с ОТ в сегменте), вчера не в отпуске. */
+function isFirstVacationCalendarDay(name, date, dataYear) {
+  const dNorm = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const c = scheduleCodeOnCalendarDate(name, dNorm, dataYear);
+  if (c !== VACATION_OT && c !== VACATION_TRAVEL) return false;
+  const prev = new Date(dNorm);
+  prev.setDate(prev.getDate() - 1);
+  const cPrev = scheduleCodeOnCalendarDate(name, prev, dataYear);
+  if (cPrev === VACATION_OT || cPrev === VACATION_TRAVEL) return false;
+  const seg = expandVacationSegmentCalendar(name, dNorm, dataYear);
+  if (!seg) return false;
+  return vacationSegmentHasOT(name, seg.start, seg.end, dataYear);
+}
+
+function formatCalendarDateLongRu(d) {
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+const SUMMARY_NAMES_MAX = 7;
+
+function formatNameList(names) {
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, "ru"));
+  const n = sorted.length;
+  if (n === 0) return "—";
+  const shown = sorted.slice(0, SUMMARY_NAMES_MAX);
+  const rest = n - shown.length;
+  const tail = rest > 0 ? ` +${rest}` : "";
+  const esc = (s) => {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  };
+  return shown.map((s) => esc(s)).join(", ") + tail;
+}
+
+function renderObjectSummary() {
+  const mount = document.getElementById("objectSummaryMount");
+  const ctxEl = document.getElementById("objectSummaryContext");
+  if (!mount) return;
+
+  const dataYear = summaryDataYear();
+  const today = new Date();
+  const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const tomorrow = new Date(todayNorm);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const mkToday = monthKey(dataYear, todayNorm.getMonth());
+  const dataToday = getDatasetForMonthKey(mkToday);
+  const sectionTitle = sectionTabTitle(state.sectionId);
+
+  if (ctxEl) {
+    ctxEl.textContent = `${sectionTitle} · по графику ${dataYear} г.`;
+  }
+
+  if (!dataToday || !dataToday.employees.length) {
+    mount.innerHTML = `<p class="object-summary__empty">Нет данных графика за ${MONTH_NAMES[todayNorm.getMonth()]} ${dataYear} — сводка недоступна.</p>`;
+    return;
+  }
+
+  const pool = employeesForSection(dataToday.employees, state.sectionId);
+  if (!pool.length) {
+    mount.innerHTML = `<p class="object-summary__empty">Нет сотрудников на вкладке «${sectionTitle}».</p>`;
+    return;
+  }
+
+  let dayShift = 0;
+  let nightShift = 0;
+  const weekendToday = [];
+  const sickToday = [];
+  const weekendTomorrow = [];
+  const vacFirstTomorrow = [];
+
+  for (const emp of pool) {
+    const codeT = scheduleCodeOnCalendarDate(emp.name, todayNorm, dataYear);
+    if (codeT === NIGHT_SHIFT_CODE) nightShift += 1;
+    else if (ON_SHIFT_DAY_CODES.has(codeT)) dayShift += 1;
+    if (codeT === WEEKEND_CODE) weekendToday.push(emp.name);
+    if (SICK_CODES.has(codeT)) sickToday.push(emp.name);
+
+    const codeTom = scheduleCodeOnCalendarDate(emp.name, tomorrow, dataYear);
+    if (codeTom === WEEKEND_CODE) weekendTomorrow.push(emp.name);
+    if (isFirstVacationCalendarDay(emp.name, tomorrow, dataYear)) vacFirstTomorrow.push(emp.name);
+  }
+
+  const wdToday = weekdayShortRu(todayNorm.getFullYear(), todayNorm.getMonth(), todayNorm.getDate());
+  const wdTom = weekdayShortRu(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+
+  mount.innerHTML = `
+    <div class="object-summary__columns">
+      <div class="object-summary__col object-summary__col--today">
+        <h3 class="object-summary__col-title">Сегодня <span class="object-summary__col-date">${formatCalendarDateLongRu(todayNorm)}, ${wdToday}</span></h3>
+        <div class="object-summary__stats">
+          <div class="object-summary__stat object-summary__stat--day">
+            <span class="object-summary__stat-value">${dayShift}</span>
+            <span class="object-summary__stat-label">день (СПГ и др. смена)</span>
+          </div>
+          <div class="object-summary__stat object-summary__stat--night">
+            <span class="object-summary__stat-value">${nightShift}</span>
+            <span class="object-summary__stat-label">ночь (СПГ.)</span>
+          </div>
+        </div>
+        <div class="object-summary__block">
+          <span class="object-summary__block-label">Выходной (ВХ)</span>
+          <p class="object-summary__block-text">${formatNameList(weekendToday)}</p>
+        </div>
+        <div class="object-summary__block">
+          <span class="object-summary__block-label">Болеют (Б / БЛ)</span>
+          <p class="object-summary__block-text">${formatNameList(sickToday)}</p>
+        </div>
+      </div>
+      <div class="object-summary__col object-summary__col--tomorrow">
+        <h3 class="object-summary__col-title">Завтра <span class="object-summary__col-date">${formatCalendarDateLongRu(tomorrow)}, ${wdTom}</span></h3>
+        <div class="object-summary__block">
+          <span class="object-summary__block-label">Выходной (ВХ)</span>
+          <p class="object-summary__block-text">${formatNameList(weekendTomorrow)}</p>
+        </div>
+        <div class="object-summary__block">
+          <span class="object-summary__block-label">Первый день отпуска (ВП / ОТ)</span>
+          <p class="object-summary__block-text">${formatNameList(vacFirstTomorrow)}</p>
+        </div>
+      </div>
+    </div>`;
 }
 
 function init() {
@@ -1997,6 +2184,7 @@ function render() {
   closeScheduleCellPicker();
   cancelPillFillInteraction();
   buildLegend();
+  renderObjectSummary();
   const data = getDataset();
   document.getElementById("yearLabel").textContent = "2026";
 
