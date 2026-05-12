@@ -169,6 +169,15 @@ body {
   box-shadow: none;
 }
 
+/* Светлая шапка: фирменный #0047BB; тёмная тема — тот же оттенок на тёмном фоне плохо читается */
+[data-theme="dark"] .header__logo .header__logo-word {
+  fill: #bbdefb;
+}
+
+[data-theme="dark"] .header__logo .header__logo-stroke {
+  stroke: #bbdefb;
+}
+
 .header__page {
   margin: 0;
   font-family: var(--font-display);
