@@ -489,6 +489,35 @@ body {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.toolbar__toggles {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-right: 10px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border);
+}
+
+.toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.toolbar-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .select {
@@ -813,4 +842,153 @@ body[data-mode="edit"] .pill {
 
 body[data-mode="edit"] .pill:hover {
   outline-color: var(--accent);
+}
+
+/* Диалог «Объекты и состав» */
+.team-dialog {
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  max-width: min(640px, 96vw);
+  background: transparent;
+  box-shadow: none;
+}
+
+.team-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.team-dialog__panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
+}
+
+.team-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.team-dialog__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.team-dialog__close {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 4px 10px;
+}
+
+.team-dialog__section {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.team-dialog__subtitle {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.team-dialog__hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.team-dialog__fields {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 520px) {
+  .team-dialog__fields {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+}
+
+.team-dialog__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.team-dialog__label-text {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.input {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+
+.input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.team-dialog__scroll {
+  max-height: min(52vh, 420px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+}
+
+.team-dialog__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.team-dialog__table th,
+.team-dialog__table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.team-dialog__table thead th {
+  background: var(--bg);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.team-dialog__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.team-dialog__table select {
+  min-width: 12rem;
+}
+
+.team-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 18px;
+  background: var(--bg);
+}
+
+.team-dialog__footer .btn:first-of-type {
+  margin-right: auto;
 }

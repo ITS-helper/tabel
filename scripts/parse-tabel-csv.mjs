@@ -76,37 +76,48 @@ function monthDayColStart(m1to12) {
   return col;
 }
 
-/** Нормализация кода ячейки → ключ для приложения */
+/** Нормализация кода ячейки → ключ для приложения (как в легенде Google Таблицы) */
 function normalizeCell(raw) {
   if (raw == null) return "";
-  let s = String(raw).trim();
-  if (!s || s === "-" || s === "—") return "";
-  s = s.replace(/\uFEFF/g, "");
-  // единый вид точки в аббревиатурах
-  const base = s.replace(/\.+$/, "").replace(/−/g, "-");
-  const upperish = base.toUpperCase();
+  let s = String(raw).trim().replace(/\uFEFF/g, "");
+  if (!s) return "";
+
+  // Длинное тире в выгрузке — пустая ячейка в UI
+  if (s === "—") return "";
+
+  // Минус / короткое тире — код «Отсутствует»
+  if (s === "-" || s === "−" || s === "–") return "-";
+
+  const t = s.replace(/−/g, "-");
+
+  // Ночные смены: СПГ. и ТСБ. (точка частью кода)
+  if (/^СПГ\.\s*$/i.test(t)) return "СПГ.";
+  if (/^ТСБ\.\s*$/i.test(t)) return "ТСБ.";
+  if (/^СПГ\s*$/i.test(t)) return "СПГ";
+  if (/^ТСБ\s*$/i.test(t)) return "ТСБ";
+
+  // Старые латинские сокращения из черновиков
+  if (/^OT$/i.test(t)) return "ОТ";
+  if (/^BX$/i.test(t)) return "ВХ";
 
   const map = new Map([
-    ["ОТ", "OT"],
-    ["ВХ", "BX"],
+    ["ОТ", "ОТ"],
+    ["ВХ", "ВХ"],
     ["Б", "Б"],
-    ["БЛ", "Б"],
+    ["БЛ", "БЛ"],
+    ["ВП", "ВП"],
+    ["О", "О"],
     ["УР", "УР"],
     ["ИНК", "ИНК"],
     ["ГАЛС", "ГАЛС"],
+    ["М", "М"],
+    ["АПК", "АПК"],
+    ["ЗЛ", "ЗЛ"],
   ]);
 
-  if (map.has(base)) return map.get(base);
-  if (upperish.startsWith("СПГ")) return "ИНК";
-  if (upperish.startsWith("ТСБ")) return "ТСБ";
-  if (base === "ВП") return "ВП";
-  if (base === "О") return "О";
-  if (base === "М") return "М";
-  if (base === "АПК") return "АПК";
-  if (base === "ЗЛ") return "ЗЛ";
-  if (base === "ОТ") return "OT";
+  if (map.has(t)) return map.get(t);
 
-  return base;
+  return t;
 }
 
 function isEmployeeRow(cols) {
@@ -131,9 +142,19 @@ function extractMonthSchedule(cols, m1to12) {
   return schedule;
 }
 
+/** Совпадает с ON_SHIFT_CODES в app.js */
 function daysOnShiftFromSchedule(schedule, dmax) {
   let n = 0;
-  const shiftCodes = new Set(["ИНК", "УР", "ГАЛС"]);
+  const shiftCodes = new Set([
+    "СПГ",
+    "СПГ.",
+    "ИНК",
+    "УР",
+    "ГАЛС",
+    "М",
+    "АПК",
+    "ЗЛ",
+  ]);
   for (let d = 1; d <= dmax; d++) {
     if (shiftCodes.has(schedule[d])) n++;
   }
@@ -145,7 +166,8 @@ for (const cols of rows) {
   if (!isEmployeeRow(cols)) continue;
   const tn = String(cols[3] || "").trim() || "—";
   const name = String(cols[4] || "").trim();
-  const position = String(cols[2] || "").trim() || "—";
+  /** Колонка C в этой выгрузке — подпись к аббревиатуре из легенды слева (Отпуск, ВСМ…), не должность сотрудника. Должности в CSV нет. */
+  const position = "";
 
   const schedule = extractMonthSchedule(cols, 5); // май 2026
   const dmax = MONTH_LEN[4];

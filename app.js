@@ -17,35 +17,359 @@ const MONTH_NAMES = [
   "Декабрь",
 ];
 
-/** Легенда: код → подпись и цвет заливки ячейки */
+/**
+ * Легенда — как в Google Таблице «График работы на объектах».
+ * Колонка «СПГ» / «СПГ.» — табель объекта Усть-Луга (не путать с ИНК и др.).
+ */
 const LEGEND = [
-  { code: "OT", label: "Отпуск", bg: "#e9d5ff", fg: "#6b21a8" },
-  { code: "BX", label: "Выходной", bg: "#fecaca", fg: "#991b1b" },
+  { code: "ОТ", label: "Отпуск", bg: "#e9d5ff", fg: "#6b21a8" },
+  { code: "ВХ", label: "Выходной", bg: "#fecaca", fg: "#991b1b" },
   { code: "Б", label: "Больничный", bg: "#fed7aa", fg: "#9a3412" },
-  { code: "ВП", label: "Вых. перед отпуском", bg: "#fce7f3", fg: "#9d174d" },
-  { code: "О", label: "Отгул / офис (О)", bg: "#e5e7eb", fg: "#374151" },
-  { code: "УР", label: "Удалённо", bg: "#bfdbfe", fg: "#1e40af" },
-  { code: "ИНК", label: "Инженер (вахта)", bg: "#c7d2fe", fg: "#3730a3" },
-  { code: "ГАЛС", label: "Галс", bg: "#a5f3fc", fg: "#0e7490" },
-  { code: "ТСБ", label: "ТСБ", bg: "#ddd6fe", fg: "#5b21b6" },
-  { code: "М", label: "Мобилизация / М", bg: "#fbcfe8", fg: "#9d174d" },
-  { code: "АПК", label: "АПК", bg: "#cffafe", fg: "#155e75" },
-  { code: "ЗЛ", label: "Зелёная линия", bg: "#bbf7d0", fg: "#166534" },
+  { code: "БЛ", label: "Больничный лист", bg: "#ddd6fe", fg: "#5b21b6" },
+  { code: "ВП", label: "В пути", bg: "#fce7f3", fg: "#9d174d" },
+  { code: "-", label: "Отсутствует", bg: "#e2e8f0", fg: "#64748b" },
+  { code: "О", label: "Офис (МСК)", bg: "#dbeafe", fg: "#1e40af" },
+  { code: "УР", label: "Удалённая работа", bg: "#bfdbfe", fg: "#1e3a8a" },
+  { code: "СПГ", label: "ВСМ (Усть-Луга) СПГ", bg: "#7dd3fc", fg: "#0c4a6e" },
+  { code: "СПГ.", label: "ВСМ (Усть-Луга) СПГ Ночь", bg: "#0284c7", fg: "#f0f9ff" },
+  { code: "М", label: "Магнит", bg: "#fb923c", fg: "#7c2d12" },
+  { code: "АПК", label: "Продовольственная программа (РМ АГРО)", bg: "#cffafe", fg: "#155e75" },
+  { code: "ГАЛС", label: 'ООО "Галс-Девелопмент"', bg: "#f9a8d4", fg: "#831843" },
+  { code: "ЗЛ", label: 'ТК "ЗЕЛЕНАЯ ЛИНИЯ"', bg: "#bbf7d0", fg: "#166534" },
+  { code: "ИНК", label: "Иркутская нефтяная компания", bg: "#a5b4fc", fg: "#312e81" },
 ];
 
 const CODE_ORDER = LEGEND.map((l) => l.code);
 
-/** Коды, которые учитываются в строке «Всего на смене» (вахта / смена по проекту) */
-const ON_SHIFT_CODES = new Set(["ИНК", "УР", "ГАЛС"]);
+/** Учитываются в строке «Всего на смене» (объекты / выезд, без отпуска и офиса) */
+const ON_SHIFT_CODES = new Set([
+  "СПГ",
+  "СПГ.",
+  "ИНК",
+  "УР",
+  "ГАЛС",
+  "М",
+  "АПК",
+  "ЗЛ",
+]);
 
 /** Визуальная пустая ячейка (нет отметки в табеле; в «на смене» не входит) */
 const EMPTY_MARK = "\u2014";
 
 const SECTIONS = [
-  { id: "pilot", title: "Пилотные проекты" },
   { id: "ust", title: "Усть-Луга" },
+  { id: "pilot", title: "Пилотные проекты" },
   { id: "summary", title: "Сводная" },
 ];
+
+/** По умолчанию эти ФИО отнесены к пилотным проектам (переопределяется в «Объекты и состав») */
+const DEFAULT_PILOT_NAMES = new Set([
+  "Подгорбунских Иван Леонидович",
+  "Погорелец Мария Анатольевна",
+  "Трефилов Алексей Павлович",
+  "Штепа Илья Вадимович",
+]);
+
+const STORAGE_SECTION_ASSIGN = "ww-section-overrides";
+const STORAGE_SECTION_TITLES = "ww-section-titles";
+
+function loadSectionAssignOverrides() {
+  try {
+    const r = localStorage.getItem(STORAGE_SECTION_ASSIGN);
+    if (!r) return {};
+    const o = JSON.parse(r);
+    const out = {};
+    for (const k of Object.keys(o)) {
+      if (o[k] === "pilot" || o[k] === "ust") out[k] = o[k];
+    }
+    return out;
+  } catch (_) {
+    return {};
+  }
+}
+
+function loadSectionTitleOverrides() {
+  try {
+    const r = localStorage.getItem(STORAGE_SECTION_TITLES);
+    if (!r) return {};
+    const o = JSON.parse(r);
+    const out = {};
+    if (typeof o.ust === "string") out.ust = o.ust;
+    if (typeof o.pilot === "string") out.pilot = o.pilot;
+    return out;
+  } catch (_) {
+    return {};
+  }
+}
+
+function defaultSectionForName(name) {
+  return DEFAULT_PILOT_NAMES.has(name) ? "pilot" : "ust";
+}
+
+/** Должности по таблицам заказчика */
+const POSITION_BY_NAME = {
+  "Бурангулов Руслан Азаматович": "Руководитель проекта",
+  "Беккер Александр Анатольевич": "Инженер по внедрению",
+  "Гаджиев Ильгар Бахтиярович": "Старший инженер по внедрению",
+  "Зацепин Никита Валериевич": "Старший инженер по внедрению",
+  "Магомедов Султан Абдурахманович": "Младший инженер по внедрению",
+  "Аюшеев Дандар Дамбаевич": "Младший инженер по внедрению",
+  "Смирнов Павел Александрович": "Младший инженер по внедрению",
+  "Окунев Александр Игоревич": "Младший инженер по внедрению",
+  "Устян Авенир Григорьевич": "Младший инженер по внедрению",
+  "Вишневский Сергей Арсенович": "Младший инженер по внедрению",
+  "Газизуллин Рустам Дамирович": "Младший инженер по внедрению",
+  "Савчук Руслан Ростиславович": "Младший инженер по внедрению",
+  "Жарков Александр Владиславович": "Младший инженер по внедрению",
+  "Зуев Леонид Олегович": "Младший инженер по внедрению",
+  "Шуйский Иван Андреевич": "Инженер по внедрению",
+  "Бондарь Роман Альбертович": "Младший инженер по внедрению",
+  "Кумейко Николай Александрович": "Инженер по внедрению",
+  "Доркин Филипп Александрович": "Младший инженер по внедрению",
+  "Мищенко Егор Александрович": "Руководитель проектов",
+  "Бердников Александр Львович": "Старший инженер по внедрению",
+  "Сергеев Тимофей Ильич": "Координатор внедрения",
+  "Трубаев Никита Васильевич": "Инженер по внедрению",
+  "Одиноков Александр Евгеньевич": "Инженер по внедрению",
+  "Насыров Максим Тимурович": "Старший инженер по внедрению",
+  "Подгорбунских Иван Леонидович": "Руководитель проекта",
+  "Погорелец Мария Анатольевна":
+    "Координатор проектов по повышению производительности труда",
+  "Трефилов Алексей Павлович": "Младший инженер по внедрению",
+  "Штепа Илья Вадимович": "Младший инженер по внедрению",
+};
+
+const UST_NAME_ORDER = [
+  "Бурангулов Руслан Азаматович",
+  "Беккер Александр Анатольевич",
+  "Гаджиев Ильгар Бахтиярович",
+  "Зацепин Никита Валериевич",
+  "Магомедов Султан Абдурахманович",
+  "Аюшеев Дандар Дамбаевич",
+  "Смирнов Павел Александрович",
+  "Окунев Александр Игоревич",
+  "Устян Авенир Григорьевич",
+  "Вишневский Сергей Арсенович",
+  "Газизуллин Рустам Дамирович",
+  "Савчук Руслан Ростиславович",
+  "Жарков Александр Владиславович",
+  "Зуев Леонид Олегович",
+  "Шуйский Иван Андреевич",
+  "Бондарь Роман Альбертович",
+  "Кумейко Николай Александрович",
+  "Доркин Филипп Александрович",
+  "Мищенко Егор Александрович",
+  "Бердников Александр Львович",
+  "Сергеев Тимофей Ильич",
+  "Трубаев Никита Васильевич",
+  "Одиноков Александр Евгеньевич",
+  "Насыров Максим Тимурович",
+  "Ивахненко Сергей Игоревич",
+  "Червяков Сергей Андреевич",
+  "Тучин Сергей Геннадьевич",
+];
+
+const PILOT_NAME_ORDER = [
+  "Подгорбунских Иван Леонидович",
+  "Погорелец Мария Анатольевна",
+  "Трефилов Алексей Павлович",
+  "Штепа Илья Вадимович",
+];
+
+function sectionIdForEmployee(name) {
+  const o = state.sectionAssignOverrides[name];
+  if (o === "pilot" || o === "ust") return o;
+  return defaultSectionForName(name);
+}
+
+function persistSectionAssignOverrides() {
+  try {
+    localStorage.setItem(STORAGE_SECTION_ASSIGN, JSON.stringify(state.sectionAssignOverrides));
+  } catch (_) {}
+}
+
+function persistSectionTitleOverrides() {
+  try {
+    localStorage.setItem(STORAGE_SECTION_TITLES, JSON.stringify(state.sectionTitleOverrides));
+  } catch (_) {}
+}
+
+/** Отображаемое название вкладки объекта (с учётом переименования в браузере) */
+function sectionTabTitle(id) {
+  const sec = SECTIONS.find((s) => s.id === id);
+  const def = sec ? sec.title : id;
+  if (id !== "ust" && id !== "pilot") return def;
+  const o = state.sectionTitleOverrides[id];
+  if (o != null && String(o).trim() !== "") return String(o).trim();
+  return def;
+}
+
+function setEmployeeSection(name, sectionId) {
+  if (sectionId !== "pilot" && sectionId !== "ust") return;
+  if (defaultSectionForName(name) === sectionId) delete state.sectionAssignOverrides[name];
+  else state.sectionAssignOverrides[name] = sectionId;
+  persistSectionAssignOverrides();
+  render();
+}
+
+function resetSectionAssignOverrides() {
+  state.sectionAssignOverrides = {};
+  persistSectionAssignOverrides();
+  render();
+}
+
+function resetSectionTitleOverrides() {
+  state.sectionTitleOverrides = {};
+  persistSectionTitleOverrides();
+  fillTeamDialogTitleInputs();
+  buildSectionNav();
+  syncCurrentSectionTitle();
+  refreshTeamAssignSelectLabels();
+}
+
+function syncCurrentSectionTitle() {
+  const cur = SECTIONS.find((s) => s.id === state.sectionId);
+  const te = document.getElementById("currentSectionTitle");
+  if (cur && te) te.textContent = sectionTabTitle(state.sectionId);
+}
+
+function refreshTeamAssignSelectLabels() {
+  const tbody = document.getElementById("teamAssignBody");
+  if (!tbody) return;
+  tbody.querySelectorAll("select.team-dialog__select").forEach((sel) => {
+    sel.querySelectorAll("option").forEach((opt) => {
+      opt.textContent = sectionTabTitle(opt.value);
+    });
+  });
+}
+
+function fillTeamDialogTitleInputs() {
+  const ustEl = document.getElementById("titleUstInput");
+  const pilEl = document.getElementById("titlePilotInput");
+  if (!ustEl || !pilEl) return;
+  ustEl.value = sectionTabTitle("ust");
+  pilEl.value = sectionTabTitle("pilot");
+}
+
+function applyTitleInput(kind, rawValue) {
+  const v = String(rawValue).trim();
+  const defRow = SECTIONS.find((s) => s.id === kind);
+  const defTitle = defRow ? defRow.title : "";
+  if (!v || v === defTitle) delete state.sectionTitleOverrides[kind];
+  else state.sectionTitleOverrides[kind] = v;
+  persistSectionTitleOverrides();
+  const inputEl = document.getElementById(kind === "ust" ? "titleUstInput" : "titlePilotInput");
+  if (inputEl && (!v || v === defTitle)) inputEl.value = sectionTabTitle(kind);
+  refreshTeamAssignSelectLabels();
+  buildSectionNav();
+  syncCurrentSectionTitle();
+}
+
+function populateTeamAssignTable() {
+  const data = getDataset();
+  const tbody = document.getElementById("teamAssignBody");
+  if (!data || !tbody) return;
+  tbody.innerHTML = "";
+  const sorted = [...data.employees].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  sorted.forEach((emp) => {
+    const tr = document.createElement("tr");
+    const tdName = document.createElement("td");
+    tdName.textContent = emp.name;
+    const tdSel = document.createElement("td");
+    const sel = document.createElement("select");
+    sel.className = "select team-dialog__select";
+    ["ust", "pilot"].forEach((sid) => {
+      const opt = document.createElement("option");
+      opt.value = sid;
+      opt.textContent = sectionTabTitle(sid);
+      if (sid === sectionIdForEmployee(emp.name)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", () => setEmployeeSection(emp.name, sel.value));
+    tdSel.appendChild(sel);
+    tr.appendChild(tdName);
+    tr.appendChild(tdSel);
+    tbody.appendChild(tr);
+  });
+}
+
+function openTeamDialog() {
+  const data = getDataset();
+  if (!data || !data.employees.length) {
+    alert("Нет списка сотрудников для выбранного месяца.");
+    return;
+  }
+  fillTeamDialogTitleInputs();
+  populateTeamAssignTable();
+  const dlg = document.getElementById("teamDialog");
+  if (dlg) dlg.showModal();
+}
+
+function bindTeamDialog() {
+  const dlg = document.getElementById("teamDialog");
+  const btn = document.getElementById("teamDialogBtn");
+  const done = document.getElementById("teamDialogDone");
+  const dismiss = document.getElementById("teamDialogDismiss");
+  const resetAssign = document.getElementById("teamAssignReset");
+  const resetTitles = document.getElementById("teamTitlesReset");
+  const ustIn = document.getElementById("titleUstInput");
+  const pilIn = document.getElementById("titlePilotInput");
+
+  if (btn) btn.addEventListener("click", () => openTeamDialog());
+  if (done)
+    done.addEventListener("click", () => {
+      if (dlg) dlg.close();
+    });
+  if (dismiss)
+    dismiss.addEventListener("click", () => {
+      if (dlg) dlg.close();
+    });
+  if (resetAssign)
+    resetAssign.addEventListener("click", () => {
+      if (!confirm("Сбросить состав команд к значениям по умолчанию?")) return;
+      resetSectionAssignOverrides();
+      populateTeamAssignTable();
+    });
+  if (resetTitles)
+    resetTitles.addEventListener("click", () => {
+      if (confirm("Сбросить названия вкладок к умолчанию?")) resetSectionTitleOverrides();
+    });
+  if (ustIn)
+    ustIn.addEventListener("input", () => {
+      applyTitleInput("ust", ustIn.value);
+    });
+  if (pilIn)
+    pilIn.addEventListener("input", () => {
+      applyTitleInput("pilot", pilIn.value);
+    });
+}
+
+function sortEmployeesForSection(rows, sectionId) {
+  const order = sectionId === "pilot" ? PILOT_NAME_ORDER : UST_NAME_ORDER;
+  const idx = new Map(order.map((n, i) => [n, i]));
+  return [...rows].sort((a, b) => {
+    const ia = idx.has(a.name) ? idx.get(a.name) : 10000;
+    const ib = idx.has(b.name) ? idx.get(b.name) : 10000;
+    if (ia !== ib) return ia - ib;
+    return a.name.localeCompare(b.name, "ru");
+  });
+}
+
+/** Сотрудники вкладки: Усть-Луга / пилоты / сводная (оба списка подряд) */
+function employeesForSection(employees, sectionId) {
+  if (sectionId === "summary") {
+    const ust = employees.filter((e) => sectionIdForEmployee(e.name) === "ust");
+    const pilot = employees.filter((e) => sectionIdForEmployee(e.name) === "pilot");
+    return [
+      ...sortEmployeesForSection(ust, "ust"),
+      ...sortEmployeesForSection(pilot, "pilot"),
+    ];
+  }
+  return sortEmployeesForSection(
+    employees.filter((e) => sectionIdForEmployee(e.name) === sectionId),
+    sectionId
+  );
+}
 
 /**
  * Демо-данные по месяцам: ключ "YYYY-M"
@@ -53,14 +377,12 @@ const SECTIONS = [
  */
 const DATABASE = {
   "2026-5": {
-    sectionId: "pilot",
     vacationsOut: [],
     vacationsIn: [],
     /** Данные из выгрузки Google Таблицы (scripts/parsed-employees-may.js) */
     employees: typeof PARSED_EMPLOYEES_MAY !== "undefined" ? PARSED_EMPLOYEES_MAY : [],
   },
   "2026-6": {
-    sectionId: "pilot",
     vacationsOut: [{ name: "Петров Д.О.", daysLeft: 8, start: "18.06.2026", duration: 10 }],
     vacationsIn: [{ name: "Соколов А.В.", daysLeft: 4, date: "14.06.2026" }],
     employees: [],
@@ -226,9 +548,25 @@ function cycleCode(current) {
   return CODE_ORDER[idx + 1];
 }
 
+const STORAGE_UI_BLOCKS = "ww-ui-blocks";
+
+function loadUiBlocks() {
+  try {
+    const r = localStorage.getItem(STORAGE_UI_BLOCKS);
+    if (!r) return { legend: true, vacations: true };
+    const o = JSON.parse(r);
+    return {
+      legend: o.legend !== false,
+      vacations: o.vacations !== false,
+    };
+  } catch (_) {
+    return { legend: true, vacations: true };
+  }
+}
+
 let state = {
   monthKey: "2026-5",
-  sectionId: "pilot",
+  sectionId: "ust",
   mode: "view",
   theme: localStorage.getItem("ww-theme") || "light",
   /** Видимость закреплённых столбцов (дни месяца не относятся сюда) */
@@ -237,28 +575,49 @@ let state = {
   legendFilterCode: null,
   /** копия расписаний для редактирования */
   scheduleOverrides: null,
+  /** Переназначение объекта (ФИО → ust | pilot), только отличия от DEFAULT_PILOT_NAMES */
+  sectionAssignOverrides: loadSectionAssignOverrides(),
+  /** Переименование вкладок ust / pilot */
+  sectionTitleOverrides: loadSectionTitleOverrides(),
+  /** Блоки легенды и сводки по отпускам на странице */
+  uiBlocks: loadUiBlocks(),
 };
 
 function persistStickyVisibility() {
   localStorage.setItem("ww-sticky-cols", JSON.stringify(state.stickyVisibility));
 }
 
+function persistUiBlocks() {
+  try {
+    localStorage.setItem(STORAGE_UI_BLOCKS, JSON.stringify(state.uiBlocks));
+  } catch (_) {}
+}
+
+function applyUiBlockVisibility() {
+  const leg = document.getElementById("legendSection");
+  const vac = document.getElementById("vacationCardsSection");
+  const cbLeg = document.getElementById("toggleLegendBlock");
+  const cbVac = document.getElementById("toggleVacationsBlock");
+  if (leg) leg.hidden = !state.uiBlocks.legend;
+  if (vac) vac.hidden = !state.uiBlocks.vacations;
+  if (cbLeg) cbLeg.checked = state.uiBlocks.legend;
+  if (cbVac) cbVac.checked = state.uiBlocks.vacations;
+}
+
 function getDataset() {
   const base = DATABASE[state.monthKey];
   if (!base) return null;
-  const demoSection = base.sectionId || "pilot";
-  if (state.sectionId !== demoSection) {
-    return {
-      ...base,
-      employees: [],
-      vacationsOut: [],
-      vacationsIn: [],
-    };
-  }
   const overrides = state.scheduleOverrides;
   const employees = base.employees.map((emp, i) => {
-    if (!overrides || !overrides[i]) return emp;
-    return { ...emp, schedule: { ...emp.schedule, ...overrides[i] } };
+    let e = emp;
+    if (overrides && overrides[i]) {
+      e = { ...emp, schedule: { ...emp.schedule, ...overrides[i] } };
+    }
+    const pos = POSITION_BY_NAME[e.name];
+    if (pos != null && String(pos).trim() !== "") {
+      e = { ...e, position: pos };
+    }
+    return e;
   });
   return { ...base, employees };
 }
@@ -269,6 +628,8 @@ function init() {
   buildSectionNav();
   bindControls();
   bindStickyTableClick();
+  bindTeamDialog();
+  applyUiBlockVisibility();
   render();
 }
 
@@ -313,7 +674,7 @@ function buildSectionNav() {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = sec.title;
+    btn.textContent = sectionTabTitle(sec.id);
     btn.dataset.section = sec.id;
     if (sec.id === state.sectionId) btn.classList.add("is-active");
     btn.addEventListener("click", () => {
@@ -321,12 +682,15 @@ function buildSectionNav() {
       state.scheduleOverrides = null;
       state.legendFilterCode = null;
       ul.querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b.dataset.section === sec.id));
-      document.getElementById("currentSectionTitle").textContent = sec.title;
+      document.getElementById("currentSectionTitle").textContent = sectionTabTitle(sec.id);
       render();
     });
     li.appendChild(btn);
     ul.appendChild(li);
   });
+  const cur = SECTIONS.find((s) => s.id === state.sectionId);
+  const titleEl = document.getElementById("currentSectionTitle");
+  if (cur && titleEl) titleEl.textContent = sectionTabTitle(state.sectionId);
 }
 
 function employeeHasLegendCodeInMonth(emp, code, dim) {
@@ -336,17 +700,17 @@ function employeeHasLegendCodeInMonth(emp, code, dim) {
   return false;
 }
 
-/** Сотрудники для отображения табеля с учётом фильтра легенды */
+/** Сотрудники вкладки с учётом фильтра легенды */
 function getFilteredEmployeesForView(data) {
-  const full = data.employees;
   const { year, monthIndex } = parseMonthKey(state.monthKey);
   const dim = daysInMonth(year, monthIndex);
+  const baseRows = employeesForSection(data.employees, state.sectionId);
+  const total = baseRows.length;
   const code = state.legendFilterCode;
-  if (!code) {
-    return { rows: full, total: full.length, dim };
-  }
-  const rows = full.filter((emp) => employeeHasLegendCodeInMonth(emp, code, dim));
-  return { rows, total: full.length, dim };
+  const rows = code
+    ? baseRows.filter((emp) => employeeHasLegendCodeInMonth(emp, code, dim))
+    : baseRows;
+  return { rows, total, dim };
 }
 
 function syncLegendChrome() {
@@ -399,6 +763,7 @@ function bindControls() {
       state.mode = btn.dataset.mode;
       document.querySelectorAll(".segmented__btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mode === state.mode));
       document.body.dataset.mode = state.mode;
+      render();
     });
   });
   document.body.dataset.mode = state.mode;
@@ -414,6 +779,23 @@ function bindControls() {
     legendClear.addEventListener("click", () => {
       state.legendFilterCode = null;
       render();
+    });
+  }
+
+  const tLeg = document.getElementById("toggleLegendBlock");
+  const tVac = document.getElementById("toggleVacationsBlock");
+  if (tLeg) {
+    tLeg.addEventListener("change", () => {
+      state.uiBlocks.legend = tLeg.checked;
+      persistUiBlocks();
+      applyUiBlockVisibility();
+    });
+  }
+  if (tVac) {
+    tVac.addEventListener("change", () => {
+      state.uiBlocks.vacations = tVac.checked;
+      persistUiBlocks();
+      applyUiBlockVisibility();
     });
   }
 }
@@ -458,7 +840,10 @@ function renderVacationCards(data) {
 function stickyCellValue(emp, key) {
   if (key === "tn") return emp.tn;
   if (key === "name") return emp.name;
-  if (key === "pos") return emp.position;
+  if (key === "pos") {
+    const p = emp.position;
+    return p != null && String(p).trim() !== "" ? String(p).trim() : EMPTY_MARK;
+  }
   return String(emp.daysOnShift);
 }
 
@@ -678,12 +1063,8 @@ function render() {
     tbl.querySelectorAll("colgroup").forEach((el) => el.remove());
     document.getElementById("vacationOut").innerHTML = "";
     document.getElementById("vacationIn").innerHTML = "";
-    const base = DATABASE[state.monthKey];
-    const wrongSection =
-      base && state.sectionId !== (base.sectionId || "pilot") && base.employees?.length > 0;
-    const msg = wrongSection
-      ? "В этом прототипе заполнен только раздел «Пилотные проекты». Переключитесь на него в боковом меню."
-      : "Нет данных для этого месяца — выберите май или июнь 2026 либо добавьте записи в app.js.";
+    const msg =
+      "Нет данных для этого месяца — выберите май или июнь 2026 либо добавьте записи в app.js.";
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">${msg}</td></tr>`;
     document.getElementById("scheduleHead").innerHTML = "";
     document.getElementById("scheduleFoot").innerHTML = "";
@@ -701,7 +1082,7 @@ function render() {
     document.getElementById("scheduleHead").innerHTML = "";
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">В этом месяце ни у кого нет отметки «${state.legendFilterCode}». Выберите другой код или нажмите «Показать всех».</td></tr>`;
     document.getElementById("scheduleFoot").innerHTML = "";
-    document.getElementById("employeeCount").textContent = `0 из ${data.employees.length} сотр.`;
+    document.getElementById("employeeCount").textContent = `0 из ${employeesForSection(data.employees, state.sectionId).length} сотр.`;
     renderHiddenColumnsBar();
     syncLegendChrome();
     return;

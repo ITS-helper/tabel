@@ -49,6 +49,19 @@
           </nav>
         </div>
         <div class="toolbar__controls">
+          <div class="toolbar__toggles" role="group" aria-label="Видимость блоков страницы">
+            <label class="toolbar-toggle">
+              <input type="checkbox" id="toggleLegendBlock" checked />
+              <span>Легенда</span>
+            </label>
+            <label class="toolbar-toggle">
+              <input type="checkbox" id="toggleVacationsBlock" checked />
+              <span>Отпуска</span>
+            </label>
+          </div>
+          <button type="button" class="btn btn--outline" id="teamDialogBtn" title="Кто в каком объекте, названия вкладок">
+            Объекты и состав
+          </button>
           <button type="button" class="btn btn--outline" id="archiveBtn">Архив</button>
           <label class="select-wrap">
             <span class="visually-hidden">Месяц</span>
@@ -57,7 +70,11 @@
         </div>
       </section>
 
-      <section class="control-strip control-strip--legend surface-card surface-card--pad" aria-label="Легенда">
+      <section
+        id="legendSection"
+        class="control-strip control-strip--legend surface-card surface-card--pad"
+        aria-label="Легенда"
+      >
         <div class="legend-bubble" aria-labelledby="legendBubbleTitle">
           <div class="legend-bubble__head">
             <h3 class="legend-bubble__title" id="legendBubbleTitle">Легенда</h3>
@@ -72,9 +89,13 @@
         </div>
       </section>
 
-      <span id="currentSectionTitle" class="visually-hidden">Пилотные проекты</span>
+      <span id="currentSectionTitle" class="visually-hidden">Усть-Луга</span>
 
-      <section class="cards surface-card surface-card--pad" aria-label="Краткая сводка по отпускам">
+      <section
+        id="vacationCardsSection"
+        class="cards surface-card surface-card--pad"
+        aria-label="Краткая сводка по отпускам"
+      >
         <article class="card card--vac-out">
           <h3 class="card__title">Уезжают в отпуск</h3>
           <ul class="card__list" id="vacationOut"></ul>
@@ -102,6 +123,53 @@
         </div>
       </section>
     </main>
+
+    <dialog id="teamDialog" class="team-dialog">
+      <div class="team-dialog__panel">
+        <header class="team-dialog__head">
+          <h2 class="team-dialog__title" id="teamDialogTitle">Объекты и состав команд</h2>
+          <button type="button" class="btn btn--ghost team-dialog__close" id="teamDialogDismiss" aria-label="Закрыть">
+            ×
+          </button>
+        </header>
+        <div class="team-dialog__section">
+          <h3 class="team-dialog__subtitle">Названия объектов (вкладки)</h3>
+          <div class="team-dialog__fields">
+            <label class="team-dialog__label">
+              <span class="team-dialog__label-text">Первый объект</span>
+              <input type="text" class="input team-dialog__input" id="titleUstInput" maxlength="80" autocomplete="off" />
+            </label>
+            <label class="team-dialog__label">
+              <span class="team-dialog__label-text">Второй объект</span>
+              <input type="text" class="input team-dialog__input" id="titlePilotInput" maxlength="80" autocomplete="off" />
+            </label>
+          </div>
+          <p class="team-dialog__hint">Пустое поле — подставится название по умолчанию.</p>
+        </div>
+        <div class="team-dialog__section">
+          <h3 class="team-dialog__subtitle">Сотрудник → объект</h3>
+          <p class="team-dialog__hint">
+            Перенос между «Усть-Луга» и «Пилотные проекты». Хранится только в этом браузере.
+          </p>
+          <div class="team-dialog__scroll">
+            <table class="team-dialog__table">
+              <thead>
+                <tr>
+                  <th scope="col">ФИО</th>
+                  <th scope="col">Объект</th>
+                </tr>
+              </thead>
+              <tbody id="teamAssignBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <footer class="team-dialog__footer">
+          <button type="button" class="btn btn--outline" id="teamAssignReset">Сбросить состав</button>
+          <button type="button" class="btn btn--outline" id="teamTitlesReset">Сбросить названия</button>
+          <button type="button" class="btn btn--primary" id="teamDialogDone">Готово</button>
+        </footer>
+      </div>
+    </dialog>
   </div>
   <script src="scripts/parsed-employees-may.js"></script>
   <script src="app.js"></script>
