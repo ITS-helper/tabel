@@ -55,6 +55,17 @@ const ON_SHIFT_CODES = new Set([
 /** Визуальная пустая ячейка (нет отметки в табеле; в «на смене» не входит) */
 const EMPTY_MARK = "\u2014";
 
+/** Нет «смены» в смысле табеля: пустая ячейка или явное «Отсутствует» (-) */
+const ABSENT_LIKE_CODES = new Set(["", "-"]);
+
+function employeeIsAbsentWholeMonth(emp, dim) {
+  for (let d = 1; d <= dim; d++) {
+    const c = emp.schedule[d] ?? "";
+    if (!ABSENT_LIKE_CODES.has(c)) return false;
+  }
+  return true;
+}
+
 const SECTIONS = [
   { id: "ust", title: "Усть-Луга" },
   { id: "pilot", title: "Пилотные проекты" },
@@ -1226,17 +1237,18 @@ function employeeHasLegendCodeInMonth(emp, code, dim) {
   return false;
 }
 
-/** Сотрудники вкладки с учётом фильтра «Объекты» (несколько кодов, логика ИЛИ) */
+/** Сотрудники вкладки с учётом: скрыть «только отсутствует/пусто» за месяц; фильтр легенды (ИЛИ) */
 function getFilteredEmployeesForView(data) {
   const { year, monthIndex } = parseMonthKey(state.monthKey);
   const dim = daysInMonth(year, monthIndex);
   const baseRows = employeesForSection(data.employees, state.sectionId);
-  const total = baseRows.length;
+  const withPresence = baseRows.filter((emp) => !employeeIsAbsentWholeMonth(emp, dim));
+  const total = withPresence.length;
   const codes = [...state.legendFilterCodes];
   const rows =
     codes.length === 0
-      ? baseRows
-      : baseRows.filter((emp) =>
+      ? withPresence
+      : withPresence.filter((emp) =>
           codes.some((c) => employeeHasLegendCodeInMonth(emp, c, dim))
         );
   return { rows, total, dim };
@@ -1569,7 +1581,7 @@ function render() {
     return;
   }
 
-  const { rows: filteredRows } = getFilteredEmployeesForView(data);
+  const { rows: filteredRows, total: totalInSectionWithMarks } = getFilteredEmployeesForView(data);
   if (state.legendFilterCodes.size > 0 && filteredRows.length === 0) {
     renderVacationCards(data);
     const tbl = document.getElementById("scheduleTable");
@@ -1578,7 +1590,7 @@ function render() {
     const codesLabel = [...state.legendFilterCodes].join(", ");
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">В этом месяце нет сотрудников с отметками: ${codesLabel}. Измените выбор или нажмите «Показать всех».</td></tr>`;
     document.getElementById("scheduleFoot").innerHTML = "";
-    document.getElementById("employeeCount").textContent = `0 из ${employeesForSection(data.employees, state.sectionId).length} сотр.`;
+    document.getElementById("employeeCount").textContent = `0 из ${totalInSectionWithMarks} сотр.`;
     renderHiddenColumnsBar();
     syncLegendChrome();
     return;
