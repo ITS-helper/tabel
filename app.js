@@ -730,16 +730,23 @@ function daysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
 
-/** Код дня в графике для отпуска (совпадает с LEGEND). */
-const VACATION_SCHED_MARK = "ОТ";
+/** Коды дня в графике для отпуска: «В пути» — первый и последний день, между — «ОТ» (LEGEND). */
+const VACATION_OT = "ОТ";
+const VACATION_TRAVEL = "ВП";
 
 function formatRuDate(year, monthIndex, day) {
   return `${pad(day)}.${pad(monthIndex + 1)}.${year}`;
 }
 
+function dayScheduleCode(schedule, day) {
+  return String(schedule[day] ?? "").trim();
+}
+
 /**
- * По объединённому графику: начало отпуска в месяце (первый ОТ после не-ОТ),
- * возврат — первый день после блока ОТ, если он ещё в этом месяце.
+ * По объединённому графику: отпуск — непрерывная цепочка ВП и/или ОТ с хотя бы одним ОТ
+ * (типично ВП — выезд, ОТ — дни отпуска, ВП — возвращение). Начало периода — первый день цепочки,
+ * конец — последний. Возврат на работу — первый день после цепочки, если он в этом месяце.
+ * Цепочка только из ОТ (без ВП в выгрузке) тоже учитывается.
  */
 function computeVacationSummaryFromSchedules(data, year, monthIndex) {
   const dim = daysInMonth(year, monthIndex);
@@ -752,18 +759,28 @@ function computeVacationSummaryFromSchedules(data, year, monthIndex) {
 
   for (const emp of emps) {
     const schedule = emp.schedule || {};
-    const isVac = (day) => (schedule[day] ?? "") === VACATION_SCHED_MARK;
+    const isTravelOrOT = (day) => {
+      const c = dayScheduleCode(schedule, day);
+      return c === VACATION_OT || c === VACATION_TRAVEL;
+    };
+    const segmentHasOT = (start, end) => {
+      for (let x = start; x <= end; x++) {
+        if (dayScheduleCode(schedule, x) === VACATION_OT) return true;
+      }
+      return false;
+    };
 
     let d = 1;
     while (d <= dim) {
-      while (d <= dim && !isVac(d)) d++;
+      while (d <= dim && !isTravelOrOT(d)) d++;
       if (d > dim) break;
       const start = d;
-      while (d <= dim && isVac(d)) d++;
+      while (d <= dim && isTravelOrOT(d)) d++;
       const end = d - 1;
+      if (!segmentHasOT(start, end)) continue;
 
-      const prevWasVac = start > 1 && isVac(start - 1);
-      if (!prevWasVac) {
+      const prevWasPart = start > 1 && isTravelOrOT(start - 1);
+      if (!prevWasPart) {
         const nDays = end - start + 1;
         departures.push({
           name: emp.name,
@@ -776,7 +793,7 @@ function computeVacationSummaryFromSchedules(data, year, monthIndex) {
         });
       }
 
-      if (d <= dim && !isVac(d)) {
+      if (d <= dim && !isTravelOrOT(d)) {
         returns.push({
           name: emp.name,
           tn: emp.tn,
@@ -1752,7 +1769,7 @@ function renderVacationCards(data) {
 
   if (!departures.length) {
     outEl.innerHTML =
-      '<li class="card__empty">Нет начала отпуска (ОТ) среди видимых строк в этом месяце</li>';
+      '<li class="card__empty">Нет отпуска по графику (цепочка ВП/ОТ с хотя бы одним ОТ) среди видимых строк</li>';
   } else {
     departures.forEach((v) => {
       const sameDay = v.startDay === v.endDay;
@@ -1764,7 +1781,7 @@ function renderVacationCards(data) {
 
   if (!returns.length) {
     inEl.innerHTML =
-      '<li class="card__empty">Нет выхода на работу после ОТ в этом месяце (отпуск до конца месяца или нет ОТ)</li>';
+      '<li class="card__empty">Нет выхода на работу после отпуска в этом месяце (цепочка до конца месяца или нет ОТ)</li>';
   } else {
     returns.forEach((v) => {
       appendVacationCardRow(inEl, {
