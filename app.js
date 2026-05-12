@@ -810,13 +810,17 @@ function computeVacationSummaryFromSchedules(data, year, monthIndex) {
   return { departures, returns };
 }
 
-/** День 1..dim, если календарное «сегодня» в этом году/месяце, иначе null */
-function todayDayIfCalendarMonthMatches(year, monthIndex) {
+/**
+ * Число месяца для столбца «сегодня», если в графике открыт тот же календарный месяц, что и у системной даты.
+ * Год в табеле может отличаться (в данных часто один год, например 2026) — совпадение года не требуется.
+ * 29 февраля при невисокосном феврале в графике — последний день месяца.
+ */
+function viewMonthTodayDayNumber(year, monthIndex) {
   const n = new Date();
-  if (n.getFullYear() !== year || n.getMonth() !== monthIndex) return null;
+  if (n.getMonth() !== monthIndex) return null;
   const dim = daysInMonth(year, monthIndex);
-  const d = n.getDate();
-  if (d < 1 || d > dim) return null;
+  const d = Math.min(n.getDate(), dim);
+  if (d < 1) return null;
   return d;
 }
 
@@ -825,20 +829,15 @@ let scheduleScrollToTodayAppliedForMonthKey = null;
 
 function queueScheduleScrollToTodayColumn() {
   const { year, monthIndex } = parseMonthKey(state.monthKey);
-  const todayD = todayDayIfCalendarMonthMatches(year, monthIndex);
+  const todayD = viewMonthTodayDayNumber(year, monthIndex);
   if (todayD == null) return;
   if (scheduleScrollToTodayAppliedForMonthKey === state.monthKey) return;
   scheduleScrollToTodayAppliedForMonthKey = state.monthKey;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const wrap = document.querySelector(".table-scroll");
       const th = document.querySelector(`#scheduleHead th.schedule-day-th[data-schedule-day="${todayD}"]`);
-      if (!wrap || !th) return;
-      const wr = wrap.getBoundingClientRect();
-      const hr = th.getBoundingClientRect();
-      const targetCenter = hr.left + hr.width / 2;
-      const wrapCenter = wr.left + wr.width / 2;
-      wrap.scrollLeft += targetCenter - wrapCenter;
+      if (!th) return;
+      th.scrollIntoView({ block: "nearest", inline: "center" });
     });
   });
 }
@@ -1823,7 +1822,7 @@ function renderSchedule(data) {
   head.innerHTML = "";
   body.innerHTML = "";
   foot.innerHTML = "";
-  const todayD = todayDayIfCalendarMonthMatches(year, monthIndex);
+  const todayD = viewMonthTodayDayNumber(year, monthIndex);
   injectScheduleColgroup(table, dim, vis, todayD);
 
   const fullEmployees = data.employees;
