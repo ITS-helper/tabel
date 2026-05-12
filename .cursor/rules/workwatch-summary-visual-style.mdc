@@ -43,3 +43,7 @@ alwaysApply: false
 `object-summary-group`, `object-summary__inner`, `object-summary__col`, `object-summary__col--today`, `object-summary__col--tomorrow`, `object-summary__shifts-strip`, `object-summary__metric`, `object-summary__metric--day`, `object-summary__metric--night`, `object-summary__metric-sep`, `object-summary__block`.
 
 Новые похожие блоки: **наследуй паттерн** (градиент + слой теней + одна спокойная «дышащая» анимация), не копируй слепо все keyframes — только если блок визуально того же класса.
+
+## Шапка (бейдж «сотр.», вкладки объектов)
+
+Те же принципы вынесены в `styles.css`: селекторы `.header__toolbar-left .badge`, `.header .section-tabs__list button`, keyframes `header-toolbar-pill-pulse-*` и `header-toolbar-tab-pulse-teal`. Вторая вкладка (пилоты) — бирюзовая «ночная» капсула как в сводке.
