@@ -159,18 +159,23 @@ body {
 .header__logo-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
-  max-width: min(300px, 54vw);
+  max-width: min(260px, 56vw);
   min-width: 0;
 }
 
+/* Растр 492×340: без min-width:0 flex не даёт сжать ниже intrinsic — «на полэкрана» */
 .header__logo-mark {
   display: block;
+  box-sizing: border-box;
   height: 40px;
   width: auto;
+  max-height: 40px;
+  max-width: 58px;
+  min-width: 0;
+  flex: 0 1 auto;
   object-fit: contain;
-  flex-shrink: 0;
 }
 
 .header__logo-type {
