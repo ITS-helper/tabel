@@ -588,8 +588,8 @@ const DATABASE = {
 };
 
 /**
- * Архив прошлого года: только статические данные из репозитория.
- * Ключи `YYYY-M` — в селекторе отдельной группой «Архив»; редактирование графика отключено.
+ * Дополнительные статические периоды (другой год и т.п.): в селекторе отдельной группой;
+ * только просмотр, как и остальной архив.
  */
 const ARCHIVE_DATABASE = {
   "2025-5": {
@@ -745,21 +745,68 @@ function parseMonthKey(key) {
   return { year: y, monthIndex: m - 1 };
 }
 
-/** Год «текущего» табеля в основной группе селектора месяцев. */
+/** Год ключей в `DATABASE` (март–декабрь попадают в группу «Архив» в селекторе, кроме двух «живых» месяцев). */
 const CURRENT_SCHEDULE_YEAR = 2026;
-/** Год архива (прошлый год относительно текущего в UI). */
-const ARCHIVE_YEAR = CURRENT_SCHEDULE_YEAR - 1;
+/** С какого месяца (1–12) внутри `CURRENT_SCHEDULE_YEAR` показывать месяцы в группе «Архив». */
+const ARCHIVE_SELECTOR_FROM_MONTH = 3;
 
-function isArchiveYear(year) {
-  return year === ARCHIVE_YEAR;
+/** Календарные «живые» месяцы: только предыдущий и текущий — для них доступно редактирование. */
+function liveCalendarMonthKeys() {
+  const t = new Date();
+  const prev = new Date(t.getFullYear(), t.getMonth() - 1, 1);
+  const prevKey = monthKey(prev.getFullYear(), prev.getMonth());
+  const curKey = monthKey(t.getFullYear(), t.getMonth());
+  return [prevKey, curKey];
+}
+
+function isLiveMonthKey(monthKey) {
+  return liveCalendarMonthKeys().includes(monthKey);
 }
 
 function isArchiveMonthKey(monthKey) {
-  return isArchiveYear(parseMonthKey(monthKey).year);
+  return !isLiveMonthKey(monthKey);
 }
 
 function isArchiveView() {
   return isArchiveMonthKey(state.monthKey);
+}
+
+/** Месяцы, которые можно выбрать в селекторе (живые + архив с марта года + ключи ARCHIVE_DATABASE). */
+function collectSelectableMonthKeys() {
+  const keys = [];
+  const seen = new Set();
+  const push = (k) => {
+    if (seen.has(k)) return;
+    seen.add(k);
+    keys.push(k);
+  };
+  liveCalendarMonthKeys().forEach(push);
+  const fromIdx = ARCHIVE_SELECTOR_FROM_MONTH - 1;
+  for (let m = fromIdx; m < 12; m++) {
+    push(monthKey(CURRENT_SCHEDULE_YEAR, m));
+  }
+  Object.keys(ARCHIVE_DATABASE).forEach(push);
+  return keys;
+}
+
+function ensureValidMonthKey() {
+  const ok = new Set(collectSelectableMonthKeys());
+  if (!ok.has(state.monthKey)) {
+    const live = liveCalendarMonthKeys();
+    state.monthKey = live[1] || live[0];
+  }
+}
+
+/** Пустой каркас месяца для выбора в селекторе без записи в DATABASE. */
+function emptyMonthDataset() {
+  return { vacationsOut: [], vacationsIn: [], employees: [] };
+}
+
+function monthKeyAllowedSynthetic(monthKey) {
+  if (isLiveMonthKey(monthKey)) return true;
+  if (ARCHIVE_DATABASE[monthKey]) return true;
+  const { year, monthIndex } = parseMonthKey(monthKey);
+  return year === CURRENT_SCHEDULE_YEAR && monthIndex + 1 >= ARCHIVE_SELECTOR_FROM_MONTH;
 }
 
 function syncHeaderSchedulePeriod() {
@@ -1320,7 +1367,10 @@ function loadRosterExtrasFromLocal() {
 const _rosterInit = loadRosterExtrasFromLocal();
 
 let state = {
-  monthKey: "2026-5",
+  monthKey: (() => {
+    const t = new Date();
+    return monthKey(t.getFullYear(), t.getMonth());
+  })(),
   sectionId: "ust",
   mode: "view",
   theme: localStorage.getItem("ww-theme") || "light",
@@ -1536,8 +1586,11 @@ function bindCollapsiblePanels() {
 }
 
 function getDatasetForMonthKey(monthKey) {
-  const base = DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey];
-  if (!base) return null;
+  let base = DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey];
+  if (!base) {
+    if (monthKeyAllowedSynthetic(monthKey)) base = emptyMonthDataset();
+    else return null;
+  }
   const overrides = state.scheduleByMonth[monthKey];
   const fieldAll = state.employeeFieldOverridesByMonth[monthKey] || {};
   const employeesBase = base.employees.map((emp, i) => {
@@ -1796,23 +1849,33 @@ function applyTheme(theme) {
 function buildMonthSelect() {
   const sel = document.getElementById("monthSelect");
   sel.innerHTML = "";
-  for (let m = 0; m < 12; m++) {
-    const key = monthKey(CURRENT_SCHEDULE_YEAR, m);
+  ensureValidMonthKey();
+
+  const liveKeys = liveCalendarMonthKeys();
+  const liveSet = new Set(liveKeys);
+  const ogLive = document.createElement("optgroup");
+  ogLive.label = "Предыдущий и текущий месяц";
+  liveKeys.forEach((key) => {
+    const { year, monthIndex } = parseMonthKey(key);
     const opt = document.createElement("option");
     opt.value = key;
-    opt.textContent = `${MONTH_NAMES[m]} ${CURRENT_SCHEDULE_YEAR}`;
+    opt.textContent = `${MONTH_NAMES[monthIndex]} ${year}`;
     if (key === state.monthKey) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  const archiveKeys = Object.keys(ARCHIVE_DATABASE).sort((a, b) => {
-    const pa = parseMonthKey(a);
-    const pb = parseMonthKey(b);
-    return pa.year !== pb.year ? pa.year - pb.year : pa.monthIndex - pb.monthIndex;
+    ogLive.appendChild(opt);
   });
-  if (archiveKeys.length > 0) {
+  sel.appendChild(ogLive);
+
+  const fromIdx = ARCHIVE_SELECTOR_FROM_MONTH - 1;
+  const archiveSameYear = [];
+  for (let m = fromIdx; m < 12; m++) {
+    const key = monthKey(CURRENT_SCHEDULE_YEAR, m);
+    if (liveSet.has(key)) continue;
+    archiveSameYear.push(key);
+  }
+  if (archiveSameYear.length > 0) {
     const og = document.createElement("optgroup");
-    og.label = `Архив ${ARCHIVE_YEAR}`;
-    archiveKeys.forEach((key) => {
+    og.label = `Архив ${CURRENT_SCHEDULE_YEAR} (с ${MONTH_NAMES[ARCHIVE_SELECTOR_FROM_MONTH - 1].toLowerCase()})`;
+    archiveSameYear.forEach((key) => {
       const { year, monthIndex } = parseMonthKey(key);
       const opt = document.createElement("option");
       opt.value = key;
@@ -1822,6 +1885,28 @@ function buildMonthSelect() {
     });
     sel.appendChild(og);
   }
+
+  const extraArchiveKeys = Object.keys(ARCHIVE_DATABASE)
+    .filter((k) => !liveSet.has(k) && !archiveSameYear.includes(k))
+    .sort((a, b) => {
+      const pa = parseMonthKey(a);
+      const pb = parseMonthKey(b);
+      return pa.year !== pb.year ? pa.year - pb.year : pa.monthIndex - pb.monthIndex;
+    });
+  if (extraArchiveKeys.length > 0) {
+    const og2 = document.createElement("optgroup");
+    og2.label = "Архив (другие периоды)";
+    extraArchiveKeys.forEach((key) => {
+      const { year, monthIndex } = parseMonthKey(key);
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = `${MONTH_NAMES[monthIndex]} ${year}`;
+      if (key === state.monthKey) opt.selected = true;
+      og2.appendChild(opt);
+    });
+    sel.appendChild(og2);
+  }
+
   syncHeaderSchedulePeriod();
 }
 
@@ -2282,7 +2367,7 @@ function render() {
     tbl.querySelectorAll("colgroup").forEach((el) => el.remove());
     renderVacationCards(data || { employees: [] });
     const msg = isArchiveView()
-      ? "Нет данных за выбранный архивный месяц — добавьте ключ в ARCHIVE_DATABASE в app.js."
+      ? "Нет данных за выбранный месяц — добавьте ключ в DATABASE или ARCHIVE_DATABASE в app.js."
       : "Нет данных для этого месяца — выберите другой месяц или добавьте записи в app.js.";
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">${msg}</td></tr>`;
     document.getElementById("scheduleHead").innerHTML = "";
@@ -2315,16 +2400,35 @@ function render() {
   queueScheduleScrollToTodayColumn();
 }
 
+function allArchiveExportMonthKeys() {
+  const live = new Set(liveCalendarMonthKeys());
+  const keys = [];
+  const fromIdx = ARCHIVE_SELECTOR_FROM_MONTH - 1;
+  for (let m = fromIdx; m < 12; m++) {
+    const k = monthKey(CURRENT_SCHEDULE_YEAR, m);
+    if (!live.has(k)) keys.push(k);
+  }
+  for (const k of Object.keys(ARCHIVE_DATABASE)) {
+    if (!keys.includes(k)) keys.push(k);
+  }
+  keys.sort((a, b) => {
+    const pa = parseMonthKey(a);
+    const pb = parseMonthKey(b);
+    return pa.year !== pb.year ? pa.year - pb.year : pa.monthIndex - pb.monthIndex;
+  });
+  return keys;
+}
+
 function exportArchiveFullYear() {
-  const keys = Object.keys(ARCHIVE_DATABASE).sort();
+  const keys = allArchiveExportMonthKeys();
   if (keys.length === 0) {
-    alert("В архиве нет ни одного месяца — заполните ARCHIVE_DATABASE в app.js.");
+    alert("Нет месяцев для выгрузки архива.");
     return;
   }
   const months = {};
   for (const mk of keys) {
     const data = getDatasetForMonthKey(mk);
-    if (!data || !data.employees.length) continue;
+    if (!data) continue;
     const { year, monthIndex } = parseMonthKey(mk);
     months[mk] = {
       year,
@@ -2348,14 +2452,14 @@ function exportArchiveFullYear() {
   }
   const payload = {
     type: "workwatch-archive-year",
-    archiveYear: ARCHIVE_YEAR,
+    archiveYear: CURRENT_SCHEDULE_YEAR,
     exportedAt: new Date().toISOString(),
     months,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `workwatch-archive-${ARCHIVE_YEAR}.json`;
+  a.download = `workwatch-archive-${CURRENT_SCHEDULE_YEAR}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
