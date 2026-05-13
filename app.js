@@ -765,8 +765,6 @@ function isArchiveView() {
 function syncHeaderSchedulePeriod() {
   const yl = document.getElementById("yearLabel");
   if (yl) yl.textContent = String(parseMonthKey(state.monthKey).year);
-  const archBadge = document.getElementById("archiveYearBadge");
-  if (archBadge) archBadge.hidden = !isArchiveView();
   document.body.dataset.archiveView = isArchiveView() ? "1" : "0";
 }
 
@@ -1964,8 +1962,6 @@ function bindControls() {
 
   document.getElementById("exportBtn").addEventListener("click", exportFor1C);
 
-  bindArchiveDialog();
-
   const legendClear = document.getElementById("legendClearBtn");
   if (legendClear) {
     legendClear.addEventListener("click", () => {
@@ -2364,29 +2360,8 @@ function exportArchiveFullYear() {
   URL.revokeObjectURL(a.href);
 }
 
-function bindArchiveDialog() {
-  const dlg = document.getElementById("archiveDialog");
-  const openBtn = document.getElementById("archiveBtn");
-  const dismiss = document.getElementById("archiveDialogDismiss");
-  const ok = document.getElementById("archiveDialogOk");
-  const dl = document.getElementById("archiveDownloadYearBtn");
-  if (!dlg || !openBtn) return;
-
-  const close = () => {
-    if (dlg.open) dlg.close();
-  };
-
-  openBtn.addEventListener("click", () => {
-    if (typeof dlg.showModal === "function") dlg.showModal();
-    else dlg.setAttribute("open", "");
-  });
-  if (dismiss) dismiss.addEventListener("click", close);
-  if (ok) ok.addEventListener("click", close);
-  if (dl) dl.addEventListener("click", () => exportArchiveFullYear());
-  dlg.addEventListener("cancel", (e) => {
-    e.preventDefault();
-    close();
-  });
+if (typeof window !== "undefined") {
+  window.exportArchiveFullYear = exportArchiveFullYear;
 }
 
 function exportFor1C() {
