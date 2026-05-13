@@ -588,7 +588,7 @@ const DATABASE = {
 };
 
 /**
- * Дополнительные статические периоды (другой год и т.п.): в селекторе отдельной группой;
+ * Дополнительные статические периоды (другой год и т.п.): в селекторе в группе «Архив»;
  * только просмотр, как и остальной архив.
  */
 const ARCHIVE_DATABASE = {
@@ -1853,17 +1853,14 @@ function buildMonthSelect() {
 
   const liveKeys = liveCalendarMonthKeys();
   const liveSet = new Set(liveKeys);
-  const ogLive = document.createElement("optgroup");
-  ogLive.label = "Предыдущий и текущий месяц";
   liveKeys.forEach((key) => {
     const { year, monthIndex } = parseMonthKey(key);
     const opt = document.createElement("option");
     opt.value = key;
     opt.textContent = `${MONTH_NAMES[monthIndex]} ${year}`;
     if (key === state.monthKey) opt.selected = true;
-    ogLive.appendChild(opt);
+    sel.appendChild(opt);
   });
-  sel.appendChild(ogLive);
 
   const fromIdx = ARCHIVE_SELECTOR_FROM_MONTH - 1;
   const archiveSameYear = [];
@@ -1872,10 +1869,19 @@ function buildMonthSelect() {
     if (liveSet.has(key)) continue;
     archiveSameYear.push(key);
   }
-  if (archiveSameYear.length > 0) {
+  const extraArchiveKeys = Object.keys(ARCHIVE_DATABASE)
+    .filter((k) => !liveSet.has(k) && !archiveSameYear.includes(k))
+    .sort((a, b) => {
+      const pa = parseMonthKey(a);
+      const pb = parseMonthKey(b);
+      return pa.year !== pb.year ? pa.year - pb.year : pa.monthIndex - pb.monthIndex;
+    });
+
+  const archiveKeysOrdered = [...archiveSameYear, ...extraArchiveKeys];
+  if (archiveKeysOrdered.length > 0) {
     const og = document.createElement("optgroup");
-    og.label = `Архив ${CURRENT_SCHEDULE_YEAR} (с ${MONTH_NAMES[ARCHIVE_SELECTOR_FROM_MONTH - 1].toLowerCase()})`;
-    archiveSameYear.forEach((key) => {
+    og.label = "Архив";
+    archiveKeysOrdered.forEach((key) => {
       const { year, monthIndex } = parseMonthKey(key);
       const opt = document.createElement("option");
       opt.value = key;
@@ -1884,27 +1890,6 @@ function buildMonthSelect() {
       og.appendChild(opt);
     });
     sel.appendChild(og);
-  }
-
-  const extraArchiveKeys = Object.keys(ARCHIVE_DATABASE)
-    .filter((k) => !liveSet.has(k) && !archiveSameYear.includes(k))
-    .sort((a, b) => {
-      const pa = parseMonthKey(a);
-      const pb = parseMonthKey(b);
-      return pa.year !== pb.year ? pa.year - pb.year : pa.monthIndex - pb.monthIndex;
-    });
-  if (extraArchiveKeys.length > 0) {
-    const og2 = document.createElement("optgroup");
-    og2.label = "Архив (другие периоды)";
-    extraArchiveKeys.forEach((key) => {
-      const { year, monthIndex } = parseMonthKey(key);
-      const opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = `${MONTH_NAMES[monthIndex]} ${year}`;
-      if (key === state.monthKey) opt.selected = true;
-      og2.appendChild(opt);
-    });
-    sel.appendChild(og2);
   }
 
   syncHeaderSchedulePeriod();
