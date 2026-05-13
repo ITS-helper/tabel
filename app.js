@@ -355,6 +355,7 @@ function updateAddedEmployeeFieldsFromDialog(empName, tn, position) {
 }
 
 function handleAddEmployeeClick() {
+  if (isArchiveView()) return;
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
   const tnEl = document.getElementById("teamAddTn");
   const nameEl = document.getElementById("teamAddName");
@@ -403,7 +404,7 @@ function populateTeamAssignTable() {
   const monthKey = state.monthKey;
   const addedList = state.addedEmployeesByMonth[monthKey] || [];
   const addedNames = new Set(addedList.map((a) => a.name));
-  const canEditPeople = state.mode === "edit" && isEditSessionUnlocked();
+  const canEditPeople = state.mode === "edit" && isEditSessionUnlocked() && !isArchiveView();
   if (addPanel) addPanel.hidden = !canEditPeople;
   const secAdd = document.getElementById("teamAddSection");
   if (secAdd) {
@@ -586,6 +587,24 @@ const DATABASE = {
   },
 };
 
+/**
+ * Архив прошлого года: только статические данные из репозитория.
+ * Ключи `YYYY-M` — в селекторе отдельной группой «Архив»; редактирование графика отключено.
+ */
+const ARCHIVE_DATABASE = {
+  "2025-5": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees:
+      typeof PARSED_EMPLOYEES_MAY !== "undefined"
+        ? PARSED_EMPLOYEES_MAY.map((e) => ({
+            ...e,
+            schedule: e.schedule && typeof e.schedule === "object" ? { ...e.schedule } : {},
+          }))
+        : [],
+  },
+};
+
 function pad(n) {
   return String(n).padStart(2, "0");
 }
@@ -724,6 +743,31 @@ function monthKey(year, monthIndex) {
 function parseMonthKey(key) {
   const [y, m] = key.split("-").map(Number);
   return { year: y, monthIndex: m - 1 };
+}
+
+/** Год «текущего» табеля в основной группе селектора месяцев. */
+const CURRENT_SCHEDULE_YEAR = 2026;
+/** Год архива (прошлый год относительно текущего в UI). */
+const ARCHIVE_YEAR = CURRENT_SCHEDULE_YEAR - 1;
+
+function isArchiveYear(year) {
+  return year === ARCHIVE_YEAR;
+}
+
+function isArchiveMonthKey(monthKey) {
+  return isArchiveYear(parseMonthKey(monthKey).year);
+}
+
+function isArchiveView() {
+  return isArchiveMonthKey(state.monthKey);
+}
+
+function syncHeaderSchedulePeriod() {
+  const yl = document.getElementById("yearLabel");
+  if (yl) yl.textContent = String(parseMonthKey(state.monthKey).year);
+  const archBadge = document.getElementById("archiveYearBadge");
+  if (archBadge) archBadge.hidden = !isArchiveView();
+  document.body.dataset.archiveView = isArchiveView() ? "1" : "0";
 }
 
 function daysInMonth(year, monthIndex) {
@@ -870,6 +914,10 @@ function unlockEditSession() {
 }
 
 function applyMode(mode) {
+  if (mode === "edit" && isArchiveView()) {
+    alert("В архиве доступен только просмотр. Выберите месяц текущего года, чтобы редактировать табель.");
+    return;
+  }
   state.mode = mode;
   document.querySelectorAll(".segmented__btn").forEach((b) =>
     b.classList.toggle("is-active", b.dataset.mode === state.mode)
@@ -966,6 +1014,7 @@ function closeScheduleCellPicker() {
 }
 
 function openScheduleCellPicker(rowIndex, day, pillEl) {
+  if (isArchiveView()) return;
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
   const data = getDataset();
   if (!data) return;
@@ -1164,6 +1213,7 @@ function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
 }
 
 function startPillFillInteraction(ev, rowIndex, day, pillEl) {
+  if (isArchiveView()) return;
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
   if (ev.button !== 0) return;
   const data = getDataset();
@@ -1488,7 +1538,7 @@ function bindCollapsiblePanels() {
 }
 
 function getDatasetForMonthKey(monthKey) {
-  const base = DATABASE[monthKey];
+  const base = DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey];
   if (!base) return null;
   const overrides = state.scheduleByMonth[monthKey];
   const fieldAll = state.employeeFieldOverridesByMonth[monthKey] || {};
@@ -1749,13 +1799,32 @@ function buildMonthSelect() {
   const sel = document.getElementById("monthSelect");
   sel.innerHTML = "";
   for (let m = 0; m < 12; m++) {
-    const key = monthKey(2026, m);
+    const key = monthKey(CURRENT_SCHEDULE_YEAR, m);
     const opt = document.createElement("option");
     opt.value = key;
-    opt.textContent = `${MONTH_NAMES[m]} 2026`;
+    opt.textContent = `${MONTH_NAMES[m]} ${CURRENT_SCHEDULE_YEAR}`;
     if (key === state.monthKey) opt.selected = true;
     sel.appendChild(opt);
   }
+  const archiveKeys = Object.keys(ARCHIVE_DATABASE).sort((a, b) => {
+    const pa = parseMonthKey(a);
+    const pb = parseMonthKey(b);
+    return pa.year !== pb.year ? pa.year - pb.year : pa.monthIndex - pb.monthIndex;
+  });
+  if (archiveKeys.length > 0) {
+    const og = document.createElement("optgroup");
+    og.label = `Архив ${ARCHIVE_YEAR}`;
+    archiveKeys.forEach((key) => {
+      const { year, monthIndex } = parseMonthKey(key);
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = `${MONTH_NAMES[monthIndex]} ${year}`;
+      if (key === state.monthKey) opt.selected = true;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  }
+  syncHeaderSchedulePeriod();
 }
 
 function buildSectionNav() {
@@ -1862,6 +1931,14 @@ function bindControls() {
     state.legendFilterCodes.clear();
     state.legendIncludeNoShifts = false;
     persistLegendIncludeNoShifts();
+    if (isArchiveView() && state.mode === "edit") {
+      state.mode = "view";
+      document.querySelectorAll(".segmented__btn").forEach((b) =>
+        b.classList.toggle("is-active", b.dataset.mode === state.mode)
+      );
+      document.body.dataset.mode = state.mode;
+      closeScheduleCellPicker();
+    }
     render();
   });
 
@@ -1872,6 +1949,10 @@ function bindControls() {
   document.querySelectorAll(".segmented__btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const m = btn.dataset.mode;
+      if (m === "edit" && isArchiveView()) {
+        alert("В архиве доступен только просмотр. Переключитесь на месяц текущего года.");
+        return;
+      }
       if (m === "edit" && !isEditSessionUnlocked()) {
         openEditPasswordDialog();
         return;
@@ -1883,9 +1964,7 @@ function bindControls() {
 
   document.getElementById("exportBtn").addEventListener("click", exportFor1C);
 
-  document.getElementById("archiveBtn").addEventListener("click", () => {
-    alert("Демо: раздел «Архив» можно подключить к API или статическим архивным наборам.");
-  });
+  bindArchiveDialog();
 
   const legendClear = document.getElementById("legendClearBtn");
   if (legendClear) {
@@ -2199,15 +2278,16 @@ function render() {
   cancelPillFillInteraction();
   buildLegend();
   renderObjectSummary();
+  syncHeaderSchedulePeriod();
   const data = getDataset();
-  document.getElementById("yearLabel").textContent = "2026";
 
   if (!data || !data.employees.length) {
     const tbl = document.getElementById("scheduleTable");
     tbl.querySelectorAll("colgroup").forEach((el) => el.remove());
     renderVacationCards(data || { employees: [] });
-    const msg =
-      "Нет данных для этого месяца — выберите май или июнь 2026 либо добавьте записи в app.js.";
+    const msg = isArchiveView()
+      ? "Нет данных за выбранный архивный месяц — добавьте ключ в ARCHIVE_DATABASE в app.js."
+      : "Нет данных для этого месяца — выберите другой месяц или добавьте записи в app.js.";
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">${msg}</td></tr>`;
     document.getElementById("scheduleHead").innerHTML = "";
     document.getElementById("scheduleFoot").innerHTML = "";
@@ -2237,6 +2317,76 @@ function render() {
   renderHiddenColumnsBar();
   syncLegendChrome();
   queueScheduleScrollToTodayColumn();
+}
+
+function exportArchiveFullYear() {
+  const keys = Object.keys(ARCHIVE_DATABASE).sort();
+  if (keys.length === 0) {
+    alert("В архиве нет ни одного месяца — заполните ARCHIVE_DATABASE в app.js.");
+    return;
+  }
+  const months = {};
+  for (const mk of keys) {
+    const data = getDatasetForMonthKey(mk);
+    if (!data || !data.employees.length) continue;
+    const { year, monthIndex } = parseMonthKey(mk);
+    months[mk] = {
+      year,
+      month: monthIndex + 1,
+      employees: data.employees.map((e) => {
+        const { __fromManualAdd: _m, ...rest } = e;
+        return {
+          tn: rest.tn,
+          name: rest.name,
+          position: rest.position,
+          daysOnShift: rest.daysOnShift,
+          schedule: rest.schedule,
+        };
+      }),
+      scheduleOverrides: state.scheduleByMonth[mk] ? JSON.parse(JSON.stringify(state.scheduleByMonth[mk])) : {},
+      rosterOverrides: {
+        employeeFields: state.employeeFieldOverridesByMonth[mk] || {},
+        addedEmployees: state.addedEmployeesByMonth[mk] || [],
+      },
+    };
+  }
+  const payload = {
+    type: "workwatch-archive-year",
+    archiveYear: ARCHIVE_YEAR,
+    exportedAt: new Date().toISOString(),
+    months,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `workwatch-archive-${ARCHIVE_YEAR}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function bindArchiveDialog() {
+  const dlg = document.getElementById("archiveDialog");
+  const openBtn = document.getElementById("archiveBtn");
+  const dismiss = document.getElementById("archiveDialogDismiss");
+  const ok = document.getElementById("archiveDialogOk");
+  const dl = document.getElementById("archiveDownloadYearBtn");
+  if (!dlg || !openBtn) return;
+
+  const close = () => {
+    if (dlg.open) dlg.close();
+  };
+
+  openBtn.addEventListener("click", () => {
+    if (typeof dlg.showModal === "function") dlg.showModal();
+    else dlg.setAttribute("open", "");
+  });
+  if (dismiss) dismiss.addEventListener("click", close);
+  if (ok) ok.addEventListener("click", close);
+  if (dl) dl.addEventListener("click", () => exportArchiveFullYear());
+  dlg.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    close();
+  });
 }
 
 function exportFor1C() {

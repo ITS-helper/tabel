@@ -253,6 +253,46 @@ body {
   line-height: 1.2;
 }
 
+.archive-year-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 4px 10px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #f0fdfa, #cffafe);
+  color: #0f766e;
+  border: 1px solid color-mix(in srgb, #14b8a6 38%, transparent);
+  box-shadow: 0 1px 8px rgba(20, 184, 166, 0.18);
+}
+
+[data-theme="dark"] .archive-year-badge {
+  color: #99f6e4;
+  background: linear-gradient(145deg, color-mix(in srgb, #134e4a 52%, var(--surface)), var(--surface));
+  border-color: color-mix(in srgb, #2dd4bf 35%, var(--border));
+}
+
+body[data-archive-view="1"] .segmented__btn[data-mode="edit"] {
+  opacity: 0.38;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.archive-dialog__hint {
+  margin-bottom: 10px;
+}
+
+.archive-dialog__hint:last-of-type {
+  margin-bottom: 0;
+}
+
+.archive-dialog__actions {
+  margin-top: 14px;
+}
+
 .header__actions {
   display: flex;
   align-items: center;
