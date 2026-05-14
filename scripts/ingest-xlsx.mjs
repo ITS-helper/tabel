@@ -93,9 +93,10 @@ function isEmployeeRow(cols) {
   if (!fio) return false;
   if (/кол-во|итого|сотрудников|нехватка|^\s*спг\s*:/i.test(fio)) return false;
   if (/^Итого|^СПГ:|^ТСБ|^ТСБ\./i.test(fio)) return false;
-  /** На листе «График 2026» у строки сотрудника ТН — число; без ТН — подписи легенды / ФИО без графика */
-  if (!/^\d+$/.test(tn)) return false;
-  return true;
+  if (/^\d+$/.test(tn)) return true;
+  /** ТН позже: строка без номера, но с ФИО (как в parse-tabel-csv.mjs) */
+  if (/^[А-ЯЁ][а-яё\-]+\s+[А-ЯЁ][а-яё\-]+/.test(fio)) return true;
+  return false;
 }
 
 function extractMonthSchedule(cols, m1to12) {
