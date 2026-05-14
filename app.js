@@ -604,6 +604,36 @@ const DATABASE = {
     vacationsIn: [],
     employees: typeof PARSED_2026_6 !== "undefined" ? PARSED_2026_6 : [],
   },
+  "2026-7": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: [],
+  },
+  "2026-8": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: [],
+  },
+  "2026-9": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: [],
+  },
+  "2026-10": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: [],
+  },
+  "2026-11": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: [],
+  },
+  "2026-12": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: [],
+  },
 };
 
 /**
@@ -774,6 +804,17 @@ function liveCalendarMonthKeys() {
 
 function isLiveMonthKey(monthKey) {
   return liveCalendarMonthKeys().includes(monthKey);
+}
+
+/** Месяц целиком ещё впереди (после текущего календарного месяца). */
+function isFutureMonthKey(monthKey) {
+  const { year, monthIndex } = parseMonthKey(monthKey);
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth();
+  if (year > cy) return true;
+  if (year < cy) return false;
+  return monthIndex > cm;
 }
 
 function isArchiveMonthKey(monthKey) {
@@ -1599,8 +1640,13 @@ function bindCollapsiblePanels() {
 }
 
 function getDatasetForMonthKey(monthKey) {
+  const { year } = parseMonthKey(monthKey);
+  const forceEmptyFuture = year === CURRENT_SCHEDULE_YEAR && isFutureMonthKey(monthKey);
+
   let base = DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey];
-  if (!base) {
+  if (forceEmptyFuture) {
+    base = emptyMonthDataset();
+  } else if (!base) {
     if (monthKeyAllowedSynthetic(monthKey)) base = emptyMonthDataset();
     else return null;
   }
@@ -1877,13 +1923,15 @@ function buildMonthSelect() {
 
   const fromIdx = ARCHIVE_SELECTOR_FROM_MONTH - 1;
   const archiveSameYear = [];
+  const futureSameYear = [];
   for (let m = fromIdx; m < 12; m++) {
     const key = monthKey(CURRENT_SCHEDULE_YEAR, m);
     if (liveSet.has(key)) continue;
-    archiveSameYear.push(key);
+    if (isFutureMonthKey(key)) futureSameYear.push(key);
+    else archiveSameYear.push(key);
   }
   const extraArchiveKeys = Object.keys(ARCHIVE_DATABASE)
-    .filter((k) => !liveSet.has(k) && !archiveSameYear.includes(k))
+    .filter((k) => !liveSet.has(k) && !archiveSameYear.includes(k) && !futureSameYear.includes(k))
     .sort((a, b) => {
       const pa = parseMonthKey(a);
       const pb = parseMonthKey(b);
@@ -1903,6 +1951,20 @@ function buildMonthSelect() {
       og.appendChild(opt);
     });
     sel.appendChild(og);
+  }
+
+  if (futureSameYear.length > 0) {
+    const ogF = document.createElement("optgroup");
+    ogF.label = `Остаток ${CURRENT_SCHEDULE_YEAR} (пусто)`;
+    futureSameYear.forEach((key) => {
+      const { year, monthIndex } = parseMonthKey(key);
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = `${MONTH_NAMES[monthIndex]} ${year}`;
+      if (key === state.monthKey) opt.selected = true;
+      ogF.appendChild(opt);
+    });
+    sel.appendChild(ogF);
   }
 
   syncHeaderSchedulePeriod();
@@ -2364,9 +2426,13 @@ function render() {
     const tbl = document.getElementById("scheduleTable");
     tbl.querySelectorAll("colgroup").forEach((el) => el.remove());
     renderVacationCards(data || { employees: [] });
-    const msg = isArchiveView()
-      ? "Нет данных за выбранный месяц — добавьте ключ в DATABASE или ARCHIVE_DATABASE в app.js."
-      : "Нет данных для этого месяца — выберите другой месяц или добавьте записи в app.js.";
+    const yk = parseMonthKey(state.monthKey).year;
+    const msg =
+      yk === CURRENT_SCHEDULE_YEAR && isFutureMonthKey(state.monthKey)
+        ? "Этот месяц ещё впереди — пустой план. После начала месяца и импорта из таблицы здесь появятся строки графика."
+        : isArchiveView()
+          ? "Нет данных за выбранный месяц — добавьте ключ в DATABASE или ARCHIVE_DATABASE в app.js."
+          : "Нет данных для этого месяца — выберите другой месяц или добавьте записи в app.js.";
     document.getElementById("scheduleBody").innerHTML = `<tr><td colspan="99" style="padding:24px;text-align:center;color:var(--muted)">${msg}</td></tr>`;
     document.getElementById("scheduleHead").innerHTML = "";
     document.getElementById("scheduleFoot").innerHTML = "";
@@ -2404,10 +2470,10 @@ function allArchiveExportMonthKeys() {
   const fromIdx = ARCHIVE_SELECTOR_FROM_MONTH - 1;
   for (let m = fromIdx; m < 12; m++) {
     const k = monthKey(CURRENT_SCHEDULE_YEAR, m);
-    if (!live.has(k)) keys.push(k);
+    if (!live.has(k) && !isFutureMonthKey(k)) keys.push(k);
   }
   for (const k of Object.keys(ARCHIVE_DATABASE)) {
-    if (!keys.includes(k)) keys.push(k);
+    if (!keys.includes(k) && !isFutureMonthKey(k)) keys.push(k);
   }
   keys.sort((a, b) => {
     const pa = parseMonthKey(a);
@@ -2498,19 +2564,4 @@ function exportFor1C() {
   URL.revokeObjectURL(a.href);
 }
 
-/** Для демо: июнь = те же люди, график по дням 1–30 как в мае */
-function ensureJunePlaceholder() {
-  const june = DATABASE["2026-6"];
-  if (june.employees.length === 0 && DATABASE["2026-5"]) {
-    june.employees = DATABASE["2026-5"].employees.map((emp) => {
-      const schedule = {};
-      for (let d = 1; d <= 30; d++) {
-        schedule[d] = emp.schedule[d] ?? "";
-      }
-      return { ...emp, schedule };
-    });
-  }
-}
-
-ensureJunePlaceholder();
 init();
