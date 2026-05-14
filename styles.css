@@ -1458,6 +1458,56 @@ body[data-archive-view="1"] .segmented__btn[data-mode="edit"] {
   background: color-mix(in srgb, var(--accent-soft) 40%, var(--bg)) !important;
 }
 
+.sticky-th__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sticky-th__inner--center {
+  align-items: center;
+  text-align: center;
+}
+
+.sticky-th__hide {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--portal-primary) 38%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--portal-primary);
+  cursor: pointer;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.sticky-th__hide:hover {
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  border-color: color-mix(in srgb, var(--portal-primary) 55%, transparent);
+}
+
+.sticky-th__hide:focus-visible {
+  outline: 2px solid var(--portal-primary);
+  outline-offset: 1px;
+}
+
+[data-theme="dark"] .sticky-th__hide {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-color: color-mix(in srgb, #90caf9 40%, transparent);
+  color: #bbdefb;
+}
+
+[data-theme="dark"] .sticky-th__hide:hover {
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+}
+
 .sticky-th__main {
   display: inline-block;
 }
