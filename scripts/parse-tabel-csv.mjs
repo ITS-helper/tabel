@@ -1,5 +1,6 @@
 /**
- * Парсинг выгрузки Google Таблицы → фрагмент для DATABASE в app.js
+ * Парсинг выгрузки Google Таблицы (CSV) → scripts/parsed-employees-may.js (один месяц).
+ * Для книги Excel с января по июнь см. scripts/ingest-xlsx.mjs и README.
  * Запуск: node scripts/parse-tabel-csv.mjs
  */
 import fs from "fs";

@@ -5,6 +5,8 @@ TimeFlow*.html
 # Дубликат выгрузки (в репозитории хранится tabel-sheet.csv)
 google_sheet_raw.csv
 
+node_modules/
+
 # Редактор / ОС
 .cursor/*
 !.cursor/rules/

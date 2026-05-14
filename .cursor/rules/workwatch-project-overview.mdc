@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Что это
 
-Статический прототип табеля (**без сборки**): `index.html`, `styles.css`, `app.js`, выгрузки в `scripts/` (например `parsed-employees-may.js`).
+Статический прототип табеля (**без сборки**): `index.html`, `styles.css`, `app.js`, выгрузки в `scripts/` (например `parsed-employees-2026-h1.js` для января–июня).
 
 ## Git
 

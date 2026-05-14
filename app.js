@@ -574,16 +574,35 @@ function employeesForSection(employees, sectionId) {
  * schedule: день месяца → код из легенды или "" (пусто)
  */
 const DATABASE = {
+  "2026-1": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: typeof PARSED_2026_1 !== "undefined" ? PARSED_2026_1 : [],
+  },
+  "2026-2": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: typeof PARSED_2026_2 !== "undefined" ? PARSED_2026_2 : [],
+  },
+  "2026-3": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: typeof PARSED_2026_3 !== "undefined" ? PARSED_2026_3 : [],
+  },
+  "2026-4": {
+    vacationsOut: [],
+    vacationsIn: [],
+    employees: typeof PARSED_2026_4 !== "undefined" ? PARSED_2026_4 : [],
+  },
   "2026-5": {
     vacationsOut: [],
     vacationsIn: [],
-    /** Данные из выгрузки Google Таблицы (scripts/parsed-employees-may.js) */
-    employees: typeof PARSED_EMPLOYEES_MAY !== "undefined" ? PARSED_EMPLOYEES_MAY : [],
+    employees: typeof PARSED_2026_5 !== "undefined" ? PARSED_2026_5 : [],
   },
   "2026-6": {
     vacationsOut: [],
     vacationsIn: [],
-    employees: [],
+    employees: typeof PARSED_2026_6 !== "undefined" ? PARSED_2026_6 : [],
   },
 };
 
@@ -595,13 +614,7 @@ const ARCHIVE_DATABASE = {
   "2025-5": {
     vacationsOut: [],
     vacationsIn: [],
-    employees:
-      typeof PARSED_EMPLOYEES_MAY !== "undefined"
-        ? PARSED_EMPLOYEES_MAY.map((e) => ({
-            ...e,
-            schedule: e.schedule && typeof e.schedule === "object" ? { ...e.schedule } : {},
-          }))
-        : [],
+    employees: [],
   },
 };
 

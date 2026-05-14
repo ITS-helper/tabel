@@ -1,0 +1,11 @@
+{
+  "name": "workwatch-tabel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ingest-xlsx": "node scripts/ingest-xlsx.mjs"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
