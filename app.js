@@ -788,18 +788,21 @@ function parseMonthKey(key) {
   return { year: y, monthIndex: m - 1 };
 }
 
-/** Год ключей в `DATABASE` (март–декабрь попадают в группу «Архив» в селекторе, кроме двух «живых» месяцев). */
+/** Год ключей в `DATABASE` (март–декабрь в селекторе: архив / остаток года, кроме трёх «живых» месяцев). */
 const CURRENT_SCHEDULE_YEAR = 2026;
 /** С какого месяца (1–12) внутри `CURRENT_SCHEDULE_YEAR` показывать месяцы в группе «Архив». */
 const ARCHIVE_SELECTOR_FROM_MONTH = 3;
 
-/** Календарные «живые» месяцы: только предыдущий и текущий — для них доступно редактирование. */
+/** «Живые» месяцы: предыдущий, текущий и следующий календарный — для них доступно редактирование. */
 function liveCalendarMonthKeys() {
   const t = new Date();
   const prev = new Date(t.getFullYear(), t.getMonth() - 1, 1);
-  const prevKey = monthKey(prev.getFullYear(), prev.getMonth());
-  const curKey = monthKey(t.getFullYear(), t.getMonth());
-  return [prevKey, curKey];
+  const next = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+  return [
+    monthKey(prev.getFullYear(), prev.getMonth()),
+    monthKey(t.getFullYear(), t.getMonth()),
+    monthKey(next.getFullYear(), next.getMonth()),
+  ];
 }
 
 function isLiveMonthKey(monthKey) {
@@ -1641,7 +1644,8 @@ function bindCollapsiblePanels() {
 
 function getDatasetForMonthKey(monthKey) {
   const { year } = parseMonthKey(monthKey);
-  const forceEmptyFuture = year === CURRENT_SCHEDULE_YEAR && isFutureMonthKey(monthKey);
+  const forceEmptyFuture =
+    year === CURRENT_SCHEDULE_YEAR && isFutureMonthKey(monthKey) && !isLiveMonthKey(monthKey);
 
   let base = DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey];
   if (forceEmptyFuture) {
