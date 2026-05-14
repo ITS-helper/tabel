@@ -1460,7 +1460,7 @@ let state = {
   })(),
   sectionId: "ust",
   mode: "view",
-  theme: localStorage.getItem("ww-theme") || "light",
+  theme: "light",
   /** Видимость закреплённых столбцов (дни месяца не относятся сюда) */
   stickyVisibility: loadStickyVisibility(),
   /** Фильтр табеля: набор кодов отметок (пусто — все сотрудники; OR по выбранным) */
@@ -1934,7 +1934,6 @@ function bindStickyTableClick() {
 function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute("data-theme", theme === "dark" ? "dark" : "light");
-  localStorage.setItem("ww-theme", theme);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
 }
