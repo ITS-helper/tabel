@@ -884,15 +884,30 @@ function formatRuDate(year, monthIndex, day) {
   return `${pad(day)}.${pad(monthIndex + 1)}.${year}`;
 }
 
+function datesEqualCal(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/** Число календарных дней включительно от start до end (оба — даты без времени). */
+function calendarDaysInclusive(start, end) {
+  const a0 = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const b0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.floor((b0 - a0) / 864e5) + 1;
+}
+
 function dayScheduleCode(schedule, day) {
   return String(schedule[day] ?? "").trim();
 }
 
 /**
- * По объединённому графику: отпуск — непрерывная цепочка ВП и/или ОТ с хотя бы одним ОТ
- * (типично ВП — выезд, ОТ — дни отпуска, ВП — возвращение). Начало периода — первый день цепочки,
- * конец — последний. Возврат на работу — первый день после цепочки, если он в этом месяце.
- * Цепочка только из ОТ (без ВП в выгрузке) тоже учитывается.
+ * По объединённому графику (все месяцы года `year` из `getDatasetForMonthKey`): отпуск —
+ * непрерывная цепочка ВП и/или ОТ с хотя бы одним ОТ. Если цепочка заходит из прошлого месяца,
+ * в блоке «Уезжают» показываются полные даты начала и конца и длина всего отпуска.
+ * «Возвращаются» — первый день после цепочки, если он попадает в открытый месяц (в т.ч. после отпуска, оборвавшегося в конце прошлого месяца).
  */
 function computeVacationSummaryFromSchedules(data, year, monthIndex) {
   const dim = daysInMonth(year, monthIndex);
@@ -903,56 +918,71 @@ function computeVacationSummaryFromSchedules(data, year, monthIndex) {
     return { departures, returns };
   }
 
+  const monthStart = new Date(year, monthIndex, 1);
+  const monthEnd = new Date(year, monthIndex, dim);
+  const departureKeys = new Set();
+  const returnKeys = new Set();
+
   for (const emp of emps) {
-    const schedule = emp.schedule || {};
-    const isTravelOrOT = (day) => {
-      const c = dayScheduleCode(schedule, day);
-      return c === VACATION_OT || c === VACATION_TRAVEL;
-    };
-    const segmentHasOT = (start, end) => {
-      for (let x = start; x <= end; x++) {
-        if (dayScheduleCode(schedule, x) === VACATION_OT) return true;
-      }
-      return false;
-    };
+    for (let d = 1; d <= dim; d++) {
+      const c = dayScheduleCode(emp.schedule, d);
+      if (c !== VACATION_OT && c !== VACATION_TRAVEL) continue;
+      const anchor = new Date(year, monthIndex, d);
+      const seg = expandVacationSegmentCalendar(emp.name, anchor, year);
+      if (!seg) continue;
+      if (!vacationSegmentHasOT(emp.name, seg.start, seg.end, year)) continue;
 
-    let d = 1;
-    while (d <= dim) {
-      while (d <= dim && !isTravelOrOT(d)) d++;
-      if (d > dim) break;
-      const start = d;
-      while (d <= dim && isTravelOrOT(d)) d++;
-      const end = d - 1;
-      if (!segmentHasOT(start, end)) continue;
+      const overlaps = seg.end >= monthStart && seg.start <= monthEnd;
+      if (!overlaps) continue;
 
-      const prevWasPart = start > 1 && isTravelOrOT(start - 1);
-      if (!prevWasPart) {
-        const nDays = end - start + 1;
-        departures.push({
-          name: emp.name,
-          tn: emp.tn,
-          startDay: start,
-          endDay: end,
-          startLabel: formatRuDate(year, monthIndex, start),
-          endLabel: formatRuDate(year, monthIndex, end),
-          nDays,
-        });
-      }
+      const key = `${emp.name}|${seg.start.getTime()}`;
+      if (departureKeys.has(key)) continue;
+      departureKeys.add(key);
 
-      if (d <= dim && !isTravelOrOT(d)) {
-        returns.push({
-          name: emp.name,
-          tn: emp.tn,
-          returnDay: d,
-          dateLabel: formatRuDate(year, monthIndex, d),
-        });
-      }
+      const nDays = calendarDaysInclusive(seg.start, seg.end);
+      departures.push({
+        name: emp.name,
+        tn: emp.tn,
+        sortTs: seg.start.getTime(),
+        startLabel: formatRuDate(
+          seg.start.getFullYear(),
+          seg.start.getMonth(),
+          seg.start.getDate()
+        ),
+        endLabel: formatRuDate(seg.end.getFullYear(), seg.end.getMonth(), seg.end.getDate()),
+        nDays,
+      });
+    }
+
+    for (let d = 1; d <= dim; d++) {
+      const cur = new Date(year, monthIndex, d);
+      const codeCur = scheduleCodeOnCalendarDate(emp.name, cur, year);
+      if (codeCur === VACATION_OT || codeCur === VACATION_TRAVEL) continue;
+      const prev = new Date(cur);
+      prev.setDate(prev.getDate() - 1);
+      const codePrev = scheduleCodeOnCalendarDate(emp.name, prev, year);
+      if (codePrev !== VACATION_OT && codePrev !== VACATION_TRAVEL) continue;
+      const seg = expandVacationSegmentCalendar(emp.name, prev, year);
+      if (!seg || !vacationSegmentHasOT(emp.name, seg.start, seg.end, year)) continue;
+      if (!datesEqualCal(seg.end, prev)) continue;
+
+      const rkey = `${emp.name}|${cur.getTime()}`;
+      if (returnKeys.has(rkey)) continue;
+      returnKeys.add(rkey);
+
+      returns.push({
+        name: emp.name,
+        tn: emp.tn,
+        sortTs: cur.getTime(),
+        returnDay: d,
+        dateLabel: formatRuDate(year, monthIndex, d),
+      });
     }
   }
 
   const byName = (a, b) => a.name.localeCompare(b.name, "ru");
-  departures.sort((a, b) => a.startDay - b.startDay || byName(a, b));
-  returns.sort((a, b) => a.returnDay - b.returnDay || byName(a, b));
+  departures.sort((a, b) => a.sortTs - b.sortTs || byName(a, b));
+  returns.sort((a, b) => a.sortTs - b.sortTs || byName(a, b));
   return { departures, returns };
 }
 
@@ -2196,7 +2226,7 @@ function renderVacationCards(data) {
       '<li class="card__empty">Нет отпуска по графику (цепочка ВП/ОТ с хотя бы одним ОТ) среди видимых строк</li>';
   } else {
     departures.forEach((v) => {
-      const sameDay = v.startDay === v.endDay;
+      const sameDay = v.nDays === 1;
       const range = sameDay ? v.startLabel : `${v.startLabel} — ${v.endLabel}`;
       const mainText = `${range} · ${v.nDays} календ. дн.`;
       appendVacationCardRow(outEl, { name: v.name, tn: v.tn, mainText, metaText: "" });
