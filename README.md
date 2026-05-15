@@ -54,6 +54,8 @@
 ### Настройка в Supabase (один раз)
 
 1. **SQL Editor** → выполните [`supabase-schema.sql`](supabase-schema.sql), затем [`supabase-auth.sql`](supabase-auth.sql).
+   - В **Database → Extensions** должно быть включено **pgcrypto** (иначе вход вернёт ошибку про `crypt`).
+   - Если `supabase-auth.sql` уже выполняли раньше — выполните файл **ещё раз** (обновит функцию `workwatch_login`).
 2. На компьютере с Node.js в корне репозитория:
    ```bash
    npm install

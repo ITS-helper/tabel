@@ -1240,10 +1240,17 @@ function bindAuthLoginDialog() {
       pwdInp.value = "";
       applyMode("edit");
     } catch (e) {
-      err.textContent =
-        e?.message?.includes("workwatch_login")
-          ? "Сервис входа не настроен — выполните supabase-auth.sql в Supabase."
-          : "Ошибка сети при входе. Попробуйте позже.";
+      const msg = String(e?.message || e || "");
+      if (msg.includes("workwatch_login") || msg.includes("Could not find")) {
+        err.textContent = "Сервис входа не настроен — выполните supabase-auth.sql в Supabase.";
+      } else if (msg.includes("crypt") || msg.includes("pgcrypto")) {
+        err.textContent =
+          "В Supabase не подключено расширение pgcrypto. Database → Extensions → включите pgcrypto, затем снова выполните supabase-auth.sql.";
+      } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        err.textContent = "Ошибка сети при входе. Откройте сайт по http(s) (не file://) и проверьте интернет.";
+      } else {
+        err.textContent = msg.length > 120 ? "Ошибка входа. Откройте консоль браузера (F12) для деталей." : msg;
+      }
       err.hidden = false;
     } finally {
       ok.disabled = false;

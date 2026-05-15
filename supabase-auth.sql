@@ -1,7 +1,8 @@
 -- Аутентификация WORK WATCH (выполнить в Supabase → SQL Editor после supabase-schema.sql)
 -- Пароли: bcrypt через pgcrypto. Логин — RPC workwatch_login.
 
-create extension if not exists pgcrypto;
+-- В Supabase расширения обычно в схеме extensions (Dashboard → Database → Extensions → pgcrypto).
+create extension if not exists pgcrypto with schema extensions;
 
 -- Учётные записи: сотрудник (employee_name = ФИО как в табеле) или админ (employee_name null)
 create table if not exists public.workwatch_auth_users (
@@ -76,7 +77,7 @@ create or replace function public.workwatch_login(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_login text;
