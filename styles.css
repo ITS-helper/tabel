@@ -2259,6 +2259,10 @@ body[data-mode="edit"] .pill:hover {
   pointer-events: none;
 }
 
+.person-chip:not(.person-chip--readonly) {
+  touch-action: none;
+}
+
 .person-chip {
   display: flex;
   align-items: center;
@@ -2287,6 +2291,10 @@ body[data-mode="edit"] .pill:hover {
   cursor: grabbing;
   transform: scale(0.97);
   pointer-events: none;
+}
+
+.zp-drag-ghost {
+  box-sizing: border-box;
 }
 
 body.zp-drag-active {

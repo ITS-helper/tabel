@@ -1,10 +1,11 @@
 /**
- * Расстановка по зонам (из workarounds): drag-and-drop, утро/вечер, синхронизация через app.js.
+ * Расстановка по зонам: pointer-drag (как workarounds), клик «сотрудник → зона», синхронизация через app.js.
  */
 (function () {
   "use strict";
 
   const ZONE_KEYS = ["pool", "spg1", "spg2", "spg21", "spg3", "spg31", "spg4", "dayoff"];
+  const DRAG_THRESHOLD_PX = 6;
   const AVATAR_COLORS = [
     "#1565C0", "#00897B", "#E53935", "#5E35B1", "#0277BD",
     "#00695C", "#BF360C", "#6A1B9A", "#01579B", "#004D40",
@@ -23,14 +24,16 @@
     { key: "pool", label: "Нераспределённые", dot: "zsb-dot-pool", abbr: "—" },
   ];
 
+  const DROP_HIGHLIGHT_SEL =
+    ".zp-pool-zone, .zp-zone-card, .zp-zone-drop";
+
   let api = null;
   let currentShift = "morning";
   let rosterCount = 0;
-  let dragPerson = null;
-  let dragSourceZone = null;
-  let html5DragActive = false;
   let selectedPerson = null;
-  const DND_MIME = "application/x-ww-zone";
+  let dragSession = false;
+  /** @type {{ chip: HTMLElement, name: string, from: string, startX: number, startY: number, dragging: boolean, ghost: HTMLElement|null, offsetX: number, offsetY: number, pointerId: number } | null} */
+  let pointerState = null;
   let sheetOverlay = null;
   let sheetPerson = null;
   let sheetSourceZone = null;
@@ -179,23 +182,33 @@
   }
 
   function clearDragOverHighlights() {
-    document
-      .querySelectorAll(".zp-pool-zone.drag-over, .zp-zone-drop.drag-over, .zp-zone-card.drag-over")
-      .forEach((el) => el.classList.remove("drag-over"));
+    document.querySelectorAll(DROP_HIGHLIGHT_SEL + ".drag-over").forEach((el) => {
+      el.classList.remove("drag-over");
+    });
   }
 
-  function parseDragPayload(raw) {
-    if (!raw) return null;
-    try {
-      const p = JSON.parse(raw);
-      if (p && p.name) return { name: p.name, from: p.from || "pool" };
-    } catch (_) {}
-    return { name: raw, from: dragSourceZone || "pool" };
+  function getDropZoneKeyAt(clientX, clientY) {
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return null;
+    const zoneEl = el.closest("[data-zone]");
+    if (!zoneEl) return null;
+    const key = zoneEl.dataset.zone;
+    return ZONE_KEYS.includes(key) ? key : null;
+  }
+
+  function highlightDropZone(clientX, clientY) {
+    clearDragOverHighlights();
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return;
+    const zoneEl = el.closest("[data-zone]");
+    if (zoneEl) zoneEl.classList.add("drag-over");
   }
 
   function clearSelection() {
     selectedPerson = null;
-    document.querySelectorAll(".person-chip--selected").forEach((c) => c.classList.remove("person-chip--selected"));
+    document.querySelectorAll(".person-chip--selected").forEach((c) => {
+      c.classList.remove("person-chip--selected");
+    });
     $("zonePlacementSection")?.classList.remove("zone-placement--pick-mode");
   }
 
@@ -204,6 +217,118 @@
     selectedPerson = { name: name, from: from };
     chipEl.classList.add("person-chip--selected");
     $("zonePlacementSection")?.classList.add("zone-placement--pick-mode");
+  }
+
+  function useTapAssign() {
+    return window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
+  }
+
+  function beginPointerDrag(st, clientX, clientY) {
+    st.dragging = true;
+    dragSession = true;
+    document.body.classList.add("zp-drag-active");
+    st.chip.classList.add("dragging");
+    clearSelection();
+    const rect = st.chip.getBoundingClientRect();
+    st.offsetX = clientX - rect.left;
+    st.offsetY = clientY - rect.top;
+    st.ghost = st.chip.cloneNode(true);
+    st.ghost.classList.add("zp-drag-ghost");
+    st.ghost.style.cssText =
+      "position:fixed;z-index:10000;pointer-events:none;opacity:0.92;" +
+      "transform:rotate(2deg) scale(1.04);box-shadow:0 8px 28px rgba(0,0,0,0.22);" +
+      "left:" +
+      (clientX - st.offsetX) +
+      "px;top:" +
+      (clientY - st.offsetY) +
+      "px;width:" +
+      rect.width +
+      "px;";
+    document.body.appendChild(st.ghost);
+  }
+
+  function cleanupPointerDrag() {
+    if (pointerState?.ghost) {
+      pointerState.ghost.remove();
+    }
+    if (pointerState?.chip) {
+      pointerState.chip.classList.remove("dragging");
+    }
+    document.body.classList.remove("zp-drag-active");
+    clearDragOverHighlights();
+    pointerState = null;
+    dragSession = false;
+  }
+
+  function onChipPointerDown(e) {
+    if (!canEdit()) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (pointerState) return;
+
+    const chip = e.currentTarget;
+    pointerState = {
+      chip: chip,
+      name: chip.dataset.person,
+      from: chip.dataset.zone,
+      startX: e.clientX,
+      startY: e.clientY,
+      dragging: false,
+      ghost: null,
+      offsetX: 0,
+      offsetY: 0,
+      pointerId: e.pointerId,
+    };
+
+    try {
+      chip.setPointerCapture(e.pointerId);
+    } catch (_) {}
+
+    e.preventDefault();
+  }
+
+  function onChipPointerMove(e) {
+    if (!pointerState || e.pointerId !== pointerState.pointerId) return;
+    const st = pointerState;
+    const dx = e.clientX - st.startX;
+    const dy = e.clientY - st.startY;
+
+    if (!st.dragging) {
+      if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+      beginPointerDrag(st, e.clientX, e.clientY);
+    }
+
+    if (st.ghost) {
+      st.ghost.style.left = e.clientX - st.offsetX + "px";
+      st.ghost.style.top = e.clientY - st.offsetY + "px";
+    }
+    highlightDropZone(e.clientX, e.clientY);
+    e.preventDefault();
+  }
+
+  function onChipPointerUp(e) {
+    if (!pointerState || e.pointerId !== pointerState.pointerId) return;
+    const st = pointerState;
+
+    try {
+      st.chip.releasePointerCapture(e.pointerId);
+    } catch (_) {}
+
+    if (st.dragging) {
+      const toZone = getDropZoneKeyAt(e.clientX, e.clientY);
+      if (toZone && toZone !== st.from) {
+        movePerson(st.name, st.from, toZone);
+      }
+      cleanupPointerDrag();
+      return;
+    }
+
+    cleanupPointerDrag();
+
+    if (useTapAssign()) {
+      openSheet(st.name, st.from);
+    } else {
+      selectPerson(st.name, st.from, st.chip);
+    }
   }
 
   function bindZoneClickTargetsOnce() {
@@ -222,41 +347,27 @@
       clearSelection();
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") clearSelection();
+      if (e.key === "Escape") {
+        clearSelection();
+        closeSheet();
+      }
     });
   }
 
-  function bindDropTargetsOnce() {
-    if (bindDropTargetsOnce.done) return;
-    bindDropTargetsOnce.done = true;
-    for (const z of ZONE_KEYS) {
-      const el = $(zoneContainerId(z));
-      if (!el) continue;
-      el.addEventListener("dragover", (e) => {
-        if (!canEdit()) return;
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-        el.classList.add("drag-over");
-      });
-      el.addEventListener("dragleave", (e) => {
-        const rel = e.relatedTarget;
-        if (rel && el.contains(rel)) return;
-        el.classList.remove("drag-over");
-      });
-      el.addEventListener("drop", (e) => {
-        if (!canEdit()) return;
-        e.preventDefault();
-        el.classList.remove("drag-over");
-        const payload = parseDragPayload(
-          e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData("text/plain")
-        );
-        if (!payload) return;
-        const toZone = el.dataset.zone || z;
-        if (ZONE_KEYS.includes(toZone) && payload.from !== toZone) {
-          movePerson(payload.name, payload.from, toZone);
-        }
-      });
-    }
+  function attachChipInteractions(chip) {
+    if (!canEdit()) return;
+    chip.addEventListener("pointerdown", onChipPointerDown);
+    chip.addEventListener("pointermove", onChipPointerMove);
+    chip.addEventListener("pointerup", onChipPointerUp);
+    chip.addEventListener("pointercancel", onChipPointerUp);
+    chip.addEventListener("dblclick", (e) => {
+      if (useTapAssign() || !canEdit()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const name = chip.dataset.person;
+      const zone = chip.dataset.zone;
+      if (name) openSheet(name, zone);
+    });
   }
 
   function createChip(name, zone) {
@@ -271,45 +382,10 @@
     chip.appendChild(avatar);
     chip.appendChild(document.createTextNode(name));
     if (canEdit()) {
-      chip.draggable = true;
-      chip.addEventListener("click", (e) => {
-        if (!canEdit() || html5DragActive) return;
-        e.stopPropagation();
-        selectPerson(name, zone, chip);
-      });
-      chip.addEventListener("dragstart", (e) => {
-        if (!canEdit()) {
-          e.preventDefault();
-          return;
-        }
-        clearSelection();
-        html5DragActive = true;
-        dragPerson = name;
-        dragSourceZone = zone;
-        chip.classList.add("dragging");
-        e.dataTransfer.setData(DND_MIME, JSON.stringify({ name: name, from: zone }));
-        e.dataTransfer.setData("text/plain", name);
-        e.dataTransfer.effectAllowed = "move";
-        try {
-          if (e.dataTransfer.setDragImage) {
-            const img = document.createElement("canvas");
-            img.width = img.height = 1;
-            e.dataTransfer.setDragImage(img, 0, 0);
-          }
-        } catch (_) {}
-      });
-      chip.addEventListener("dragend", () => {
-        html5DragActive = false;
-        chip.classList.remove("dragging");
-        dragPerson = null;
-        dragSourceZone = null;
-        clearDragOverHighlights();
-      });
+      attachChipInteractions(chip);
     } else {
-      chip.draggable = false;
       chip.classList.add("person-chip--readonly");
     }
-    addTapToChip(chip);
     return chip;
   }
 
@@ -385,7 +461,7 @@
         lockHint.hidden = false;
         lockHint.textContent =
           msg ||
-          "Чтобы перетаскивать: режим «Редактирование» и вход администратора. Или двойной клик по фамилии (на компьютере).";
+          "Чтобы менять расстановку: режим «Редактирование» и вход администратора. Или двойной клик по фамилии.";
       }
     }
   }
@@ -490,10 +566,6 @@
     }
   }
 
-  function useTapAssign() {
-    return window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
-  }
-
   function createSheet() {
     if (sheetOverlay) return;
     sheetOverlay = document.createElement("div");
@@ -529,9 +601,6 @@
         { passive: true }
       );
     }
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeSheet();
-    });
   }
 
   function openSheet(personName, fromZone) {
@@ -580,66 +649,9 @@
     sheetSourceZone = null;
   }
 
-  function addTapToChip(chip) {
-    if (chip._zpTapPatched) return;
-    chip._zpTapPatched = true;
-    let tapStartTime = 0;
-    let tapStartX = 0;
-    let tapStartY = 0;
-    let wasDragged = false;
-
-    chip.addEventListener(
-      "touchstart",
-      (e) => {
-        if (!useTapAssign() || !canEdit()) return;
-        tapStartTime = Date.now();
-        tapStartX = e.touches[0].clientX;
-        tapStartY = e.touches[0].clientY;
-        wasDragged = false;
-        e.stopPropagation();
-      },
-      { capture: true }
-    );
-    chip.addEventListener(
-      "touchmove",
-      (e) => {
-        if (!useTapAssign()) return;
-        const dx = Math.abs(e.touches[0].clientX - tapStartX);
-        const dy = Math.abs(e.touches[0].clientY - tapStartY);
-        if (dx > 10 || dy > 10) wasDragged = true;
-      },
-      { passive: true }
-    );
-    chip.addEventListener(
-      "touchend",
-      (e) => {
-        if (!useTapAssign() || !canEdit()) return;
-        e.stopPropagation();
-        if (wasDragged) return;
-        if (Date.now() - tapStartTime < 400) {
-          e.preventDefault();
-          const name = chip.dataset.person;
-          const zone = chip.dataset.zone;
-          if (name) openSheet(name, zone);
-        }
-      },
-      { capture: true }
-    );
-
-    chip.addEventListener("dblclick", (e) => {
-      if (useTapAssign() || !canEdit()) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const name = chip.dataset.person;
-      const zone = chip.dataset.zone;
-      if (name) openSheet(name, zone);
-    });
-  }
-
   function bindControlsOnce() {
     if (bound) return;
     bound = true;
-    bindDropTargetsOnce();
     bindZoneClickTargetsOnce();
     $("zpBtnMorning")?.addEventListener("click", () => setShift("morning"));
     $("zpBtnEvening")?.addEventListener("click", () => setShift("evening"));
@@ -650,7 +662,7 @@
 
   function refresh() {
     if (!api || !$("zonePlacementSection")) return;
-    if (html5DragActive) return;
+    if (dragSession) return;
     bindControlsOnce();
     const sectionEl = $("zonePlacementSection");
     const hint = $("zonePlacementHint");
@@ -670,7 +682,7 @@
       hint.textContent = canEdit()
         ? "Состав: «" +
           title +
-          "» (есть смены в месяце). Сегодня ВХ → «Выходной». Клик: сотрудник → зона."
+          "» (есть смены в месяце). Сегодня ВХ → «Выходной». Перетащите или клик: сотрудник → зона."
         : "Состав: «" + title + "» — только с сменами в месяце. Сегодня ВХ в «Выходной».";
     }
     const roster = api.getRosterNames();
