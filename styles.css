@@ -2249,6 +2249,10 @@ body[data-mode="edit"] .pill:hover {
   opacity: 0.75;
 }
 
+.person-chip .person-avatar {
+  pointer-events: none;
+}
+
 .person-chip {
   display: flex;
   align-items: center;
@@ -2286,6 +2290,24 @@ body.zp-drag-active {
 
 body.zp-drag-active .person-chip:not(.dragging) {
   cursor: grabbing;
+}
+
+.person-chip--selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.zone-placement--pick-mode .zp-pool-zone,
+.zone-placement--pick-mode .zp-zone-drop,
+.zone-placement--pick-mode .zp-zone-card .zone-header {
+  cursor: pointer;
+}
+
+.zone-placement--pick-mode .zp-zone-card.drag-over,
+.zone-placement--pick-mode .zp-pool-zone.drag-over,
+.zone-placement--pick-mode .zp-zone-drop.drag-over {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .person-chip--readonly {

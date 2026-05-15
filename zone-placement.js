@@ -27,6 +27,7 @@
   let dragPerson = null;
   let dragSourceZone = null;
   let html5DragActive = false;
+  let selectedPerson = null;
   const DND_MIME = "application/x-ww-zone";
   let sheetOverlay = null;
   let sheetPerson = null;
@@ -173,6 +174,39 @@
     return { name: raw, from: dragSourceZone || "pool" };
   }
 
+  function clearSelection() {
+    selectedPerson = null;
+    document.querySelectorAll(".person-chip--selected").forEach((c) => c.classList.remove("person-chip--selected"));
+    $("zonePlacementSection")?.classList.remove("zone-placement--pick-mode");
+  }
+
+  function selectPerson(name, from, chipEl) {
+    clearSelection();
+    selectedPerson = { name: name, from: from };
+    chipEl.classList.add("person-chip--selected");
+    $("zonePlacementSection")?.classList.add("zone-placement--pick-mode");
+  }
+
+  function bindZoneClickTargetsOnce() {
+    if (bindZoneClickTargetsOnce.done) return;
+    bindZoneClickTargetsOnce.done = true;
+    const section = $("zonePlacementSection");
+    if (!section) return;
+    section.addEventListener("click", (e) => {
+      if (!canEdit() || !selectedPerson) return;
+      if (e.target.closest(".person-chip")) return;
+      const zoneEl = e.target.closest("[data-zone]");
+      if (!zoneEl || !section.contains(zoneEl)) return;
+      const toZone = zoneEl.dataset.zone;
+      if (!toZone || !ZONE_KEYS.includes(toZone) || toZone === selectedPerson.from) return;
+      movePerson(selectedPerson.name, selectedPerson.from, toZone);
+      clearSelection();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") clearSelection();
+    });
+  }
+
   function bindDropTargetsOnce() {
     if (bindDropTargetsOnce.done) return;
     bindDropTargetsOnce.done = true;
@@ -219,11 +253,17 @@
     chip.appendChild(document.createTextNode(name));
     if (canEdit()) {
       chip.draggable = true;
+      chip.addEventListener("click", (e) => {
+        if (!canEdit() || html5DragActive) return;
+        e.stopPropagation();
+        selectPerson(name, zone, chip);
+      });
       chip.addEventListener("dragstart", (e) => {
         if (!canEdit()) {
           e.preventDefault();
           return;
         }
+        clearSelection();
         html5DragActive = true;
         dragPerson = name;
         dragSourceZone = zone;
@@ -231,6 +271,13 @@
         e.dataTransfer.setData(DND_MIME, JSON.stringify({ name: name, from: zone }));
         e.dataTransfer.setData("text/plain", name);
         e.dataTransfer.effectAllowed = "move";
+        try {
+          if (e.dataTransfer.setDragImage) {
+            const img = document.createElement("canvas");
+            img.width = img.height = 1;
+            e.dataTransfer.setDragImage(img, 0, 0);
+          }
+        } catch (_) {}
       });
       chip.addEventListener("dragend", () => {
         html5DragActive = false;
@@ -259,6 +306,7 @@
     if (placeholder) placeholder.remove();
     toContainer.appendChild(chip);
     persistFromDom();
+    clearSelection();
     updateDeploymentUI();
   }
 
@@ -565,6 +613,7 @@
     if (bound) return;
     bound = true;
     bindDropTargetsOnce();
+    bindZoneClickTargetsOnce();
     $("zpBtnMorning")?.addEventListener("click", () => setShift("morning"));
     $("zpBtnEvening")?.addEventListener("click", () => setShift("evening"));
     $("zpBtnCopyDeploy")?.addEventListener("click", () => void copyDeployment());
@@ -591,10 +640,11 @@
     sectionEl.classList.remove("zone-placement--inactive");
     if (hint) {
       const title = api.getSectionTitle ? api.getSectionTitle() : sid;
-      hint.textContent =
-        "Состав: «" +
-        title +
-        "», выбранный месяц. Утро и вечер — отдельно; перетаскивание — администратор в режиме редактирования.";
+      hint.textContent = canEdit()
+        ? "Состав: «" +
+          title +
+          "». Клик по фамилии, затем по зоне (или перетащите). Двойной клик — меню зон."
+        : "Состав: «" + title + "», выбранный месяц. Утро и вечер — отдельно.";
     }
     const roster = api.getRosterNames();
     rosterCount = roster.length;
