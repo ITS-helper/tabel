@@ -82,22 +82,68 @@
     return out;
   }
 
-  function getMonthBucket() {
+  function getSectionKey() {
+    const sid = api.getSectionId();
+    return sid === "pilot" || sid === "ust" ? sid : null;
+  }
+
+  function normalizeMonthEntry(month) {
+    if (!month || typeof month !== "object") return;
+    const hasLegacy =
+      month.morning != null ||
+      month.evening != null ||
+      Array.isArray(month.pool) ||
+      Array.isArray(month.spg1);
+    if (!hasLegacy || month.ust != null || month.pilot != null) return;
+    month.ust = {
+      shift: month.shift === "evening" ? "evening" : "morning",
+      morning:
+        month.morning && typeof month.morning === "object"
+          ? month.morning
+          : emptyPlacement(),
+      evening:
+        month.evening && typeof month.evening === "object"
+          ? month.evening
+          : emptyPlacement(),
+    };
+    delete month.shift;
+    delete month.morning;
+    delete month.evening;
+    delete month.pool;
+    delete month.spg1;
+    delete month.spg2;
+    delete month.spg3;
+    delete month.spg4;
+    delete month.dayoff;
+  }
+
+  function getMonthBucket(createIfMissing) {
     const mk = api.getMonthKey();
     if (!api.state.zonePlacementByMonth[mk]) {
-      api.state.zonePlacementByMonth[mk] = { shift: "morning", morning: emptyPlacement(), evening: emptyPlacement() };
+      if (createIfMissing === false) return null;
+      api.state.zonePlacementByMonth[mk] = {};
     }
-    return api.state.zonePlacementByMonth[mk];
+    const month = api.state.zonePlacementByMonth[mk];
+    normalizeMonthEntry(month);
+    const sid = getSectionKey();
+    if (!sid) return null;
+    if (!month[sid]) {
+      if (createIfMissing === false) return null;
+      month[sid] = { shift: "morning", morning: emptyPlacement(), evening: emptyPlacement() };
+    }
+    return month[sid];
   }
 
   function getCurrentPlacement() {
-    const bucket = getMonthBucket();
+    const bucket = getMonthBucket(true);
+    if (!bucket) return emptyPlacement();
     currentShift = bucket.shift === "evening" ? "evening" : "morning";
     return bucket[currentShift] || emptyPlacement();
   }
 
   function setCurrentPlacement(placement) {
-    const bucket = getMonthBucket();
+    const bucket = getMonthBucket(true);
+    if (!bucket) return;
     bucket.shift = currentShift;
     bucket[currentShift] = placement;
     api.persistLocal();
@@ -184,18 +230,27 @@
     finishDrag(getDropZoneAt(t.clientX, t.clientY));
   }
 
+  function pickDropZoneAt(cx, cy) {
+    const stack = document.elementsFromPoint(cx, cy);
+    for (let i = 0; i < stack.length; i++) {
+      const el = stack[i];
+      if (!el || el === dragGhost) continue;
+      if (el.classList && el.classList.contains("person-chip")) continue;
+      if (el.closest && el.closest(".person-chip.dragging")) continue;
+      const zone = el.closest("[data-zone]");
+      if (zone && zone.closest("#zonePlacementSection")) return zone;
+    }
+    return null;
+  }
+
   function highlightDropZone(cx, cy) {
     document.querySelectorAll(".zp-pool-zone, .zp-zone-card, .zp-zone-drop").forEach((el) => el.classList.remove("drag-over"));
-    const el = document.elementFromPoint(cx, cy);
-    if (!el) return;
-    const zone = el.closest("[data-zone]");
+    const zone = pickDropZoneAt(cx, cy);
     if (zone) zone.classList.add("drag-over");
   }
 
   function getDropZoneAt(cx, cy) {
-    const el = document.elementFromPoint(cx, cy);
-    if (!el) return null;
-    return el.closest("[data-zone]");
+    return pickDropZoneAt(cx, cy);
   }
 
   function finishDrag(dropZoneEl) {
@@ -304,7 +359,8 @@
 
   function setShift(shift) {
     if (shift !== "morning" && shift !== "evening") return;
-    const bucket = getMonthBucket();
+    const bucket = getMonthBucket(true);
+    if (!bucket) return;
     bucket[currentShift] = readPlacementFromDom();
     currentShift = shift;
     bucket.shift = shift;
@@ -335,7 +391,10 @@
     const deploy = readPlacementFromDom();
     const shiftLabel = currentShift === "morning" ? "Утро" : "Вечер";
     const shiftEmoji = currentShift === "morning" ? "🌅" : "🌙";
-    let text = "📅 " + formatTodayRu() + " | " + shiftEmoji + " Расстановка " + shiftLabel + ":\n";
+    const objTitle = api.getSectionTitle ? api.getSectionTitle() : "";
+    let text = "📅 " + formatTodayRu() + " | " + shiftEmoji + " Расстановка " + shiftLabel;
+    if (objTitle) text += " («" + objTitle + "»)";
+    text += ":\n";
     const zones = [
       { key: "spg1", label: "СПГ 1" },
       { key: "spg2", label: "СПГ 2" },
@@ -533,9 +592,30 @@
   function refresh() {
     if (!api || !$("zonePlacementSection")) return;
     bindControlsOnce();
+    const sectionEl = $("zonePlacementSection");
+    const hint = $("zonePlacementHint");
+    const sid = getSectionKey();
+    if (!sid) {
+      sectionEl.classList.add("zone-placement--inactive");
+      sectionEl.classList.remove("zone-placement--empty");
+      if (hint) {
+        hint.textContent =
+          "Расстановка на вкладках «Усть-Луга» и «Пилотные проекты». На сводной вкладке блок недоступен.";
+      }
+      return;
+    }
+    sectionEl.classList.remove("zone-placement--inactive");
+    if (hint) {
+      const title = api.getSectionTitle ? api.getSectionTitle() : sid;
+      hint.textContent =
+        "Состав: «" +
+        title +
+        "», выбранный месяц. Утро и вечер — отдельно; перетаскивание — администратор в режиме редактирования.";
+    }
     const roster = api.getRosterNames();
     rosterCount = roster.length;
-    const bucket = getMonthBucket();
+    const bucket = getMonthBucket(true);
+    if (!bucket) return;
     currentShift = bucket.shift === "evening" ? "evening" : "morning";
     $("zpBtnMorning")?.classList.toggle("active", currentShift === "morning");
     $("zpBtnEvening")?.classList.toggle("active", currentShift === "evening");
@@ -543,7 +623,7 @@
     bucket[currentShift] = placement;
     applyPlacementState(placement);
     const empty = roster.length === 0;
-    $("zonePlacementSection")?.classList.toggle("zone-placement--empty", empty);
+    sectionEl.classList.toggle("zone-placement--empty", empty);
   }
 
   function init(workWatchApi) {

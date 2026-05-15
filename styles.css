@@ -2260,6 +2260,7 @@ body[data-mode="edit"] .pill:hover {
   opacity: 0.4;
   cursor: grabbing;
   transform: scale(0.97);
+  pointer-events: none;
 }
 
 .person-chip--readonly {
@@ -2396,6 +2397,11 @@ body[data-mode="edit"] .pill:hover {
 }
 
 .zone-placement--empty .zone-placement-inner {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.zone-placement--inactive .zone-placement-inner {
   opacity: 0.55;
   pointer-events: none;
 }

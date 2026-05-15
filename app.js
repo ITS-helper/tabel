@@ -1618,15 +1618,14 @@ function persistZonePlacementLocal() {
   } catch (_) {}
 }
 
-/** Все ФИО табеля за месяц (оба объекта), без дублей */
-function getZoneRosterNamesForMonth(monthKey) {
+/** ФИО табеля за месяц на выбранном объекте (вкладка ust / pilot) */
+function getZoneRosterNamesForMonth(monthKey, sectionId) {
+  if (sectionId !== "ust" && sectionId !== "pilot") return [];
   const data = getDatasetForMonthKey(monthKey);
   if (!data?.employees?.length) return [];
-  const names = new Set();
-  for (const e of data.employees) {
-    if (e?.name) names.add(e.name);
-  }
-  return [...names].sort((a, b) => a.localeCompare(b, "ru"));
+  return employeesForSection(data.employees, sectionId)
+    .map((e) => e.name)
+    .filter(Boolean);
 }
 
 function canEditZonePlacement() {
@@ -1912,7 +1911,9 @@ function initZonePlacementModule() {
   window.WorkWatchZonePlacement.init({
     state,
     getMonthKey: () => state.monthKey,
-    getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey),
+    getSectionId: () => state.sectionId,
+    getSectionTitle: () => sectionTabTitle(state.sectionId),
+    getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey, state.sectionId),
     canEdit: canEditZonePlacement,
     persistLocal: persistZonePlacementLocal,
     scheduleRemotePersist: scheduleRemotePersistDebounced,
