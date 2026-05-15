@@ -46,13 +46,16 @@ alter table public.workwatch_auth_users enable row level security;
 alter table public.workwatch_login_attempts enable row level security;
 alter table public.workwatch_sessions enable row level security;
 
--- Клиент не читает хеши напрямую; только RPC
+-- Клиент не читает хеши напрямую; только RPC (повторный запуск файла — безопасен)
+drop policy if exists "workwatch_auth_users_deny_all" on public.workwatch_auth_users;
 create policy "workwatch_auth_users_deny_all"
   on public.workwatch_auth_users for all using (false) with check (false);
 
+drop policy if exists "workwatch_login_attempts_deny_all" on public.workwatch_login_attempts;
 create policy "workwatch_login_attempts_deny_all"
   on public.workwatch_login_attempts for all using (false) with check (false);
 
+drop policy if exists "workwatch_sessions_deny_all" on public.workwatch_sessions;
 create policy "workwatch_sessions_deny_all"
   on public.workwatch_sessions for all using (false) with check (false);
 
