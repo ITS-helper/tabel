@@ -26,12 +26,8 @@
   let rosterCount = 0;
   let dragPerson = null;
   let dragSourceZone = null;
-  let dragGhost = null;
-  let dragChipEl = null;
-  let dragPointerId = null;
-  let dragActive = false;
-  let touchOffsetX = 0;
-  let touchOffsetY = 0;
+  let html5DragActive = false;
+  const DND_MIME = "application/x-ww-zone";
   let sheetOverlay = null;
   let sheetPerson = null;
   let sheetSourceZone = null;
@@ -153,6 +149,63 @@
     api.scheduleRemotePersist();
   }
 
+  function findChipByName(container, name) {
+    if (!container) return null;
+    const chips = container.querySelectorAll(".person-chip");
+    for (let i = 0; i < chips.length; i++) {
+      if (chips[i].dataset.person === name) return chips[i];
+    }
+    return null;
+  }
+
+  function clearDragOverHighlights() {
+    document
+      .querySelectorAll(".zp-pool-zone.drag-over, .zp-zone-drop.drag-over, .zp-zone-card.drag-over")
+      .forEach((el) => el.classList.remove("drag-over"));
+  }
+
+  function parseDragPayload(raw) {
+    if (!raw) return null;
+    try {
+      const p = JSON.parse(raw);
+      if (p && p.name) return { name: p.name, from: p.from || "pool" };
+    } catch (_) {}
+    return { name: raw, from: dragSourceZone || "pool" };
+  }
+
+  function bindDropTargetsOnce() {
+    if (bindDropTargetsOnce.done) return;
+    bindDropTargetsOnce.done = true;
+    for (const z of ZONE_KEYS) {
+      const el = $(zoneContainerId(z));
+      if (!el) continue;
+      el.addEventListener("dragover", (e) => {
+        if (!canEdit()) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        el.classList.add("drag-over");
+      });
+      el.addEventListener("dragleave", (e) => {
+        const rel = e.relatedTarget;
+        if (rel && el.contains(rel)) return;
+        el.classList.remove("drag-over");
+      });
+      el.addEventListener("drop", (e) => {
+        if (!canEdit()) return;
+        e.preventDefault();
+        el.classList.remove("drag-over");
+        const payload = parseDragPayload(
+          e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData("text/plain")
+        );
+        if (!payload) return;
+        const toZone = el.dataset.zone || z;
+        if (ZONE_KEYS.includes(toZone) && payload.from !== toZone) {
+          movePerson(payload.name, payload.from, toZone);
+        }
+      });
+    }
+  }
+
   function createChip(name, zone) {
     const chip = document.createElement("div");
     chip.className = "person-chip";
@@ -165,152 +218,39 @@
     chip.appendChild(avatar);
     chip.appendChild(document.createTextNode(name));
     if (canEdit()) {
-      chip.draggable = false;
-      chip.addEventListener("pointerdown", onChipPointerDown);
+      chip.draggable = true;
+      chip.addEventListener("dragstart", (e) => {
+        if (!canEdit()) {
+          e.preventDefault();
+          return;
+        }
+        html5DragActive = true;
+        dragPerson = name;
+        dragSourceZone = zone;
+        chip.classList.add("dragging");
+        e.dataTransfer.setData(DND_MIME, JSON.stringify({ name: name, from: zone }));
+        e.dataTransfer.setData("text/plain", name);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      chip.addEventListener("dragend", () => {
+        html5DragActive = false;
+        chip.classList.remove("dragging");
+        dragPerson = null;
+        dragSourceZone = null;
+        clearDragOverHighlights();
+      });
     } else {
+      chip.draggable = false;
       chip.classList.add("person-chip--readonly");
     }
     addTapToChip(chip);
     return chip;
   }
 
-  function onWinPointerMove(e) {
-    if (!dragActive || e.pointerId !== dragPointerId || !dragGhost) return;
-    dragGhost.style.left = e.clientX - touchOffsetX + "px";
-    dragGhost.style.top = e.clientY - touchOffsetY + "px";
-    highlightDropZone(e.clientX, e.clientY);
-  }
-
-  function onWinPointerEnd(e) {
-    if (!dragActive || e.pointerId !== dragPointerId) return;
-    const drop = pickDropZoneAt(e.clientX, e.clientY);
-    endDragSession(drop);
-  }
-
-  function bindDragWindowListeners() {
-    window.addEventListener("pointermove", onWinPointerMove, true);
-    window.addEventListener("pointerup", onWinPointerEnd, true);
-    window.addEventListener("pointercancel", onWinPointerEnd, true);
-    window.addEventListener("blur", onWinDragBlur);
-  }
-
-  function unbindDragWindowListeners() {
-    window.removeEventListener("pointermove", onWinPointerMove, true);
-    window.removeEventListener("pointerup", onWinPointerEnd, true);
-    window.removeEventListener("pointercancel", onWinPointerEnd, true);
-    window.removeEventListener("blur", onWinDragBlur);
-  }
-
-  function onWinDragBlur() {
-    if (!dragActive) return;
-    endDragSession(null);
-  }
-
-  function onChipPointerDown(e) {
-    if (!canEdit() || e.button !== 0) return;
-    if (isMobile()) return;
-    if (dragActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const chip = e.currentTarget;
-    try {
-      chip.setPointerCapture(e.pointerId);
-    } catch (_) {}
-    startDrag(chip, e.clientX, e.clientY, e.pointerId);
-    bindDragWindowListeners();
-  }
-
-  function startDrag(chip, clientX, clientY, pointerId) {
-    dragActive = true;
-    dragChipEl = chip;
-    dragPointerId = pointerId;
-    dragPerson = chip.dataset.person;
-    dragSourceZone = chip.dataset.zone;
-    chip.classList.add("dragging");
-    document.body.classList.add("zp-drag-active");
-    const rect = chip.getBoundingClientRect();
-    touchOffsetX = clientX - rect.left;
-    touchOffsetY = clientY - rect.top;
-    dragGhost = chip.cloneNode(true);
-    dragGhost.classList.add("person-chip--ghost");
-    dragGhost.style.cssText =
-      "position:fixed;z-index:10050;pointer-events:none;opacity:0.9;transform:rotate(2deg) scale(1.04);transition:none;box-shadow:0 8px 28px rgba(0,0,0,0.22);left:" +
-      (clientX - touchOffsetX) +
-      "px;top:" +
-      (clientY - touchOffsetY) +
-      "px;width:" +
-      rect.width +
-      "px;";
-    document.body.appendChild(dragGhost);
-  }
-
-  function endDragSession(dropZoneEl) {
-    if (!dragActive) return;
-    unbindDragWindowListeners();
-    if (dragChipEl && dragPointerId != null) {
-      try {
-        if (dragChipEl.hasPointerCapture(dragPointerId)) {
-          dragChipEl.releasePointerCapture(dragPointerId);
-        }
-      } catch (_) {}
-    }
-    finishDrag(dropZoneEl);
-    dragActive = false;
-    dragChipEl = null;
-    dragPointerId = null;
-    document.body.classList.remove("zp-drag-active");
-  }
-
-  function pickDropZoneAt(cx, cy) {
-    const stack = document.elementsFromPoint(cx, cy);
-    for (let i = 0; i < stack.length; i++) {
-      const el = stack[i];
-      if (!el || el === dragGhost) continue;
-      if (el.classList && el.classList.contains("person-chip")) continue;
-      if (el.closest && el.closest(".person-chip.dragging")) continue;
-      const zone = el.closest("[data-zone]");
-      if (zone && zone.closest("#zonePlacementSection")) return zone;
-    }
-    return null;
-  }
-
-  function highlightDropZone(cx, cy) {
-    document.querySelectorAll(".zp-pool-zone, .zp-zone-card, .zp-zone-drop").forEach((el) => el.classList.remove("drag-over"));
-    const zone = pickDropZoneAt(cx, cy);
-    if (zone) zone.classList.add("drag-over");
-  }
-
-  function getDropZoneAt(cx, cy) {
-    return pickDropZoneAt(cx, cy);
-  }
-
-  function finishDrag(dropZoneEl) {
-    if (dragGhost) {
-      dragGhost.remove();
-      dragGhost = null;
-    }
-    document.querySelectorAll(".person-chip.dragging").forEach((c) => c.classList.remove("dragging"));
-    dragActive = false;
-    document.body.classList.remove("zp-drag-active");
-    document.querySelectorAll(".zp-pool-zone, .zp-zone-card, .zp-zone-drop").forEach((el) => el.classList.remove("drag-over"));
-    if (!dragPerson) return;
-    let targetZone = null;
-    if (dropZoneEl) {
-      targetZone = dropZoneEl.dataset.zone;
-      if (!targetZone) {
-        const zoneCard = dropZoneEl.closest(".zp-zone-card");
-        if (zoneCard) targetZone = zoneCard.dataset.zone;
-      }
-    }
-    if (targetZone && targetZone !== dragSourceZone) movePerson(dragPerson, dragSourceZone, targetZone);
-    dragPerson = null;
-    dragSourceZone = null;
-  }
-
   function movePerson(name, fromZone, toZone) {
     if (!canEdit() || !ZONE_KEYS.includes(toZone)) return;
     const fromContainer = $(zoneContainerId(fromZone));
-    const existing = fromContainer ? fromContainer.querySelector('[data-person="' + CSS.escape(name) + '"]') : null;
+    const existing = findChipByName(fromContainer, name);
     if (existing) existing.remove();
     const toContainer = $(zoneContainerId(toZone));
     if (!toContainer) return;
@@ -368,6 +308,19 @@
     if (prog) prog.style.width = pct + "%";
     const section = $("zonePlacementSection");
     if (section) section.classList.toggle("zone-placement--readonly", !canEdit());
+    const lockHint = $("zonePlacementLockHint");
+    if (lockHint) {
+      const msg = api.getLockHint ? api.getLockHint() : "";
+      if (canEdit()) {
+        lockHint.hidden = true;
+        lockHint.textContent = "";
+      } else {
+        lockHint.hidden = false;
+        lockHint.textContent =
+          msg ||
+          "Чтобы перетаскивать: режим «Редактирование» и вход администратора. Или двойной клик по фамилии (на компьютере).";
+      }
+    }
   }
 
   function applyPlacementState(placement) {
@@ -462,8 +415,8 @@
     }
   }
 
-  function isMobile() {
-    return window.innerWidth <= 768;
+  function useTapAssign() {
+    return window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
   }
 
   function createSheet() {
@@ -563,7 +516,7 @@
     chip.addEventListener(
       "touchstart",
       (e) => {
-        if (!isMobile() || !canEdit()) return;
+        if (!useTapAssign() || !canEdit()) return;
         tapStartTime = Date.now();
         tapStartX = e.touches[0].clientX;
         tapStartY = e.touches[0].clientY;
@@ -575,7 +528,7 @@
     chip.addEventListener(
       "touchmove",
       (e) => {
-        if (!isMobile()) return;
+        if (!useTapAssign()) return;
         const dx = Math.abs(e.touches[0].clientX - tapStartX);
         const dy = Math.abs(e.touches[0].clientY - tapStartY);
         if (dx > 10 || dy > 10) wasDragged = true;
@@ -585,7 +538,7 @@
     chip.addEventListener(
       "touchend",
       (e) => {
-        if (!isMobile() || !canEdit()) return;
+        if (!useTapAssign() || !canEdit()) return;
         e.stopPropagation();
         if (wasDragged) return;
         if (Date.now() - tapStartTime < 400) {
@@ -599,7 +552,7 @@
     );
 
     chip.addEventListener("dblclick", (e) => {
-      if (isMobile() || !canEdit()) return;
+      if (useTapAssign() || !canEdit()) return;
       e.preventDefault();
       e.stopPropagation();
       const name = chip.dataset.person;
@@ -611,6 +564,7 @@
   function bindControlsOnce() {
     if (bound) return;
     bound = true;
+    bindDropTargetsOnce();
     $("zpBtnMorning")?.addEventListener("click", () => setShift("morning"));
     $("zpBtnEvening")?.addEventListener("click", () => setShift("evening"));
     $("zpBtnCopyDeploy")?.addEventListener("click", () => void copyDeployment());
@@ -620,7 +574,7 @@
 
   function refresh() {
     if (!api || !$("zonePlacementSection")) return;
-    if (dragActive) return;
+    if (html5DragActive) return;
     bindControlsOnce();
     const sectionEl = $("zonePlacementSection");
     const hint = $("zonePlacementHint");

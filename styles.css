@@ -2092,10 +2092,25 @@ body[data-mode="edit"] .pill:hover {
 }
 
 .zone-placement-hint {
-  margin: 0 0 14px;
+  margin: 0 0 8px;
   font-size: 0.88rem;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.zone-placement-lock-hint {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #9a3412;
+  background: color-mix(in srgb, #ffedd5 75%, var(--surface));
+  border: 1px solid color-mix(in srgb, #fdba74 55%, var(--border));
+}
+
+.zone-placement--readonly .person-chip {
+  cursor: default;
 }
 
 .pool-label {
@@ -2244,8 +2259,7 @@ body[data-mode="edit"] .pill:hover {
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   font-size: 13px;
   user-select: none;
-  -webkit-user-drag: none;
-  touch-action: none;
+  touch-action: manipulation;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
   white-space: nowrap;
   background: var(--surface);

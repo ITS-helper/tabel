@@ -1632,6 +1632,16 @@ function canEditZonePlacement() {
   return canEditRosterAndObjects();
 }
 
+function getZonePlacementLockHint() {
+  if (isArchiveView()) return "В архиве расстановку менять нельзя.";
+  if (state.mode !== "edit") return "Включите режим «Редактирование» в шапке страницы.";
+  if (!isEditSessionUnlocked()) {
+    return "Нажмите «Редактирование» и войдите (логин и пароль администратора из Supabase).";
+  }
+  if (!isAdminAuth()) return "Расстановку меняет администратор — войдите под учётной записью admin.";
+  return "";
+}
+
 function loadScheduleByMonthFromLocal() {
   try {
     const r = localStorage.getItem(STORAGE_SCHEDULE_BY_MONTH);
@@ -1915,6 +1925,7 @@ function initZonePlacementModule() {
     getSectionTitle: () => sectionTabTitle(state.sectionId),
     getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey, state.sectionId),
     canEdit: canEditZonePlacement,
+    getLockHint: getZonePlacementLockHint,
     persistLocal: persistZonePlacementLocal,
     scheduleRemotePersist: scheduleRemotePersistDebounced,
   });
