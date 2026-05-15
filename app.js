@@ -1625,14 +1625,27 @@ function persistZonePlacementLocal() {
   } catch (_) {}
 }
 
-/** ФИО табеля за месяц на выбранном объекте (вкладка ust / pilot) */
+/** ФИО табеля за месяц на объекте: только те, у кого в месяце есть смена (коды ON_SHIFT_CODES) */
 function getZoneRosterNamesForMonth(monthKey, sectionId) {
   if (sectionId !== "ust" && sectionId !== "pilot") return [];
   const data = getDatasetForMonthKey(monthKey);
   if (!data?.employees?.length) return [];
+  const { year, monthIndex } = parseMonthKey(monthKey);
+  const dim = daysInMonth(year, monthIndex);
   return employeesForSection(data.employees, sectionId)
+    .filter((emp) => !employeeHasNoShiftsInMonth(emp, dim))
     .map((e) => e.name)
     .filter(Boolean);
+}
+
+/** Сегодня в графике отметка ВХ — в расстановке автоматически «Выходной» */
+function getZoneTodayDayOffNames(monthKey, sectionId) {
+  const dataYear = parseMonthKey(monthKey).year;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return getZoneRosterNamesForMonth(monthKey, sectionId).filter(
+    (name) => scheduleCodeOnCalendarDate(name, today, dataYear) === "ВХ"
+  );
 }
 
 function canEditZonePlacement() {
@@ -1931,6 +1944,7 @@ function initZonePlacementModule() {
     getSectionId: () => state.sectionId,
     getSectionTitle: () => sectionTabTitle(state.sectionId),
     getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey, state.sectionId),
+    getTodayDayOffNames: () => getZoneTodayDayOffNames(state.monthKey, state.sectionId),
     canEdit: canEditZonePlacement,
     getLockHint: getZonePlacementLockHint,
     persistLocal: persistZonePlacementLocal,

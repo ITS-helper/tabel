@@ -16,7 +16,7 @@
     { key: "spg1", label: "СПГ 1", dot: "zsb-dot-spg1", abbr: "СПГ1" },
     { key: "spg2", label: "СПГ 2", dot: "zsb-dot-spg2", abbr: "СПГ2" },
     { key: "spg3", label: "СПГ 3", dot: "zsb-dot-spg3", abbr: "СПГ3" },
-    { key: "spg4", label: "Усиление утро", dot: "zsb-dot-spg4", abbr: "УС" },
+    { key: "spg4", label: "Усиление", dot: "zsb-dot-spg4", abbr: "УС" },
     { key: "dayoff", label: "Выходной", dot: "zsb-dot-dayoff", abbr: "ВЫХ" },
     { key: "pool", label: "Нераспределённые", dot: "zsb-dot-pool", abbr: "—" },
   ];
@@ -62,22 +62,37 @@
     return api && typeof api.canEdit === "function" && api.canEdit();
   }
 
-  function mergePlacementWithRoster(saved, roster) {
+  function getTodayDayOffSet() {
+    if (typeof api.getTodayDayOffNames === "function") {
+      return new Set(api.getTodayDayOffNames());
+    }
+    return new Set();
+  }
+
+  function mergePlacementWithRoster(saved, roster, todayDayOffSet) {
     const rosterSet = new Set(roster);
+    const autoDayOff = todayDayOffSet || new Set();
     const seen = new Set();
     const out = emptyPlacement();
+
+    const assign = (name, preferredZone) => {
+      if (!rosterSet.has(name)) return;
+      const zone = autoDayOff.has(name) ? "dayoff" : preferredZone;
+      for (const z of ZONE_KEYS) {
+        const idx = out[z].indexOf(name);
+        if (idx >= 0) out[z].splice(idx, 1);
+      }
+      out[zone].push(name);
+      seen.add(name);
+    };
+
     for (const z of ZONE_KEYS) {
       for (const n of saved[z] || []) {
-        if (!rosterSet.has(n) || seen.has(n)) continue;
-        seen.add(n);
-        out[z].push(n);
+        assign(n, z);
       }
     }
     for (const n of roster) {
-      if (!seen.has(n)) {
-        out.pool.push(n);
-        seen.add(n);
-      }
+      if (!seen.has(n)) assign(n, autoDayOff.has(n) ? "dayoff" : "pool");
     }
     return out;
   }
@@ -400,7 +415,7 @@
     bucket.shift = shift;
     const next = bucket[shift] || emptyPlacement();
     const roster = api.getRosterNames();
-    applyPlacementState(mergePlacementWithRoster(next, roster));
+    applyPlacementState(mergePlacementWithRoster(next, roster, getTodayDayOffSet()));
     setCurrentPlacement(readPlacementFromDom());
     $("zpBtnMorning")?.classList.toggle("active", shift === "morning");
     $("zpBtnEvening")?.classList.toggle("active", shift === "evening");
@@ -410,7 +425,13 @@
   function resetDeployment() {
     if (!canEdit()) return;
     const roster = api.getRosterNames();
-    applyPlacementState({ pool: [...roster], spg1: [], spg2: [], spg3: [], spg4: [], dayoff: [] });
+    const dayOff = getTodayDayOffSet();
+    const reset = emptyPlacement();
+    for (const n of roster) {
+      if (dayOff.has(n)) reset.dayoff.push(n);
+      else reset.pool.push(n);
+    }
+    applyPlacementState(reset);
     setCurrentPlacement(readPlacementFromDom());
   }
 
@@ -433,7 +454,7 @@
       { key: "spg1", label: "СПГ 1" },
       { key: "spg2", label: "СПГ 2" },
       { key: "spg3", label: "СПГ 3" },
-      { key: "spg4", label: "Усиление утро" },
+      { key: "spg4", label: "Усиление" },
       { key: "dayoff", label: "Выходной" },
     ];
     let hasAny = false;
@@ -643,17 +664,18 @@
       hint.textContent = canEdit()
         ? "Состав: «" +
           title +
-          "». Клик по фамилии, затем по зоне (или перетащите). Двойной клик — меню зон."
-        : "Состав: «" + title + "», выбранный месяц. Утро и вечер — отдельно.";
+          "» (есть смены в месяце). Сегодня ВХ → «Выходной». Клик: сотрудник → зона."
+        : "Состав: «" + title + "» — только с сменами в месяце. Сегодня ВХ в «Выходной».";
     }
     const roster = api.getRosterNames();
+    const dayOff = getTodayDayOffSet();
     rosterCount = roster.length;
     const bucket = getMonthBucket(true);
     if (!bucket) return;
     currentShift = bucket.shift === "evening" ? "evening" : "morning";
     $("zpBtnMorning")?.classList.toggle("active", currentShift === "morning");
     $("zpBtnEvening")?.classList.toggle("active", currentShift === "evening");
-    const placement = mergePlacementWithRoster(bucket[currentShift] || emptyPlacement(), roster);
+    const placement = mergePlacementWithRoster(bucket[currentShift] || emptyPlacement(), roster, dayOff);
     bucket[currentShift] = placement;
     applyPlacementState(placement);
     const empty = roster.length === 0;
