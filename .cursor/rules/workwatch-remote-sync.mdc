@@ -21,6 +21,7 @@ alwaysApply: true
 - `employeeFieldOverridesByMonth` — ТН / должность по месяцу и ФИО
 - `addedEmployeesByMonth` — вручную добавленные сотрудники
 - `legendIncludeNoShifts` — флаг «Показать всех»
+- `zonePlacementByMonth` — расстановка по зонам: месяц → утро/вечер → pool, spg1–spg4, dayoff (ФИО из табеля)
 
 После успешного pull **`applySharedPayload`** обновляет `state` и **дублирует** часть данных в **localStorage** (см. вызовы `persist*` внутри).
 

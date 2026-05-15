@@ -101,6 +101,105 @@
         </div>
       </section>
 
+      <section
+        id="zonePlacementSection"
+        class="ww-guide-group zone-placement-group"
+        aria-label="Расстановка по зонам"
+      >
+        <button
+          type="button"
+          class="ww-group-header ww-group-header--full zone-placement-toggle"
+          id="zonePlacementPanelToggle"
+          aria-expanded="false"
+          aria-controls="zonePlacementPanelBody"
+        >
+          <span class="zone-placement-toggle__row">
+            <span class="ww-group-title">Расстановка по зонам</span>
+            <span class="ww-group-chevron" aria-hidden="true">▼</span>
+          </span>
+          <span class="zone-placement-progress-wrap" aria-hidden="true">
+            <span class="zone-placement-progress-bar" id="zpDeploymentProgress"></span>
+          </span>
+        </button>
+        <div class="ww-guide-body" id="zonePlacementPanelBody">
+          <div class="zone-placement-inner">
+            <p class="zone-placement-hint">
+              Состав из табеля за выбранный месяц (все объекты). Утро и вечер — отдельные расстановки; перетаскивание доступно администратору в режиме редактирования.
+            </p>
+            <div class="pool-label">
+              Нераспределённые инженеры
+              <span class="pool-count" id="zpPoolCount">0</span>
+            </div>
+            <div class="zp-pool-zone" id="zpPool" data-zone="pool" data-hint="Все распределены ✓"></div>
+
+            <div class="zones-grid">
+              <div class="zp-zone-card zone-spg1" data-zone="spg1">
+                <div class="zone-header">
+                  <span class="zone-title">СПГ 1</span>
+                  <span class="zone-badge" id="zpBadge-spg1">0</span>
+                </div>
+                <div class="zp-zone-drop" id="zp-zone-spg1" data-zone="spg1">
+                  <span class="zone-empty">Перетащите сюда</span>
+                </div>
+              </div>
+              <div class="zp-zone-card zone-spg2" data-zone="spg2">
+                <div class="zone-header">
+                  <span class="zone-title">СПГ 2</span>
+                  <span class="zone-badge" id="zpBadge-spg2">0</span>
+                </div>
+                <div class="zp-zone-drop" id="zp-zone-spg2" data-zone="spg2">
+                  <span class="zone-empty">Перетащите сюда</span>
+                </div>
+              </div>
+              <div class="zp-zone-card zone-spg3" data-zone="spg3">
+                <div class="zone-header">
+                  <span class="zone-title">СПГ 3</span>
+                  <span class="zone-badge" id="zpBadge-spg3">0</span>
+                </div>
+                <div class="zp-zone-drop" id="zp-zone-spg3" data-zone="spg3">
+                  <span class="zone-empty">Перетащите сюда</span>
+                </div>
+              </div>
+              <div class="zp-zone-card zone-spg4" data-zone="spg4">
+                <div class="zone-header">
+                  <span class="zone-title">Усиление утро</span>
+                  <span class="zone-badge" id="zpBadge-spg4">0</span>
+                </div>
+                <div class="zp-zone-drop" id="zp-zone-spg4" data-zone="spg4">
+                  <span class="zone-empty">Перетащите сюда</span>
+                </div>
+              </div>
+              <div class="zp-zone-card zone-dayoff" data-zone="dayoff">
+                <div class="zone-header">
+                  <span class="zone-title">Выходной</span>
+                  <span class="zone-badge" id="zpBadge-dayoff">0</span>
+                </div>
+                <div class="zp-zone-drop" id="zp-zone-dayoff" data-zone="dayoff">
+                  <span class="zone-empty">Перетащите сюда</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="deployment-footer">
+              <div class="shift-toggle" id="zpShiftToggle">
+                <button type="button" class="shift-btn morning active" id="zpBtnMorning">
+                  Утро
+                </button>
+                <button type="button" class="shift-btn evening" id="zpBtnEvening">
+                  Вечер
+                </button>
+              </div>
+              <button type="button" class="btn-copy-deploy" id="zpBtnCopyDeploy">
+                Копировать расстановку
+              </button>
+              <button type="button" class="btn-reset-deployment" id="zpBtnResetDeploy">
+                Сбросить
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="legendSection" class="ww-guide-group open" aria-label="Объекты">
         <button
           type="button"
@@ -307,6 +406,7 @@
     </dialog>
   </div>
   <script src="scripts/parsed-employees-2026-h1.js"></script>
+  <script src="zone-placement.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

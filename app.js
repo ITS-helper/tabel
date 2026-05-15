@@ -94,6 +94,7 @@ const TABEL_STATE_ROW_ID = "global";
 const STORAGE_SCHEDULE_BY_MONTH = "ww-schedule-by-month";
 const STORAGE_ROSTER_EXTRAS = "ww-roster-extras";
 const STORAGE_LEGEND_INCLUDE_NO_SHIFTS = "ww-legend-include-no-shifts";
+const STORAGE_ZONE_PLACEMENT = "ww-zone-placement";
 const SUPABASE_PUSH_DEBOUNCE_MS = 900;
 
 let supabasePushTimer = null;
@@ -1587,16 +1588,49 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl) {
 function loadUiBlocks() {
   try {
     const r = localStorage.getItem(STORAGE_UI_BLOCKS);
-    if (!r) return { legend: true, vacations: true, summary: true };
+    if (!r) return { legend: true, vacations: true, summary: true, zones: false };
     const o = JSON.parse(r);
     return {
       legend: o.legend !== false,
       vacations: o.vacations !== false,
       summary: o.summary !== false,
+      zones: o.zones === true,
     };
   } catch (_) {
-    return { legend: true, vacations: true, summary: true };
+    return { legend: true, vacations: true, summary: true, zones: false };
   }
+}
+
+function loadZonePlacementFromLocal() {
+  try {
+    const r = localStorage.getItem(STORAGE_ZONE_PLACEMENT);
+    if (!r) return {};
+    const o = JSON.parse(r);
+    return typeof o === "object" && o !== null && !Array.isArray(o) ? o : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function persistZonePlacementLocal() {
+  try {
+    localStorage.setItem(STORAGE_ZONE_PLACEMENT, JSON.stringify(state.zonePlacementByMonth));
+  } catch (_) {}
+}
+
+/** Все ФИО табеля за месяц (оба объекта), без дублей */
+function getZoneRosterNamesForMonth(monthKey) {
+  const data = getDatasetForMonthKey(monthKey);
+  if (!data?.employees?.length) return [];
+  const names = new Set();
+  for (const e of data.employees) {
+    if (e?.name) names.add(e.name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, "ru"));
+}
+
+function canEditZonePlacement() {
+  return canEditRosterAndObjects();
 }
 
 function loadScheduleByMonthFromLocal() {
@@ -1658,6 +1692,8 @@ let state = {
   employeeFieldOverridesByMonth: _rosterInit.employeeFieldOverridesByMonth,
   /** Месяц → добавленные вручную записи (в конец списка) */
   addedEmployeesByMonth: _rosterInit.addedEmployeesByMonth,
+  /** Месяц → расстановка по зонам (утро/вечер) */
+  zonePlacementByMonth: loadZonePlacementFromLocal(),
 };
 
 function scheduleOverridesBucket() {
@@ -1701,6 +1737,7 @@ function buildSharedPayload() {
     employeeFieldOverridesByMonth: JSON.parse(JSON.stringify(state.employeeFieldOverridesByMonth)),
     addedEmployeesByMonth: JSON.parse(JSON.stringify(state.addedEmployeesByMonth)),
     legendIncludeNoShifts: !!state.legendIncludeNoShifts,
+    zonePlacementByMonth: JSON.parse(JSON.stringify(state.zonePlacementByMonth)),
   };
 }
 
@@ -1744,6 +1781,13 @@ function applySharedPayload(payload) {
   if (typeof payload.legendIncludeNoShifts === "boolean") {
     state.legendIncludeNoShifts = payload.legendIncludeNoShifts;
     persistLegendIncludeNoShifts();
+  }
+  if (payload.zonePlacementByMonth != null && typeof payload.zonePlacementByMonth === "object") {
+    state.zonePlacementByMonth = JSON.parse(JSON.stringify(payload.zonePlacementByMonth));
+    persistZonePlacementLocal();
+    if (typeof window.WorkWatchZonePlacement !== "undefined") {
+      window.WorkWatchZonePlacement.refresh();
+    }
   }
 }
 
@@ -1813,21 +1857,26 @@ function syncCollapsiblePanels() {
   const legSec = document.getElementById("legendSection");
   const vacSec = document.getElementById("vacationCardsSection");
   const sumSec = document.getElementById("objectSummarySection");
+  const zoneSec = document.getElementById("zonePlacementSection");
   const legBtn = document.getElementById("legendPanelToggle");
   const vacBtn = document.getElementById("vacationPanelToggle");
   const sumBtn = document.getElementById("objectSummaryPanelToggle");
+  const zoneBtn = document.getElementById("zonePlacementPanelToggle");
   if (legSec) legSec.classList.toggle("open", state.uiBlocks.legend);
   if (vacSec) vacSec.classList.toggle("open", state.uiBlocks.vacations);
   if (sumSec) sumSec.classList.toggle("open", state.uiBlocks.summary);
+  if (zoneSec) zoneSec.classList.toggle("open", state.uiBlocks.zones);
   if (legBtn) legBtn.setAttribute("aria-expanded", state.uiBlocks.legend ? "true" : "false");
   if (vacBtn) vacBtn.setAttribute("aria-expanded", state.uiBlocks.vacations ? "true" : "false");
   if (sumBtn) sumBtn.setAttribute("aria-expanded", state.uiBlocks.summary ? "true" : "false");
+  if (zoneBtn) zoneBtn.setAttribute("aria-expanded", state.uiBlocks.zones ? "true" : "false");
 }
 
 function bindCollapsiblePanels() {
   const legBtn = document.getElementById("legendPanelToggle");
   const vacBtn = document.getElementById("vacationPanelToggle");
   const sumBtn = document.getElementById("objectSummaryPanelToggle");
+  const zoneBtn = document.getElementById("zonePlacementPanelToggle");
   if (legBtn) {
     legBtn.addEventListener("click", () => {
       state.uiBlocks.legend = !state.uiBlocks.legend;
@@ -1849,6 +1898,25 @@ function bindCollapsiblePanels() {
       syncCollapsiblePanels();
     });
   }
+  if (zoneBtn) {
+    zoneBtn.addEventListener("click", () => {
+      state.uiBlocks.zones = !state.uiBlocks.zones;
+      persistUiBlocks();
+      syncCollapsiblePanels();
+    });
+  }
+}
+
+function initZonePlacementModule() {
+  if (typeof window.WorkWatchZonePlacement === "undefined") return;
+  window.WorkWatchZonePlacement.init({
+    state,
+    getMonthKey: () => state.monthKey,
+    getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey),
+    canEdit: canEditZonePlacement,
+    persistLocal: persistZonePlacementLocal,
+    scheduleRemotePersist: scheduleRemotePersistDebounced,
+  });
 }
 
 function getDatasetForMonthKey(monthKey) {
@@ -2094,6 +2162,7 @@ function init() {
   bindTeamDialog();
   bindCollapsiblePanels();
   syncCollapsiblePanels();
+  initZonePlacementModule();
   render();
   void initRemoteSync();
 }
@@ -2691,6 +2760,9 @@ function render() {
   renderHiddenColumnsBar();
   syncLegendChrome();
   queueScheduleScrollToTodayColumn();
+  if (typeof window.WorkWatchZonePlacement !== "undefined") {
+    window.WorkWatchZonePlacement.refresh();
+  }
 }
 
 function allArchiveExportMonthKeys() {

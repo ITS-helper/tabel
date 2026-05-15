@@ -5,6 +5,8 @@ TimeFlow*.html
 # Дубликат выгрузки (в репозитории хранится tabel-sheet.csv)
 google_sheet_raw.csv
 
+_workarounds_src/
+
 node_modules/
 scripts/auth-credentials.txt
 scripts/auth-users-seed.sql
