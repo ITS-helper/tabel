@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const ZONE_KEYS = ["pool", "spg1", "spg2", "spg3", "spg4", "dayoff"];
+  const ZONE_KEYS = ["pool", "spg1", "spg2", "spg21", "spg3", "spg31", "spg4", "dayoff"];
   const AVATAR_COLORS = [
     "#1565C0", "#00897B", "#E53935", "#5E35B1", "#0277BD",
     "#00695C", "#BF360C", "#6A1B9A", "#01579B", "#004D40",
@@ -15,7 +15,9 @@
   const SHEET_ZONES = [
     { key: "spg1", label: "СПГ 1", dot: "zsb-dot-spg1", abbr: "СПГ1" },
     { key: "spg2", label: "СПГ 2", dot: "zsb-dot-spg2", abbr: "СПГ2" },
+    { key: "spg21", label: "СПГ 2.1", dot: "zsb-dot-spg21", abbr: "2.1" },
     { key: "spg3", label: "СПГ 3", dot: "zsb-dot-spg3", abbr: "СПГ3" },
+    { key: "spg31", label: "СПГ 3.1", dot: "zsb-dot-spg31", abbr: "3.1" },
     { key: "spg4", label: "Усиление", dot: "zsb-dot-spg4", abbr: "УС" },
     { key: "dayoff", label: "Выходной", dot: "zsb-dot-dayoff", abbr: "ВЫХ" },
     { key: "pool", label: "Нераспределённые", dot: "zsb-dot-pool", abbr: "—" },
@@ -35,7 +37,7 @@
   let bound = false;
 
   function emptyPlacement() {
-    return { pool: [], spg1: [], spg2: [], spg3: [], spg4: [], dayoff: [] };
+    return { pool: [], spg1: [], spg2: [], spg21: [], spg3: [], spg31: [], spg4: [], dayoff: [] };
   }
 
   function getInitials(name) {
@@ -127,7 +129,9 @@
     delete month.pool;
     delete month.spg1;
     delete month.spg2;
+    delete month.spg21;
     delete month.spg3;
+    delete month.spg31;
     delete month.spg4;
     delete month.dayoff;
   }
@@ -453,7 +457,9 @@
     const zones = [
       { key: "spg1", label: "СПГ 1" },
       { key: "spg2", label: "СПГ 2" },
+      { key: "spg21", label: "СПГ 2.1" },
       { key: "spg3", label: "СПГ 3" },
+      { key: "spg31", label: "СПГ 3.1" },
       { key: "spg4", label: "Усиление" },
       { key: "dayoff", label: "Выходной" },
     ];

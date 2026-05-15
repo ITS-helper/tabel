@@ -2154,7 +2154,7 @@ body[data-mode="edit"] .pill:hover {
 
 .zones-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   gap: 12px;
 }
 
@@ -2189,8 +2189,14 @@ body[data-mode="edit"] .pill:hover {
 .zone-spg2 .zone-header {
   background: linear-gradient(135deg, #00897b 0%, #009688 100%);
 }
+.zone-spg21 .zone-header {
+  background: linear-gradient(135deg, #00695c 0%, #00897b 100%);
+}
 .zone-spg3 .zone-header {
   background: linear-gradient(135deg, #e53935 0%, #ef5350 100%);
+}
+.zone-spg31 .zone-header {
+  background: linear-gradient(135deg, #c62828 0%, #e53935 100%);
 }
 .zone-spg4 .zone-header {
   background: linear-gradient(135deg, #5e35b1 0%, #7e57c2 100%);
@@ -2339,8 +2345,14 @@ body.zp-drag-active .person-chip:not(.dragging) {
 .zone-spg2 .zp-zone-drop .person-chip {
   border-left: 3px solid #009688;
 }
+.zone-spg21 .zp-zone-drop .person-chip {
+  border-left: 3px solid #00796b;
+}
 .zone-spg3 .zp-zone-drop .person-chip {
   border-left: 3px solid #ef5350;
+}
+.zone-spg31 .zp-zone-drop .person-chip {
+  border-left: 3px solid #d32f2f;
 }
 .zone-spg4 .zp-zone-drop .person-chip {
   border-left: 3px solid #7e57c2;
@@ -2569,8 +2581,14 @@ body.zp-drag-active .person-chip:not(.dragging) {
 .zsb-dot-spg2 {
   background: linear-gradient(135deg, #00897b, #009688);
 }
+.zsb-dot-spg21 {
+  background: linear-gradient(135deg, #00695c, #00897b);
+}
 .zsb-dot-spg3 {
   background: linear-gradient(135deg, #e53935, #ef5350);
+}
+.zsb-dot-spg31 {
+  background: linear-gradient(135deg, #c62828, #e53935);
 }
 .zsb-dot-spg4 {
   background: linear-gradient(135deg, #5e35b1, #7e57c2);
