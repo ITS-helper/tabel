@@ -2244,6 +2244,8 @@ body[data-mode="edit"] .pill:hover {
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   font-size: 13px;
   user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
   white-space: nowrap;
   background: var(--surface);
@@ -2257,10 +2259,19 @@ body[data-mode="edit"] .pill:hover {
 }
 
 .person-chip.dragging {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: grabbing;
   transform: scale(0.97);
   pointer-events: none;
+}
+
+body.zp-drag-active {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.zp-drag-active .person-chip:not(.dragging) {
+  cursor: grabbing;
 }
 
 .person-chip--readonly {

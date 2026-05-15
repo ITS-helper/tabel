@@ -27,6 +27,9 @@
   let dragPerson = null;
   let dragSourceZone = null;
   let dragGhost = null;
+  let dragChipEl = null;
+  let dragPointerId = null;
+  let dragActive = false;
   let touchOffsetX = 0;
   let touchOffsetY = 0;
   let sheetOverlay = null;
@@ -162,8 +165,8 @@
     chip.appendChild(avatar);
     chip.appendChild(document.createTextNode(name));
     if (canEdit()) {
-      chip.addEventListener("mousedown", onMouseDown);
-      chip.addEventListener("touchstart", onTouchStart, { passive: false });
+      chip.draggable = false;
+      chip.addEventListener("pointerdown", onChipPointerDown);
     } else {
       chip.classList.add("person-chip--readonly");
     }
@@ -171,29 +174,67 @@
     return chip;
   }
 
-  function onMouseDown(e) {
+  function onWinPointerMove(e) {
+    if (!dragActive || e.pointerId !== dragPointerId || !dragGhost) return;
+    dragGhost.style.left = e.clientX - touchOffsetX + "px";
+    dragGhost.style.top = e.clientY - touchOffsetY + "px";
+    highlightDropZone(e.clientX, e.clientY);
+  }
+
+  function onWinPointerEnd(e) {
+    if (!dragActive || e.pointerId !== dragPointerId) return;
+    const drop = pickDropZoneAt(e.clientX, e.clientY);
+    endDragSession(drop);
+  }
+
+  function bindDragWindowListeners() {
+    window.addEventListener("pointermove", onWinPointerMove, true);
+    window.addEventListener("pointerup", onWinPointerEnd, true);
+    window.addEventListener("pointercancel", onWinPointerEnd, true);
+    window.addEventListener("blur", onWinDragBlur);
+  }
+
+  function unbindDragWindowListeners() {
+    window.removeEventListener("pointermove", onWinPointerMove, true);
+    window.removeEventListener("pointerup", onWinPointerEnd, true);
+    window.removeEventListener("pointercancel", onWinPointerEnd, true);
+    window.removeEventListener("blur", onWinDragBlur);
+  }
+
+  function onWinDragBlur() {
+    if (!dragActive) return;
+    endDragSession(null);
+  }
+
+  function onChipPointerDown(e) {
     if (!canEdit() || e.button !== 0) return;
+    if (isMobile()) return;
+    if (dragActive) return;
     e.preventDefault();
-    startDrag(e.currentTarget, e.clientX, e.clientY);
+    e.stopPropagation();
+    const chip = e.currentTarget;
+    try {
+      chip.setPointerCapture(e.pointerId);
+    } catch (_) {}
+    startDrag(chip, e.clientX, e.clientY, e.pointerId);
+    bindDragWindowListeners();
   }
 
-  function onTouchStart(e) {
-    if (!canEdit() || e.touches.length !== 1) return;
-    if (window.innerWidth <= 768) return;
-    e.preventDefault();
-    startDrag(e.currentTarget, e.touches[0].clientX, e.touches[0].clientY);
-  }
-
-  function startDrag(chip, clientX, clientY) {
+  function startDrag(chip, clientX, clientY, pointerId) {
+    dragActive = true;
+    dragChipEl = chip;
+    dragPointerId = pointerId;
     dragPerson = chip.dataset.person;
     dragSourceZone = chip.dataset.zone;
     chip.classList.add("dragging");
+    document.body.classList.add("zp-drag-active");
     const rect = chip.getBoundingClientRect();
     touchOffsetX = clientX - rect.left;
     touchOffsetY = clientY - rect.top;
     dragGhost = chip.cloneNode(true);
+    dragGhost.classList.add("person-chip--ghost");
     dragGhost.style.cssText =
-      "position:fixed;z-index:9999;pointer-events:none;opacity:0.85;transform:rotate(2deg) scale(1.06);transition:none;box-shadow:0 8px 28px rgba(0,0,0,0.2);left:" +
+      "position:fixed;z-index:10050;pointer-events:none;opacity:0.9;transform:rotate(2deg) scale(1.04);transition:none;box-shadow:0 8px 28px rgba(0,0,0,0.22);left:" +
       (clientX - touchOffsetX) +
       "px;top:" +
       (clientY - touchOffsetY) +
@@ -203,31 +244,21 @@
     document.body.appendChild(dragGhost);
   }
 
-  function onDocMouseMove(e) {
-    if (!dragGhost) return;
-    dragGhost.style.left = e.clientX - touchOffsetX + "px";
-    dragGhost.style.top = e.clientY - touchOffsetY + "px";
-    highlightDropZone(e.clientX, e.clientY);
-  }
-
-  function onDocMouseUp(e) {
-    if (!dragGhost) return;
-    finishDrag(getDropZoneAt(e.clientX, e.clientY));
-  }
-
-  function onDocTouchMove(e) {
-    if (!dragGhost) return;
-    e.preventDefault();
-    const t = e.touches[0];
-    dragGhost.style.left = t.clientX - touchOffsetX + "px";
-    dragGhost.style.top = t.clientY - touchOffsetY + "px";
-    highlightDropZone(t.clientX, t.clientY);
-  }
-
-  function onDocTouchEnd(e) {
-    if (!dragGhost) return;
-    const t = e.changedTouches[0];
-    finishDrag(getDropZoneAt(t.clientX, t.clientY));
+  function endDragSession(dropZoneEl) {
+    if (!dragActive) return;
+    unbindDragWindowListeners();
+    if (dragChipEl && dragPointerId != null) {
+      try {
+        if (dragChipEl.hasPointerCapture(dragPointerId)) {
+          dragChipEl.releasePointerCapture(dragPointerId);
+        }
+      } catch (_) {}
+    }
+    finishDrag(dropZoneEl);
+    dragActive = false;
+    dragChipEl = null;
+    dragPointerId = null;
+    document.body.classList.remove("zp-drag-active");
   }
 
   function pickDropZoneAt(cx, cy) {
@@ -259,6 +290,8 @@
       dragGhost = null;
     }
     document.querySelectorAll(".person-chip.dragging").forEach((c) => c.classList.remove("dragging"));
+    dragActive = false;
+    document.body.classList.remove("zp-drag-active");
     document.querySelectorAll(".zp-pool-zone, .zp-zone-card, .zp-zone-drop").forEach((el) => el.classList.remove("drag-over"));
     if (!dragPerson) return;
     let targetZone = null;
@@ -578,10 +611,6 @@
   function bindControlsOnce() {
     if (bound) return;
     bound = true;
-    document.addEventListener("mousemove", onDocMouseMove);
-    document.addEventListener("mouseup", onDocMouseUp);
-    document.addEventListener("touchmove", onDocTouchMove, { passive: false });
-    document.addEventListener("touchend", onDocTouchEnd);
     $("zpBtnMorning")?.addEventListener("click", () => setShift("morning"));
     $("zpBtnEvening")?.addEventListener("click", () => setShift("evening"));
     $("zpBtnCopyDeploy")?.addEventListener("click", () => void copyDeployment());
@@ -591,6 +620,7 @@
 
   function refresh() {
     if (!api || !$("zonePlacementSection")) return;
+    if (dragActive) return;
     bindControlsOnce();
     const sectionEl = $("zonePlacementSection");
     const hint = $("zonePlacementHint");
