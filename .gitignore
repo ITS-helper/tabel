@@ -6,6 +6,8 @@ TimeFlow*.html
 google_sheet_raw.csv
 
 node_modules/
+scripts/auth-credentials.txt
+scripts/auth-users-seed.sql
 
 # Редактор / ОС
 .cursor/*

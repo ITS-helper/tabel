@@ -1828,6 +1828,40 @@ body[data-mode="edit"] .pill:hover {
   flex-wrap: wrap;
 }
 
+.auth-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #e8f5e9, #c8e6c9);
+  color: #1b5e20;
+  border: 1px solid color-mix(in srgb, #43a047 35%, transparent);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .auth-badge {
+  background: linear-gradient(145deg, color-mix(in srgb, #1b5e20 40%, var(--surface)), var(--surface));
+  color: #a5d6a7;
+  border-color: color-mix(in srgb, #66bb6a 40%, var(--border));
+}
+
+.auth-logout-btn {
+  font-size: 0.85rem;
+}
+
+.pill--editable {
+  cursor: pointer;
+}
+
+.pill--readonly {
+  cursor: default;
+}
+
 /* Диалог «Объекты и состав» */
 .team-dialog {
   padding: 0;

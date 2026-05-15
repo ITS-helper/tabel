@@ -30,6 +30,7 @@ alwaysApply: true
 - **Сворачивание панелей** (`uiBlocks` в `ww-ui-blocks`)
 - **Видимость закреплённых колонок** (`ww-sticky-cols`)
 - **Тема** — по умолчанию светлая при каждой загрузке; тёмная только после нажатия переключателя (не в `localStorage`, не в Supabase)
+- **Вход** — `workwatch_auth_users` / RPC `workwatch_login` (см. `supabase-auth.sql`, `README.md`); сессия в `sessionStorage`, не в Supabase payload
 
 При новых фичах: если данные должны жить между устройствами — добавить в **`buildSharedPayload`** / **`applySharedPayload`** и описать в **`supabase-schema.sql`** при изменении схемы.
 

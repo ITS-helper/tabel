@@ -44,6 +44,8 @@
           <button type="button" class="btn btn--ghost" id="themeToggle" title="Тёмная тема" aria-pressed="false">
             <span class="icon-moon" aria-hidden="true"></span>
           </button>
+          <span id="authUserBadge" class="auth-badge" hidden></span>
+          <button type="button" class="btn btn--ghost auth-logout-btn" id="authLogoutBtn" hidden>Выйти</button>
           <div class="segmented" role="group" aria-label="Режим просмотра">
             <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
             <button type="button" class="segmented__btn" data-mode="edit">Редактирование</button>
@@ -284,12 +286,18 @@
 
     <dialog id="editPwdDialog" class="edit-pwd-dialog">
       <div class="edit-pwd-dialog__panel">
-        <h2 class="edit-pwd-dialog__title">Режим редактирования</h2>
-        <p class="edit-pwd-dialog__hint">Введите пароль, чтобы менять отметки в табеле.</p>
+        <h2 class="edit-pwd-dialog__title">Вход для редактирования</h2>
+        <p class="edit-pwd-dialog__hint">
+          Просмотр доступен всем. Сотрудник редактирует только свою строку в графике; администратор — все строки и настройки объектов.
+        </p>
         <p class="edit-pwd-dialog__err" id="editPwdErr" hidden></p>
         <label class="edit-pwd-dialog__label">
+          <span class="edit-pwd-dialog__label-text">Логин</span>
+          <input type="text" id="editLoginInput" class="edit-pwd-dialog__input" autocomplete="username" />
+        </label>
+        <label class="edit-pwd-dialog__label">
           <span class="edit-pwd-dialog__label-text">Пароль</span>
-          <input type="password" id="editPwdInput" class="edit-pwd-dialog__input" autocomplete="off" />
+          <input type="password" id="editPwdInput" class="edit-pwd-dialog__input" autocomplete="current-password" />
         </label>
         <footer class="edit-pwd-dialog__footer">
           <button type="button" class="btn btn--outline" id="editPwdCancel">Отмена</button>

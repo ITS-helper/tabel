@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "ingest-xlsx": "node scripts/ingest-xlsx.mjs"
+    "ingest-xlsx": "node scripts/ingest-xlsx.mjs",
+    "seed-auth": "node scripts/seed-auth-users.mjs > scripts/auth-users-seed.sql"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "xlsx": "^0.18.5"
   }
 }

@@ -17,3 +17,5 @@ create policy "tabel_state_anon_rw"
   to anon, authenticated
   using (true)
   with check (true);
+
+-- Аутентификация (логин сотрудников и админа): см. supabase-auth.sql

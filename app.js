@@ -82,9 +82,9 @@ const DEFAULT_PILOT_NAMES = new Set([
 
 const STORAGE_SECTION_ASSIGN = "ww-section-overrides";
 const STORAGE_SECTION_TITLES = "ww-section-titles";
-/** Сессия браузера: после ввода пароля режим редактирования доступен до закрытия вкладки */
-const STORAGE_EDIT_SESSION = "ww-edit-session";
-const EDIT_PASSWORD = "2323";
+/** Сессия входа (sessionStorage): токен и роль после workwatch_login в Supabase */
+const STORAGE_AUTH_SESSION = "ww-auth-session";
+const AUTH_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 /** Supabase: общая синхронизация (см. supabase-schema.sql в репозитории) */
 const SUPABASE_URL = "https://owcuvcshwtivqueftiuk.supabase.co";
@@ -264,6 +264,7 @@ function sectionTabTitle(id) {
 }
 
 function setEmployeeSection(name, sectionId) {
+  if (!isAdminAuth()) return;
   if (sectionId !== "pilot" && sectionId !== "ust") return;
   if (defaultSectionForName(name) === sectionId) delete state.sectionAssignOverrides[name];
   else state.sectionAssignOverrides[name] = sectionId;
@@ -273,6 +274,7 @@ function setEmployeeSection(name, sectionId) {
 }
 
 function resetSectionAssignOverrides() {
+  if (!isAdminAuth()) return;
   state.sectionAssignOverrides = {};
   persistSectionAssignOverrides();
   scheduleRemotePersistDebounced();
@@ -280,6 +282,7 @@ function resetSectionAssignOverrides() {
 }
 
 function resetSectionTitleOverrides() {
+  if (!isAdminAuth()) return;
   state.sectionTitleOverrides = {};
   persistSectionTitleOverrides();
   scheduleRemotePersistDebounced();
@@ -314,6 +317,7 @@ function fillTeamDialogTitleInputs() {
 }
 
 function applyTitleInput(kind, rawValue) {
+  if (!isAdminAuth()) return;
   const v = String(rawValue).trim();
   const defRow = SECTIONS.find((s) => s.id === kind);
   const defTitle = defRow ? defRow.title : "";
@@ -356,7 +360,7 @@ function updateAddedEmployeeFieldsFromDialog(empName, tn, position) {
 
 function handleAddEmployeeClick() {
   if (isArchiveView()) return;
-  if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
+  if (!canEditRosterAndObjects()) return;
   const tnEl = document.getElementById("teamAddTn");
   const nameEl = document.getElementById("teamAddName");
   const posEl = document.getElementById("teamAddPos");
@@ -404,7 +408,7 @@ function populateTeamAssignTable() {
   const monthKey = state.monthKey;
   const addedList = state.addedEmployeesByMonth[monthKey] || [];
   const addedNames = new Set(addedList.map((a) => a.name));
-  const canEditPeople = state.mode === "edit" && isEditSessionUnlocked() && !isArchiveView();
+  const canEditPeople = canEditRosterAndObjects();
   if (addPanel) addPanel.hidden = !canEditPeople;
   const secAdd = document.getElementById("teamAddSection");
   if (secAdd) {
@@ -490,10 +494,21 @@ function openTeamDialog() {
   }
   const ustIn = document.getElementById("titleUstInput");
   const pilIn = document.getElementById("titlePilotInput");
-  if (ustIn) ustIn.removeAttribute("readonly");
-  if (pilIn) pilIn.removeAttribute("readonly");
+  const admin = isAdminAuth();
+  if (ustIn) {
+    if (admin) ustIn.removeAttribute("readonly");
+    else ustIn.setAttribute("readonly", "");
+  }
+  if (pilIn) {
+    if (admin) pilIn.removeAttribute("readonly");
+    else pilIn.setAttribute("readonly", "");
+  }
   fillTeamDialogTitleInputs();
   populateTeamAssignTable();
+  const resetAssign = document.getElementById("teamAssignReset");
+  const resetTitles = document.getElementById("teamTitlesReset");
+  if (resetAssign) resetAssign.hidden = !admin;
+  if (resetTitles) resetTitles.hidden = !admin;
   const dlg = document.getElementById("teamDialog");
   if (dlg) dlg.showModal();
 }
@@ -509,10 +524,12 @@ function bindTeamDialog() {
   if (btn) btn.addEventListener("click", () => openTeamDialog());
   if (done)
     done.addEventListener("click", () => {
-      const u = document.getElementById("titleUstInput");
-      const p = document.getElementById("titlePilotInput");
-      if (u) applyTitleInput("ust", u.value);
-      if (p) applyTitleInput("pilot", p.value);
+      if (isAdminAuth()) {
+        const u = document.getElementById("titleUstInput");
+        const p = document.getElementById("titlePilotInput");
+        if (u) applyTitleInput("ust", u.value);
+        if (p) applyTitleInput("pilot", p.value);
+      }
       if (dlg) dlg.close();
     });
   if (dismiss)
@@ -530,12 +547,14 @@ function bindTeamDialog() {
   }
   if (resetAssign)
     resetAssign.addEventListener("click", () => {
+      if (!isAdminAuth()) return;
       if (!confirm("Сбросить состав команд к значениям по умолчанию?")) return;
       resetSectionAssignOverrides();
       populateTeamAssignTable();
     });
   if (resetTitles)
     resetTitles.addEventListener("click", () => {
+      if (!isAdminAuth()) return;
       if (confirm("Сбросить названия вкладок к умолчанию?")) resetSectionTitleOverrides();
     });
   const addEmpBtn = document.getElementById("teamAddEmployeeBtn");
@@ -1031,18 +1050,141 @@ function isWeekend(year, monthIndex, day) {
 
 const STORAGE_UI_BLOCKS = "ww-ui-blocks";
 
-function isEditSessionUnlocked() {
+function getAuthSession() {
   try {
-    return sessionStorage.getItem(STORAGE_EDIT_SESSION) === "1";
+    const raw = sessionStorage.getItem(STORAGE_AUTH_SESSION);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s?.token) return null;
+    const exp = s.expiresAt ? new Date(s.expiresAt).getTime() : 0;
+    if (exp && Date.now() > exp) {
+      clearAuthSession();
+      return null;
+    }
+    return s;
   } catch (_) {
-    return false;
+    return null;
   }
 }
 
-function unlockEditSession() {
+function setAuthSession(payload) {
+  const expiresAt =
+    payload.expires_at ||
+    new Date(Date.now() + AUTH_SESSION_MAX_AGE_MS).toISOString();
+  const s = {
+    token: payload.token,
+    login: payload.login,
+    role: payload.role,
+    employeeName: payload.employee_name || null,
+    expiresAt,
+  };
   try {
-    sessionStorage.setItem(STORAGE_EDIT_SESSION, "1");
+    sessionStorage.setItem(STORAGE_AUTH_SESSION, JSON.stringify(s));
   } catch (_) {}
+  syncAuthChrome();
+}
+
+function clearAuthSession() {
+  const s = getAuthSession();
+  if (s?.token) {
+    void supabaseRpcLogout(s.token);
+  }
+  try {
+    sessionStorage.removeItem(STORAGE_AUTH_SESSION);
+  } catch (_) {}
+  syncAuthChrome();
+}
+
+function isEditSessionUnlocked() {
+  return getAuthSession() != null;
+}
+
+function isAdminAuth() {
+  const s = getAuthSession();
+  return s?.role === "admin";
+}
+
+function canEditEmployeeSchedule(empName) {
+  if (!isEditSessionUnlocked() || isArchiveView()) return false;
+  const s = getAuthSession();
+  if (!s) return false;
+  if (s.role === "admin") return true;
+  return s.employeeName === empName;
+}
+
+function canEditScheduleRow(rowIndex) {
+  const data = getDataset();
+  const emp = data?.employees?.[rowIndex];
+  if (!emp) return false;
+  return canEditEmployeeSchedule(emp.name);
+}
+
+function canEditRosterAndObjects() {
+  return state.mode === "edit" && isAdminAuth() && !isArchiveView();
+}
+
+async function supabaseRpcLogin(login, password) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/workwatch_login`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: supabaseRestHeaders({ Prefer: "return=representation" }),
+    body: JSON.stringify({
+      p_login: login,
+      p_password: password,
+      p_ip: "web",
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.message || data?.hint || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+async function supabaseRpcLogout(token) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/workwatch_logout`, {
+      method: "POST",
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({ p_token: token }),
+    });
+  } catch (_) {}
+}
+
+function authErrorMessageRu(errCode) {
+  switch (errCode) {
+    case "rate_limited":
+      return "Слишком много попыток входа с этого устройства. Подождите около 15 минут.";
+    case "account_locked":
+      return "Учётная запись временно заблокирована после неудачных попыток. Попробуйте позже.";
+    case "invalid_credentials":
+      return "Неверный логин или пароль.";
+    default:
+      return "Не удалось войти. Проверьте логин и пароль.";
+  }
+}
+
+function syncAuthChrome() {
+  const badge = document.getElementById("authUserBadge");
+  const logoutBtn = document.getElementById("authLogoutBtn");
+  const s = getAuthSession();
+  if (!badge || !logoutBtn) return;
+  if (!s) {
+    badge.hidden = true;
+    badge.textContent = "";
+    logoutBtn.hidden = true;
+    return;
+  }
+  logoutBtn.hidden = false;
+  badge.hidden = false;
+  if (s.role === "admin") {
+    badge.textContent = "Админ";
+    badge.title = `Вход: ${s.login}. Редактирование всех строк и настроек объектов.`;
+  } else {
+    const short = s.employeeName ? s.employeeName.split(" ")[0] : s.login;
+    badge.textContent = short;
+    badge.title = `Вход: ${s.employeeName || s.login}. Можно менять только свою строку в графике.`;
+  }
 }
 
 function applyMode(mode) {
@@ -1059,64 +1201,95 @@ function applyMode(mode) {
   render();
 }
 
-function bindEditPasswordDialog() {
+function bindAuthLoginDialog() {
   const dlg = document.getElementById("editPwdDialog");
-  const inp = document.getElementById("editPwdInput");
+  const loginInp = document.getElementById("editLoginInput");
+  const pwdInp = document.getElementById("editPwdInput");
   const ok = document.getElementById("editPwdOk");
   const cancel = document.getElementById("editPwdCancel");
   const err = document.getElementById("editPwdErr");
-  if (!dlg || !inp || !ok || !cancel || !err) return;
+  if (!dlg || !loginInp || !pwdInp || !ok || !cancel || !err) return;
 
   const hideErr = () => {
     err.hidden = true;
     err.textContent = "";
   };
 
-  const trySubmit = () => {
+  const trySubmit = async () => {
     hideErr();
-    if (inp.value === EDIT_PASSWORD) {
-      unlockEditSession();
-      dlg.close();
-      inp.value = "";
-      applyMode("edit");
-    } else {
-      err.textContent = "Неверный пароль.";
+    const login = loginInp.value.trim();
+    const password = pwdInp.value;
+    if (!login || !password) {
+      err.textContent = "Введите логин и пароль.";
       err.hidden = false;
-      inp.select();
+      return;
+    }
+    ok.disabled = true;
+    try {
+      const data = await supabaseRpcLogin(login, password);
+      if (!data?.ok) {
+        err.textContent = authErrorMessageRu(data?.error);
+        err.hidden = false;
+        pwdInp.select();
+        return;
+      }
+      setAuthSession(data);
+      dlg.close();
+      loginInp.value = "";
+      pwdInp.value = "";
+      applyMode("edit");
+    } catch (e) {
+      err.textContent =
+        e?.message?.includes("workwatch_login")
+          ? "Сервис входа не настроен — выполните supabase-auth.sql в Supabase."
+          : "Ошибка сети при входе. Попробуйте позже.";
+      err.hidden = false;
+    } finally {
+      ok.disabled = false;
     }
   };
 
-  ok.addEventListener("click", trySubmit);
+  ok.addEventListener("click", () => void trySubmit());
   cancel.addEventListener("click", () => {
     hideErr();
-    inp.value = "";
+    loginInp.value = "";
+    pwdInp.value = "";
     dlg.close();
   });
-  inp.addEventListener("keydown", (e) => {
+  pwdInp.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      trySubmit();
+      void trySubmit();
+    }
+  });
+  loginInp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      pwdInp.focus();
     }
   });
   dlg.addEventListener("close", () => {
     hideErr();
-    inp.value = "";
+    loginInp.value = "";
+    pwdInp.value = "";
   });
 }
 
-function openEditPasswordDialog() {
+function openAuthLoginDialog() {
   const dlg = document.getElementById("editPwdDialog");
-  const inp = document.getElementById("editPwdInput");
+  const loginInp = document.getElementById("editLoginInput");
+  const pwdInp = document.getElementById("editPwdInput");
   const err = document.getElementById("editPwdErr");
-  if (!dlg || !inp) return;
+  if (!dlg || !loginInp || !pwdInp) return;
   if (err) {
     err.hidden = true;
     err.textContent = "";
   }
-  inp.value = "";
+  loginInp.value = "";
+  pwdInp.value = "";
   if (typeof dlg.showModal === "function") dlg.showModal();
-  else alert("Обновите браузер: нужна поддержка диалога для ввода пароля.");
-  setTimeout(() => inp.focus(), 0);
+  else alert("Обновите браузер: нужна поддержка диалога для входа.");
+  setTimeout(() => loginInp.focus(), 0);
 }
 
 function ensureScheduleCellPicker() {
@@ -1148,6 +1321,10 @@ function closeScheduleCellPicker() {
 function openScheduleCellPicker(rowIndex, day, pillEl) {
   if (isArchiveView()) return;
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
+  if (!canEditScheduleRow(rowIndex)) {
+    alert("Можно редактировать только свою строку в графике. Для правок всех строк войдите как администратор.");
+    return;
+  }
   const data = getDataset();
   if (!data) return;
   closeScheduleCellPicker();
@@ -1328,6 +1505,7 @@ function cancelPillFillInteraction() {
 }
 
 function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
+  if (!canEditScheduleRow(rowIndex)) return;
   const data = getDataset();
   if (!data || rowIndex < 0 || rowIndex >= data.employees.length) return;
   const { year, monthIndex } = parseMonthKey(state.monthKey);
@@ -1347,6 +1525,7 @@ function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
 function startPillFillInteraction(ev, rowIndex, day, pillEl) {
   if (isArchiveView()) return;
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
+  if (!canEditScheduleRow(rowIndex)) return;
   if (ev.button !== 0) return;
   const data = getDataset();
   if (!data) return;
@@ -1906,10 +2085,11 @@ function renderObjectSummary() {
 
 function init() {
   applyTheme(state.theme);
+  syncAuthChrome();
   buildMonthSelect();
   buildSectionNav();
   bindControls();
-  bindEditPasswordDialog();
+  bindAuthLoginDialog();
   bindStickyTableClick();
   bindTeamDialog();
   bindCollapsiblePanels();
@@ -2130,7 +2310,7 @@ function bindControls() {
         return;
       }
       if (m === "edit" && !isEditSessionUnlocked()) {
-        openEditPasswordDialog();
+        openAuthLoginDialog();
         return;
       }
       applyMode(m);
@@ -2139,6 +2319,14 @@ function bindControls() {
   document.body.dataset.mode = state.mode;
 
   document.getElementById("exportBtn").addEventListener("click", exportFor1C);
+
+  const logoutBtn = document.getElementById("authLogoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      clearAuthSession();
+      if (state.mode === "edit") applyMode("view");
+    });
+  }
 
   const legendClear = document.getElementById("legendClearBtn");
   if (legendClear) {
@@ -2371,15 +2559,20 @@ function renderSchedule(data) {
 
       pill.dataset.row = String(rowIndex); /* индекс в полном списке — для правок и overrides */
       pill.dataset.day = String(day);
-      const canPick = state.mode === "edit" && isEditSessionUnlocked();
+      const canPick = canEditScheduleRow(rowIndex);
       pill.title = canPick
         ? code
           ? `Код: ${code}. Клик — список; зажмите и тяните по дням — заполнить как в Excel`
           : "Клик — список; зажмите и тяните — очистить диапазон дней"
         : code
           ? `Код: ${code}`
-          : "Нет отметки — включите режим редактирования";
-      pill.addEventListener("pointerdown", (e) => startPillFillInteraction(e, rowIndex, day, pill));
+          : "Нет отметки — войдите и редактируйте только свою строку (или все — админ)";
+      if (canPick) {
+        pill.classList.add("pill--editable");
+        pill.addEventListener("pointerdown", (e) => startPillFillInteraction(e, rowIndex, day, pill));
+      } else {
+        pill.classList.add("pill--readonly");
+      }
 
       td.appendChild(pill);
       tr.appendChild(td);
