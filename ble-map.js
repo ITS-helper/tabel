@@ -53,6 +53,7 @@
   let bleSelectedZoneId = null;
   let bleMarkerLayer = null;
   const bleZoneGroups = new WeakMap();
+  const bleZoneVertexByMap = new WeakMap();
   let bleZoneLayers = new Map();
   let bleEditMapMsg = "";
 
@@ -506,10 +507,73 @@
     });
   }
 
+  function clearZoneVertexHandles(targetMap) {
+    if (!targetMap) return;
+    const state = bleZoneVertexByMap.get(targetMap);
+    if (!state) return;
+    try {
+      state.handles?.forEach((h) => h.off());
+      targetMap.removeLayer(state.group);
+    } catch {
+      /* ignore */
+    }
+    bleZoneVertexByMap.delete(targetMap);
+  }
+
   function disableAllZonePm() {
     bleZoneLayers.forEach((entry) => {
       if (entry.layer.pm) entry.layer.pm.disable();
     });
+    clearZoneVertexHandles(bleMap);
+    clearZoneVertexHandles(bleMapFS);
+  }
+
+  function syncZoneVertexHandles(layer, zoneData) {
+    const map = layer?._map;
+    if (!map || !isZoneEditAllowed() || !zoneData) return;
+    clearZoneVertexHandles(map);
+
+    const ring = polygonLatLngs(layer);
+    if (ring.length < 3) return;
+
+    const group = L.layerGroup().addTo(map);
+    const handles = [];
+
+    ring.forEach((ll, index) => {
+      const handle = L.marker(L.latLng(ll.lat, ll.lng), {
+        icon: L.divIcon({
+          className: "ble-zone-vertex-icon",
+          html: '<div class="ble-zone-vertex" aria-hidden="true"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+        draggable: true,
+        zIndexOffset: 2500,
+        pmIgnore: true,
+      });
+
+      handle.on("drag", () => {
+        const pts = polygonLatLngs(layer);
+        pts[index] = handle.getLatLng();
+        layer.setLatLngs(pts.map((p) => L.latLng(p.lat, p.lng)));
+      });
+
+      handle.on("dragstart", () => {
+        if (map.dragging) map.dragging.disable();
+      });
+
+      handle.on("dragend", () => {
+        if (map.dragging) map.dragging.enable();
+        const entry = bleZoneLayers.get(zoneData.id);
+        if (entry) entry.data.pts = latLngsToPts(polygonLatLngs(layer));
+        onZoneGeometryChanged({ layer });
+      });
+
+      handle.addTo(group);
+      handles.push(handle);
+    });
+
+    bleZoneVertexByMap.set(map, { group, layer, zoneId: zoneData.id, handles });
   }
 
   function onZoneGeometryChanged(e) {
@@ -533,20 +597,6 @@
       entry.layer.setLatLngs(orig.pts.map((p) => L.latLng(p[0], p[1])));
       entry.data.pts = orig.pts.map((p) => [...p]);
     }
-  }
-
-  function enableZoneLayerEdit(layer) {
-    const map = layer?._map;
-    if (!map?.pm || !layer?.pm) return false;
-    ensureMapGeoman(map);
-    if (typeof map.pm.disableGlobalEditMode === "function") map.pm.disableGlobalEditMode();
-    if (typeof map.pm.disableGlobalDragMode === "function") map.pm.disableGlobalDragMode();
-    if (typeof layer.pm.disable === "function") layer.pm.disable();
-    if (typeof layer.pm.disableLayerDrag === "function") layer.pm.disableLayerDrag();
-    if (typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
-    if (typeof layer.pm.disableScale === "function") layer.pm.disableScale();
-    layer.pm.enable({ allowSelfIntersection: false });
-    return true;
   }
 
   function selectZoneForEdit(zoneId) {
@@ -578,9 +628,7 @@
     }
     const layer = entry.layer;
     const map = layer._map || getActiveMap();
-    enableZoneLayerEdit(layer);
-    layer.off("pm:edit pm:vertexadded pm:vertexremoved pm:drag pm:markerdragend");
-    layer.on("pm:edit pm:vertexadded pm:vertexremoved pm:drag pm:markerdragend", onZoneGeometryChanged);
+    syncZoneVertexHandles(layer, entry.data);
     try {
       const bounds = layer.getBounds?.();
       if (bounds?.isValid?.()) map?.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
@@ -720,7 +768,7 @@
       syncZoneEditUiClasses();
       bleEditMapMsg = isCoarseMobile()
         ? "Редактирование: удержите метку 1 сек., затем перетащите."
-        : "Метки: удержите 1 сек. Зоны: нажмите зону — останутся только её метки, затем двигайте вершины.";
+        : "Метки: удержите 1 сек. Зоны: нажмите зону — останутся только её метки, тяните оранжевые точки по контуру.";
       hideMapMsg();
     } else {
       disableAllZonePm();
@@ -747,6 +795,7 @@
       group = L.layerGroup().addTo(targetMap);
       bleZoneGroups.set(targetMap, group);
     }
+    clearZoneVertexHandles(targetMap);
     group.clearLayers();
     if (forEdit) bleZoneLayers.clear();
     if (!bleZoneData.length) return;
@@ -761,6 +810,7 @@
         weight: isSelected ? 3 : dimmed ? 1 : 1.5,
         dashArray: isSelected ? "6 4" : null,
         interactive: forEdit,
+        pmIgnore: true,
       });
       layer.zoneMeta = z;
       layer.bindTooltip(z.name || `Зона ${z.id}`, {
@@ -779,7 +829,7 @@
     });
     if (forEdit && bleSelectedZoneId) {
       const entry = bleZoneLayers.get(bleSelectedZoneId);
-      if (entry?.layer) enableZoneLayerEdit(entry.layer);
+      if (entry?.layer) syncZoneVertexHandles(entry.layer, entry.data);
     }
   }
 
