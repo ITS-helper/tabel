@@ -2574,6 +2574,8 @@ function showAppPage(pageId) {
     btn.classList.toggle("is-active", btn.dataset.appPage === valid);
   });
   document.getElementById("app")?.classList.toggle("app--blemap-view", valid === "blemap");
+  document.documentElement.classList.toggle("app--blemap-tab", valid === "blemap");
+  document.body.classList.toggle("app--blemap-tab", valid === "blemap");
   if (valid === "blemap") {
     const iframe = document.querySelector("#page-blemap iframe");
     if (iframe?.contentWindow) {
@@ -2589,7 +2591,7 @@ function showAppPage(pageId) {
   } catch {
     /* ignore */
   }
-  window.scrollTo(0, 0);
+  if (valid !== "blemap") window.scrollTo(0, 0);
 }
 
 function bindAppPageNav() {

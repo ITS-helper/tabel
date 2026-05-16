@@ -2731,7 +2731,27 @@ body.zp-drag-active .person-chip:not(.dragging) {
   margin-top: 0;
 }
 
-/* Вкладка «Карта BLE»: без шапки графика (логотип, режим, объекты, месяц) */
+/* Вкладка «Карта BLE»: на весь экран под переключателем График/Карта */
+body.app--blemap-tab {
+  height: 100%;
+  overflow: hidden;
+}
+
+html.app--blemap-tab {
+  height: 100%;
+}
+
+.app--blemap-view {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .app--blemap-view .header__row--top,
 .app--blemap-view .header__row--bottom,
 .app--blemap-view .header__divider {
@@ -2739,21 +2759,32 @@ body.zp-drag-active .person-chip:not(.dragging) {
 }
 
 .app--blemap-view .header {
+  flex-shrink: 0;
+  margin-bottom: 0;
   padding: 8px 10px;
   gap: 6px;
-}
-
-.app--blemap-view .app-page--blemap.is-active {
-  margin: 0;
-}
-
-.app--blemap-view .app-page__iframe {
-  height: calc(100dvh - 64px);
-  min-height: 320px;
   border-radius: 0;
   border-left: none;
   border-right: none;
-  box-shadow: none;
+}
+
+.app--blemap-view .app-page--blemap.is-active {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+.app--blemap-view .app-page__iframe {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .app-page__iframe {
@@ -2807,13 +2838,13 @@ body.zp-drag-active .person-chip:not(.dragging) {
     font-size: 0.72em;
   }
 
-  .app-page--blemap.is-active {
-    margin: 0 -8px;
+  .app--blemap-view {
+    height: 100dvh;
+    height: 100svh;
   }
 
-  .app--blemap-view .app-page__iframe {
-    height: calc(100dvh - 52px);
-    min-height: 0;
+  .app--blemap-view .header {
+    padding-top: max(8px, env(safe-area-inset-top));
   }
 }
 

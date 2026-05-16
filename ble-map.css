@@ -801,8 +801,112 @@ html.ble-map-embedded .map-section {
 }
 
 html.ble-map-embedded .map-inner {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
   padding: 0;
-  min-height: 100%;
+  gap: 0;
+  overflow: hidden;
+}
+
+html.ble-map-embedded #bleMap {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
+html.ble-map-embedded .map-float-dock {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 700;
+  pointer-events: none;
+}
+
+html.ble-map-embedded .map-float-dock > * {
+  pointer-events: auto;
+}
+
+html.ble-map-embedded .map-msg:not([hidden]) {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: 8px;
+  right: 8px;
+  z-index: 800;
+}
+
+html.ble-map-embedded .map-retry-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+html.ble-map-embedded .map-retry-wrap .map-auth-btn {
+  pointer-events: auto;
+}
+
+/* Отдельная страница ble-map.html — карта на всю высоту под шапкой */
+body:not(.ble-map-embedded) {
+  min-height: 100dvh;
+  min-height: 100svh;
+  height: 100dvh;
+  height: 100svh;
+  overflow: hidden;
+}
+
+body:not(.ble-map-embedded) .ble-map-page-main {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+body:not(.ble-map-embedded) .map-section {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body:not(.ble-map-embedded) .map-inner {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+body:not(.ble-map-embedded) #bleMap {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
+body:not(.ble-map-embedded) .map-float-dock {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 700;
+  pointer-events: none;
+}
+
+body:not(.ble-map-embedded) .map-float-dock > * {
+  pointer-events: auto;
 }
 
 /* --- Мобильный Chrome / Android --- */
