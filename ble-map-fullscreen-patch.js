@@ -39,11 +39,6 @@
       border-radius: 10px;
     }
 
-    .map-fullscreen-overlay.patched .map-fs-msg:not([hidden]) {
-      margin: 6px 8px 0;
-      border-radius: 8px;
-    }
-
     /* === ПЕРЕДЕЛЫВАЕМ FULLSCREEN OVERLAY === */
     .map-fullscreen-overlay.patched .map-fullscreen-header {
       display: none !important;

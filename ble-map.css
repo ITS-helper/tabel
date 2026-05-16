@@ -836,12 +836,25 @@ body.ble-map--edit .leaflet-marker-draggable:active {
   border-bottom: 1px solid var(--border);
 }
 
-.map-fs-msg:not([hidden]) {
-  margin: 8px 10px 0;
-  padding: 8px 10px;
+.map-fs-msg {
+  display: none !important;
+}
+
+.map-fs-msg.error:not([hidden]) {
+  display: block !important;
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  top: auto;
+  z-index: 9600;
+  margin: 0;
+  padding: 10px 12px;
   font-size: 12px;
   line-height: 1.4;
   border-radius: 8px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .map-edit-bar--fs {

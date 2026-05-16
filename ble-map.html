@@ -96,7 +96,6 @@
           <option value="">Все маршруты</option>
         </select>
       </label>
-      <div id="mapFsMsg" class="map-msg map-fs-msg" hidden></div>
       <div id="mapEditBar" class="map-edit-bar map-edit-bar--fs">
         <button type="button" class="map-edit-toggle" id="mapEditToggle">Редактирование</button>
         <div id="mapEditTools" class="map-edit-tools" hidden>
@@ -106,6 +105,7 @@
       </div>
     </div>
     <div id="bleMapFS"></div>
+    <div id="mapFsMsg" class="map-msg map-fs-msg" hidden aria-live="polite"></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

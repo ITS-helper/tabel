@@ -93,30 +93,25 @@
   }
 
   function showMapMsg(text, type = "") {
+    if (!text || type !== "error") return;
     const fsOpen = isMapFullscreenOpen();
-    const targets = [
-      { el: document.getElementById("mapMsg"), show: !fsOpen },
-      { el: document.getElementById("mapFsMsg"), show: fsOpen },
-    ];
-    targets.forEach(({ el, show }) => {
-      if (!el || !show) {
-        if (el) el.hidden = true;
-        return;
-      }
-      el.textContent = text;
-      el.className = "map-msg map-fs-msg" + (type ? " " + type : "");
-      if (el.id === "mapMsg") el.className = "map-msg" + (type ? " " + type : "");
-      el.hidden = false;
-    });
+    const el = fsOpen
+      ? document.getElementById("mapFsMsg")
+      : document.getElementById("mapMsg");
+    if (!el) return;
+    el.textContent = text;
+    el.className =
+      el.id === "mapFsMsg"
+        ? "map-msg map-fs-msg error"
+        : "map-msg error";
+    el.hidden = false;
   }
 
   function hideMapMsg() {
-    const fsOpen = isMapFullscreenOpen();
     const main = document.getElementById("mapMsg");
     const fs = document.getElementById("mapFsMsg");
-    if (main && !fsOpen) main.hidden = true;
-    if (fs && fsOpen) fs.hidden = true;
-    if (!fsOpen && main) main.hidden = true;
+    if (main) main.hidden = true;
+    if (fs) fs.hidden = true;
   }
 
   function getPreferredTransportId() {
@@ -554,8 +549,8 @@
       const parts = [];
       if (nMarkers) parts.push(`меток: ${nMarkers}`);
       if (nZone) parts.push("зона");
-      showMapMsg("Сохранено (" + parts.join(", ") + ")", "ok");
       bleEditMapMsg = "";
+      hideMapMsg();
       updateEditBarState();
     } catch (e) {
       showMapMsg("Ошибка сохранения: " + (e.message || e), "error");
@@ -597,7 +592,7 @@
     if (bleEditMode) {
       bleEditMapMsg =
         "Редактирование: перетащите метку или нажмите на зону на карте. Вершины — потяните за точки.";
-      showMapMsg(bleEditMapMsg, "ok");
+      hideMapMsg();
     } else {
       disableAllZonePm();
       bleSelectedZoneId = null;
@@ -1093,8 +1088,7 @@
     }
     revealMapControls();
     loadBleRoutes();
-    if (cacheNotice) showMapMsg(cacheNotice, "ok");
-    else hideMapMsg();
+    hideMapMsg();
     bleMapInitialized = true;
     scheduleMapResize();
   }
@@ -1104,11 +1098,7 @@
     if (!cached?.data?.length) return null;
     if (!bleMap) initBleMap([53.038, 39.011], 15);
     bleCompanyId = companyId;
-    const notice =
-      "Показан сохранённый список меток от " +
-      formatCacheAge(cached.updatedAt) +
-      " (без VPN / без прямого API). Нажмите ↺ для повторной загрузки.";
-    await applyBleListToMap(cached.data, notice);
+    await applyBleListToMap(cached.data, "");
     setRetryVisible(true);
     try {
       sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
