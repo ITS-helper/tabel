@@ -435,24 +435,7 @@
     }
     layer.off("pm:edit pm:vertexadded pm:vertexremoved pm:drag");
     layer.on("pm:edit pm:vertexadded pm:vertexremoved pm:drag", onZoneGeometryChanged);
-    const sel = document.getElementById("mapZoneSelect");
-    if (sel && String(sel.value) !== String(id)) sel.value = String(id);
     updateEditBarState();
-  }
-
-  function populateZoneSelect() {
-    const sel = document.getElementById("mapZoneSelect");
-    if (!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">Зона…</option>';
-    bleZoneData.forEach((z) => {
-      if (!z.id || z.pts.length < 3) return;
-      const opt = document.createElement("option");
-      opt.value = String(z.id);
-      opt.textContent = z.name || `Зона ${z.id}`;
-      sel.appendChild(opt);
-    });
-    if (cur && sel.querySelector(`option[value="${cur}"]`)) sel.value = cur;
   }
 
   function updateEditBarState() {
@@ -474,8 +457,6 @@
     bleDirtyZone = null;
     disableAllZonePm();
     bleSelectedZoneId = null;
-    const sel = document.getElementById("mapZoneSelect");
-    if (sel) sel.value = "";
     resetZoneStyles();
     redrawMapLayers();
     updateEditBarState();
@@ -568,7 +549,7 @@
       if (
         !opts.skipConfirm &&
         !window.confirm(
-          "Режим редактирования меняет данные на сервере VSM.\n\n• Перетащите метку\n• Выберите зону и двигайте вершины\n\nПродолжить?"
+          "Режим редактирования меняет данные на сервере VSM.\n\n• Перетащите метку\n• Нажмите на зону и двигайте вершины\n\nПродолжить?"
         )
       ) {
         return;
@@ -578,9 +559,8 @@
     bleEditMode = on;
     document.body.classList.toggle("ble-map--edit", bleEditMode);
     if (bleEditMode) {
-      populateZoneSelect();
       bleEditMapMsg =
-        "Редактирование: перетащите метку или выберите зону в списке. Вершины — потяните за точки.";
+        "Редактирование: перетащите метку или нажмите на зону на карте. Вершины — потяните за точки.";
       showMapMsg(bleEditMapMsg, "ok");
     } else {
       disableAllZonePm();
@@ -993,7 +973,6 @@
             }))
             .filter((z) => z.pts.length > 2);
           drawZones(bleMap);
-          populateZoneSelect();
         }
       } catch {
         /* zones optional */
@@ -1224,10 +1203,6 @@
     document.getElementById("mapEditToggle")?.addEventListener("click", () => setEditMode(!bleEditMode));
     document.getElementById("mapSaveBtn")?.addEventListener("click", () => saveAllEdits());
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
-    document.getElementById("mapZoneSelect")?.addEventListener("change", (e) => {
-      selectZoneForEdit(e.target.value);
-    });
-
     document.getElementById("mapFullscreenBtnWrap")?.addEventListener("click", openFullscreenMap);
     document.getElementById("mapEditFsBtn")?.addEventListener("click", () => setEditMode(true));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
