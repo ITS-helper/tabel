@@ -45,6 +45,9 @@
             <span class="icon-moon" aria-hidden="true"></span>
           </button>
           <span id="authUserBadge" class="auth-badge" hidden></span>
+          <button type="button" class="btn btn--ghost auth-change-pwd-btn" id="authChangePwdBtn" hidden>
+            Сменить пароль
+          </button>
           <button type="button" class="btn btn--ghost auth-logout-btn" id="authLogoutBtn" hidden>Выйти</button>
           <div class="segmented" role="group" aria-label="Режим просмотра">
             <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
@@ -402,11 +405,37 @@
       </div>
     </dialog>
 
+    <dialog id="changePwdDialog" class="edit-pwd-dialog">
+      <div class="edit-pwd-dialog__panel">
+        <h2 class="edit-pwd-dialog__title" id="changePwdTitle">Смена пароля</h2>
+        <p class="edit-pwd-dialog__hint" id="changePwdHint">
+          Задайте новый пароль (не короче 8 символов, не «12345678»).
+        </p>
+        <p class="edit-pwd-dialog__err" id="changePwdErr" hidden></p>
+        <label class="edit-pwd-dialog__label">
+          <span class="edit-pwd-dialog__label-text">Текущий пароль</span>
+          <input type="password" id="changePwdCurrent" class="edit-pwd-dialog__input" autocomplete="current-password" />
+        </label>
+        <label class="edit-pwd-dialog__label">
+          <span class="edit-pwd-dialog__label-text">Новый пароль</span>
+          <input type="password" id="changePwdNew" class="edit-pwd-dialog__input" autocomplete="new-password" />
+        </label>
+        <label class="edit-pwd-dialog__label">
+          <span class="edit-pwd-dialog__label-text">Повторите новый пароль</span>
+          <input type="password" id="changePwdNew2" class="edit-pwd-dialog__input" autocomplete="new-password" />
+        </label>
+        <footer class="edit-pwd-dialog__footer">
+          <button type="button" class="btn btn--outline" id="changePwdCancel">Отмена</button>
+          <button type="button" class="btn btn--primary" id="changePwdOk">Сохранить</button>
+        </footer>
+      </div>
+    </dialog>
+
     <dialog id="editPwdDialog" class="edit-pwd-dialog">
       <div class="edit-pwd-dialog__panel">
         <h2 class="edit-pwd-dialog__title">Вход для редактирования</h2>
         <p class="edit-pwd-dialog__hint">
-          Просмотр доступен всем. Сотрудник редактирует только свою строку в графике; администратор — все строки и настройки объектов.
+          Просмотр доступен всем. Логин — табельный номер (ТН) или ярлык из фамилии. Начальный пароль сотрудников выдаёт администратор; после входа его нужно сменить.
         </p>
         <p class="edit-pwd-dialog__err" id="editPwdErr" hidden></p>
         <label class="edit-pwd-dialog__label">

@@ -1850,6 +1850,10 @@ body[data-mode="edit"] .pill:hover {
   border-color: color-mix(in srgb, #66bb6a 40%, var(--border));
 }
 
+.auth-change-pwd-btn {
+  font-size: 0.82rem;
+}
+
 .auth-logout-btn {
   font-size: 0.85rem;
 }

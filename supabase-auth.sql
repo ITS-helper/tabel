@@ -12,8 +12,16 @@ create table if not exists public.workwatch_auth_users (
   role text not null check (role in ('employee', 'admin')),
   failed_attempts int not null default 0,
   locked_until timestamptz,
+  must_change_password boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+alter table public.workwatch_auth_users
+  add column if not exists must_change_password boolean not null default true;
+
+update public.workwatch_auth_users
+set must_change_password = false
+where role = 'admin' and must_change_password = true;
 
 create index if not exists workwatch_auth_users_employee_name_idx
   on public.workwatch_auth_users (employee_name)
@@ -162,8 +170,69 @@ begin
     'login', v_user.login,
     'role', v_user.role,
     'employee_name', v_user.employee_name,
-    'expires_at', v_expires
+    'expires_at', v_expires,
+    'must_change_password', coalesce(v_user.must_change_password, false)
   );
+end;
+$$;
+
+-- Смена пароля (нужна активная сессия и текущий пароль)
+create or replace function public.workwatch_change_password(
+  p_token uuid,
+  p_current_password text,
+  p_new_password text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_login text;
+  v_user public.workwatch_auth_users%rowtype;
+begin
+  if p_token is null then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  select s.login into v_login
+  from public.workwatch_sessions s
+  where s.token = p_token and s.expires_at > now();
+
+  if v_login is null then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  select * into v_user from public.workwatch_auth_users where login = v_login;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  if length(coalesce(p_current_password, '')) < 4 or length(coalesce(p_new_password, '')) < 8 then
+    return jsonb_build_object('ok', false, 'error', 'password_too_short');
+  end if;
+
+  if p_new_password = p_current_password then
+    return jsonb_build_object('ok', false, 'error', 'password_same');
+  end if;
+
+  if p_new_password = '12345678' then
+    return jsonb_build_object('ok', false, 'error', 'password_too_weak');
+  end if;
+
+  if v_user.password_hash <> crypt(p_current_password, v_user.password_hash) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_current_password');
+  end if;
+
+  update public.workwatch_auth_users
+  set
+    password_hash = crypt(p_new_password, gen_salt('bf', 10)),
+    must_change_password = false,
+    failed_attempts = 0,
+    locked_until = null
+  where login = v_login;
+
+  return jsonb_build_object('ok', true, 'must_change_password', false);
 end;
 $$;
 
@@ -180,5 +249,6 @@ end;
 $$;
 
 grant execute on function public.workwatch_login(text, text, text) to anon, authenticated;
+grant execute on function public.workwatch_change_password(uuid, text, text) to anon, authenticated;
 grant execute on function public.workwatch_logout(uuid) to anon, authenticated;
 grant execute on function public.workwatch_prune_login_attempts() to anon, authenticated;

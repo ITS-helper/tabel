@@ -1,11 +1,12 @@
 /**
- * Генерация SQL для учёток WORK WATCH (логин + bcrypt-хеш пароля).
- * Запуск: npm install && node scripts/seed-auth-users.mjs > scripts/auth-users-seed.sql
- * Затем выполнить auth-users-seed.sql в Supabase SQL Editor (после supabase-auth.sql).
+ * Учётки WORK WATCH для всех сотрудников из табеля.
+ * Запуск: npm install && npm run seed-auth
+ * Затем scripts/auth-users-seed.sql в Supabase SQL Editor (после supabase-auth.sql).
  *
  * Переменные:
- *   ADMIN_LOGIN=admin  ADMIN_PASSWORD=...  — учётка администратора
- *   EMPLOYEE_PASSWORD_PREFIX=Ww  — пароль сотрудника: {prefix}{логин} (см. auth-credentials.txt)
+ *   ADMIN_LOGIN=admin  ADMIN_PASSWORD=...  — администратор (must_change_password = false)
+ *   EMPLOYEE_DEFAULT_PASSWORD=12345678    — начальный пароль сотрудников
+ *   SEED_RESET_PASSWORDS=1                — при конфликте логина обновить пароль (по умолчанию да)
  */
 import fs from "fs";
 import path from "path";
@@ -13,45 +14,12 @@ import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, "..");
 
 const ADMIN_LOGIN = process.env.ADMIN_LOGIN || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "AdminChangeMe2026!";
-const EMP_PREFIX = process.env.EMPLOYEE_PASSWORD_PREFIX || "Ww";
-
-/** ФИО из POSITION_BY_NAME в app.js + типичный список из выгрузки */
-const EMPLOYEES = [
-  ["11604", "Беккер Александр Анатольевич"],
-  ["29455", "Бондарь Роман Альбертович"],
-  ["23430", "Гаджиев Ильгар Бахтиярович"],
-  ["24722", "Зацепин Никита Валериевич"],
-  ["11356", "Кумейко Николай Александрович"],
-  ["30403", "Окунев Александр Игоревич"],
-  ["28760", "Шуйский Иван Андреевич"],
-  ["18173", "Савчук Руслан Ростиславович"],
-  ["16287", "Бурангулов Руслан Азаматович"],
-  ["29456", "Газизуллин Рустам Дамирович"],
-  ["27537", "Зуев Леонид Олегович"],
-  ["23755", "Насыров Максим Тимурович"],
-  ["16613", "Мищенко Егор Александрович"],
-  ["7245", "Бердников Александр Львович"],
-  ["12683", "Сергеев Тимофей Ильич"],
-  ["25680", "Трубаев Никита Васильевич"],
-  ["27321", "Одиноков Александр Евгеньевич"],
-  ["27728", "Доркин Филипп Александрович"],
-  ["472", "Подгорбунских Иван Леонидович"],
-  ["22084", "Погорелец Мария Анатольевна"],
-  ["7232", "Трефилов Алексей Павлович"],
-  ["29135", "Штепа Илья Вадимович"],
-  ["", "Жарков Александр Владиславович"],
-  ["", "Магомедов Султан Абдурахманович"],
-  ["", "Аюшеев Дандар Дамбаевич"],
-  ["", "Ивахненко Сергей Игоревич"],
-  ["", "Червяков Сергей Андреевич"],
-  ["", "Смирнов Павел Александрович"],
-  ["", "Устян Авенир Григорьевич"],
-  ["", "Вишневский Сергей Арсенович"],
-  ["", "Тучин Сергей Геннадьевич"],
-];
+const EMPLOYEE_DEFAULT_PASSWORD = process.env.EMPLOYEE_DEFAULT_PASSWORD || "12345678";
+const RESET_PASSWORDS = process.env.SEED_RESET_PASSWORDS !== "0";
 
 const TRANSLIT = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
@@ -84,23 +52,82 @@ async function hash(pw) {
   return bcrypt.hash(pw, 10);
 }
 
+/** name → { tn, name } */
+function collectFromParsedFile(filePath) {
+  const out = new Map();
+  if (!fs.existsSync(filePath)) return out;
+  const text = fs.readFileSync(filePath, "utf8");
+  const re = /"tn"\s*:\s*"([^"]*)"\s*,\s*"name"\s*:\s*"([^"]+)"/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const tn = m[1].trim();
+    const name = m[2].trim();
+    if (!name) continue;
+    const prev = out.get(name);
+    if (!prev || (tn && !prev.tn)) out.set(name, { tn, name });
+  }
+  return out;
+}
+
+function collectFromPositionByName(appJs) {
+  const out = new Map();
+  const start = appJs.indexOf("const POSITION_BY_NAME = {");
+  if (start < 0) return out;
+  const end = appJs.indexOf("\n};", start);
+  const block = end > start ? appJs.slice(start, end) : appJs.slice(start);
+  const re = /"([^"]+)":\s*"/g;
+  let m;
+  while ((m = re.exec(block))) {
+    const name = m[1].trim();
+    if (name && !out.has(name)) out.set(name, { tn: "", name });
+  }
+  return out;
+}
+
+function mergeEmployeeMaps(...maps) {
+  const out = new Map();
+  for (const map of maps) {
+    for (const [name, rec] of map) {
+      const prev = out.get(name);
+      if (!prev || (rec.tn && !prev.tn)) out.set(name, rec);
+    }
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+}
+
+const parsedPath = path.join(ROOT, "scripts", "parsed-employees-2026-h1.js");
+const appJsPath = path.join(ROOT, "app.js");
+const appJs = fs.readFileSync(appJsPath, "utf8");
+
+const employees = mergeEmployeeMaps(
+  collectFromParsedFile(parsedPath),
+  collectFromPositionByName(appJs)
+);
+
+if (employees.length === 0) {
+  console.error("Не найдено сотрудников. Проверьте scripts/parsed-employees-2026-h1.js и app.js.");
+  process.exit(1);
+}
+
 const rows = [];
 const credLines = [
-  "# WORK WATCH — начальные пароли (не коммитьте в git). Передайте сотрудникам и смените в Supabase.",
-  `# Админ: логин ${ADMIN_LOGIN}`,
+  "# WORK WATCH — начальные пароли (не коммитьте). После первого входа сотрудник меняет пароль.",
+  `# Админ: ${ADMIN_LOGIN}`,
+  `# Сотрудники: пароль по умолчанию ${EMPLOYEE_DEFAULT_PASSWORD}`,
   "",
 ];
 
 const adminHash = await hash(ADMIN_PASSWORD);
 rows.push(
-  `insert into public.workwatch_auth_users (login, password_hash, employee_name, role) values ('${sqlEscape(ADMIN_LOGIN.toLowerCase())}', '${adminHash}', null, 'admin') on conflict (login) do update set password_hash = excluded.password_hash, role = excluded.role, employee_name = excluded.employee_name;`
+  `insert into public.workwatch_auth_users (login, password_hash, employee_name, role, must_change_password) values ('${sqlEscape(ADMIN_LOGIN.toLowerCase())}', '${adminHash}', null, 'admin', false) on conflict (login) do update set password_hash = excluded.password_hash, role = excluded.role, employee_name = excluded.employee_name, must_change_password = excluded.must_change_password;`
 );
 credLines.push(`${ADMIN_LOGIN}\t${ADMIN_PASSWORD}\t(администратор)`);
 credLines.push("");
 
 const usedLogins = new Set([ADMIN_LOGIN.toLowerCase()]);
+const empHash = await hash(EMPLOYEE_DEFAULT_PASSWORD);
 
-for (const [tn, name] of EMPLOYEES) {
+for (const { tn, name } of employees) {
   let login = loginForEmployee(tn, name);
   let n = 2;
   while (usedLogins.has(login)) {
@@ -108,19 +135,29 @@ for (const [tn, name] of EMPLOYEES) {
     n++;
   }
   usedLogins.add(login);
-  const password = `${EMP_PREFIX}${login}`;
-  const h = await hash(password);
-  credLines.push(`${login}\t${password}\t${name}`);
+  credLines.push(`${login}\t${EMPLOYEE_DEFAULT_PASSWORD}\t${name}`);
+  const conflictPwd = RESET_PASSWORDS
+    ? "password_hash = excluded.password_hash, must_change_password = excluded.must_change_password,"
+    : "";
   rows.push(
-    `insert into public.workwatch_auth_users (login, password_hash, employee_name, role) values ('${sqlEscape(login)}', '${h}', '${sqlEscape(name)}', 'employee') on conflict (login) do update set password_hash = excluded.password_hash, employee_name = excluded.employee_name, role = excluded.role;`
+    `insert into public.workwatch_auth_users (login, password_hash, employee_name, role, must_change_password) values ('${sqlEscape(login)}', '${empHash}', '${sqlEscape(name)}', 'employee', true) on conflict (login) do update set ${conflictPwd} employee_name = excluded.employee_name, role = excluded.role;`
   );
 }
 
+const sqlPath = path.join(__dirname, "auth-users-seed.sql");
 const credPath = path.join(__dirname, "auth-credentials.txt");
-fs.writeFileSync(credPath, credLines.join("\n") + "\n", "utf8");
+const sqlBody = [
+  "-- Сгенерировано scripts/seed-auth-users.mjs",
+  `-- Сотрудников: ${employees.length}, пароль по умолчанию: ${EMPLOYEE_DEFAULT_PASSWORD}`,
+  "begin;",
+  ...rows,
+  "commit;",
+].join("\n");
 
-console.error(`Список паролей: ${credPath}`);
-console.log("-- Сгенерировано scripts/seed-auth-users.mjs");
-console.log("begin;");
-console.log(rows.join("\n"));
-console.log("commit;");
+fs.writeFileSync(credPath, credLines.join("\n") + "\n", "utf8");
+fs.writeFileSync(sqlPath, sqlBody + "\n", "utf8");
+
+console.error(`Сотрудников: ${employees.length}`);
+console.error(`SQL: ${sqlPath}`);
+console.error(`Пароли: ${credPath}`);
+console.log(sqlBody);

@@ -1078,6 +1078,7 @@ function setAuthSession(payload) {
     role: payload.role,
     employeeName: payload.employee_name || null,
     expiresAt,
+    mustChangePassword: !!payload.must_change_password,
   };
   try {
     sessionStorage.setItem(STORAGE_AUTH_SESSION, JSON.stringify(s));
@@ -1152,6 +1153,34 @@ async function supabaseRpcLogout(token) {
   } catch (_) {}
 }
 
+async function supabaseRpcChangePassword(token, currentPassword, newPassword) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/workwatch_change_password`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: supabaseRestHeaders({ Prefer: "return=representation" }),
+    body: JSON.stringify({
+      p_token: token,
+      p_current_password: currentPassword,
+      p_new_password: newPassword,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.message || data?.hint || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+function patchAuthSession(patch) {
+  const s = getAuthSession();
+  if (!s) return;
+  Object.assign(s, patch);
+  try {
+    sessionStorage.setItem(STORAGE_AUTH_SESSION, JSON.stringify(s));
+  } catch (_) {}
+  syncAuthChrome();
+}
+
 function authErrorMessageRu(errCode) {
   switch (errCode) {
     case "rate_limited":
@@ -1165,18 +1194,38 @@ function authErrorMessageRu(errCode) {
   }
 }
 
+function changePasswordErrorMessageRu(errCode) {
+  switch (errCode) {
+    case "invalid_session":
+      return "Сессия истекла. Войдите снова.";
+    case "invalid_current_password":
+      return "Неверный текущий пароль.";
+    case "password_too_short":
+      return "Новый пароль должен быть не короче 8 символов.";
+    case "password_same":
+      return "Новый пароль должен отличаться от текущего.";
+    case "password_too_weak":
+      return "Нельзя использовать начальный пароль «12345678». Задайте свой.";
+    default:
+      return "Не удалось сменить пароль. Попробуйте ещё раз.";
+  }
+}
+
 function syncAuthChrome() {
   const badge = document.getElementById("authUserBadge");
   const logoutBtn = document.getElementById("authLogoutBtn");
+  const changePwdBtn = document.getElementById("authChangePwdBtn");
   const s = getAuthSession();
   if (!badge || !logoutBtn) return;
   if (!s) {
     badge.hidden = true;
     badge.textContent = "";
     logoutBtn.hidden = true;
+    if (changePwdBtn) changePwdBtn.hidden = true;
     return;
   }
   logoutBtn.hidden = false;
+  if (changePwdBtn) changePwdBtn.hidden = false;
   badge.hidden = false;
   if (s.role === "admin") {
     badge.textContent = "Админ";
@@ -1235,10 +1284,15 @@ function bindAuthLoginDialog() {
         return;
       }
       setAuthSession(data);
-      dlg.close();
       loginInp.value = "";
       pwdInp.value = "";
-      applyMode("edit");
+      if (data.must_change_password) {
+        dlg.close();
+        openChangePasswordDialog({ required: true });
+      } else {
+        dlg.close();
+        applyMode("edit");
+      }
     } catch (e) {
       const msg = String(e?.message || e || "");
       if (msg.includes("workwatch_login") || msg.includes("Could not find")) {
@@ -1298,6 +1352,155 @@ function openAuthLoginDialog() {
   if (typeof dlg.showModal === "function") dlg.showModal();
   else alert("Обновите браузер: нужна поддержка диалога для входа.");
   setTimeout(() => loginInp.focus(), 0);
+}
+
+let changePwdRequired = false;
+
+function bindChangePasswordDialog() {
+  const dlg = document.getElementById("changePwdDialog");
+  const cur = document.getElementById("changePwdCurrent");
+  const neu = document.getElementById("changePwdNew");
+  const neu2 = document.getElementById("changePwdNew2");
+  const ok = document.getElementById("changePwdOk");
+  const cancel = document.getElementById("changePwdCancel");
+  const err = document.getElementById("changePwdErr");
+  const hint = document.getElementById("changePwdHint");
+  const title = document.getElementById("changePwdTitle");
+  if (!dlg || !cur || !neu || !neu2 || !ok || !cancel || !err) return;
+
+  const hideErr = () => {
+    err.hidden = true;
+    err.textContent = "";
+  };
+
+  const trySubmit = async () => {
+    hideErr();
+    const session = getAuthSession();
+    if (!session?.token) {
+      err.textContent = "Сначала войдите в систему.";
+      err.hidden = false;
+      return;
+    }
+    const current = cur.value;
+    const next = neu.value;
+    const next2 = neu2.value;
+    if (!current || !next) {
+      err.textContent = "Заполните текущий и новый пароль.";
+      err.hidden = false;
+      return;
+    }
+    if (next !== next2) {
+      err.textContent = "Новые пароли не совпадают.";
+      err.hidden = false;
+      neu2.focus();
+      return;
+    }
+    ok.disabled = true;
+    try {
+      const data = await supabaseRpcChangePassword(session.token, current, next);
+      if (!data?.ok) {
+        err.textContent = changePasswordErrorMessageRu(data?.error);
+        err.hidden = false;
+        return;
+      }
+      patchAuthSession({ mustChangePassword: false });
+      dlg.close();
+      cur.value = "";
+      neu.value = "";
+      neu2.value = "";
+      changePwdRequired = false;
+      if (state.mode !== "edit") applyMode("edit");
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (msg.includes("workwatch_change_password") || msg.includes("Could not find")) {
+        err.textContent = "Смена пароля не настроена — выполните supabase-auth.sql в Supabase.";
+      } else {
+        err.textContent =
+          msg.length > 120 ? "Ошибка смены пароля. Откройте консоль (F12)." : msg;
+      }
+      err.hidden = false;
+    } finally {
+      ok.disabled = false;
+    }
+  };
+
+  ok.addEventListener("click", () => void trySubmit());
+  cancel.addEventListener("click", () => {
+    if (changePwdRequired) {
+      clearAuthSession();
+      if (state.mode === "edit") applyMode("view");
+    }
+    hideErr();
+    cur.value = "";
+    neu.value = "";
+    neu2.value = "";
+    dlg.close();
+    changePwdRequired = false;
+  });
+  neu2.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void trySubmit();
+    }
+  });
+  dlg.addEventListener("close", () => {
+    if (changePwdRequired && getAuthSession()?.mustChangePassword) {
+      setTimeout(() => openChangePasswordDialog({ required: true }), 0);
+    }
+  });
+  dlg.addEventListener("cancel", (e) => {
+    if (changePwdRequired) {
+      e.preventDefault();
+    }
+  });
+
+  const changePwdBtn = document.getElementById("authChangePwdBtn");
+  if (changePwdBtn) {
+    changePwdBtn.addEventListener("click", () => openChangePasswordDialog({ required: false }));
+  }
+}
+
+function openChangePasswordDialog(opts) {
+  const required = !!(opts && opts.required);
+  changePwdRequired = required;
+  const dlg = document.getElementById("changePwdDialog");
+  const cur = document.getElementById("changePwdCurrent");
+  const neu = document.getElementById("changePwdNew");
+  const neu2 = document.getElementById("changePwdNew2");
+  const err = document.getElementById("changePwdErr");
+  const hint = document.getElementById("changePwdHint");
+  const cancel = document.getElementById("changePwdCancel");
+  const title = document.getElementById("changePwdTitle");
+  if (!dlg || !cur || !neu || !neu2) return;
+  if (err) {
+    err.hidden = true;
+    err.textContent = "";
+  }
+  cur.value = "";
+  neu.value = "";
+  neu2.value = "";
+  if (title) {
+    title.textContent = required ? "Задайте свой пароль" : "Смена пароля";
+  }
+  if (hint) {
+    hint.textContent = required
+      ? "Это первый вход. Укажите новый пароль (не короче 8 символов, не «12345678»)."
+      : "Новый пароль: не короче 8 символов, не «12345678».";
+  }
+  if (cancel) {
+    cancel.textContent = required ? "Выйти" : "Отмена";
+    cancel.hidden = false;
+  }
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else alert("Обновите браузер для смены пароля.");
+  setTimeout(() => cur.focus(), 0);
+}
+
+function ensureAuthPasswordFlowOnLoad() {
+  const s = getAuthSession();
+  if (s?.mustChangePassword) {
+    openChangePasswordDialog({ required: true });
+  }
 }
 
 function ensureScheduleCellPicker() {
@@ -2191,6 +2394,8 @@ function init() {
   buildSectionNav();
   bindControls();
   bindAuthLoginDialog();
+  bindChangePasswordDialog();
+  ensureAuthPasswordFlowOnLoad();
   bindStickyTableClick();
   bindTeamDialog();
   bindCollapsiblePanels();
