@@ -822,11 +822,35 @@
     if (compact?.options[0]) compact.options[0].textContent = "Все";
   }
 
+  let bleRouteFilterApplying = false;
+
+  function clearFsMarkerLayers() {
+    if (!bleMapFS) return;
+    if (bleClusterGroupFS) {
+      try {
+        bleClusterGroupFS.clearLayers();
+      } catch {
+        /* ignore */
+      }
+      bleMapFS.removeLayer(bleClusterGroupFS);
+      bleClusterGroupFS = null;
+    }
+    if (bleMarkerLayerFS) {
+      bleMarkerLayerFS.clearLayers();
+      bleMapFS.removeLayer(bleMarkerLayerFS);
+      bleMarkerLayerFS = null;
+    }
+  }
+
   function setBleMapRouteFilter(value) {
-    bleMapRouteFilter = value ? String(value) : "";
+    const next = value ? String(value) : "";
+    if (next === bleMapRouteFilter) return;
+    bleMapRouteFilter = next;
+    bleRouteFilterApplying = true;
     document.querySelectorAll(".map-route-select").forEach((sel) => {
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
     });
+    bleRouteFilterApplying = false;
     redrawMapLayers();
   }
 
@@ -868,14 +892,7 @@
 
   function renderFsMarkers() {
     if (!bleMapFS) return;
-    if (bleClusterGroupFS) {
-      bleMapFS.removeLayer(bleClusterGroupFS);
-      bleClusterGroupFS = null;
-    }
-    if (bleMarkerLayerFS) {
-      bleMapFS.removeLayer(bleMarkerLayerFS);
-      bleMarkerLayerFS = null;
-    }
+    clearFsMarkerLayers();
     const q = getFsSearchQuery();
     if (bleEditMode && isMapFullscreenOpen()) {
       bleMarkerLayerFS = L.layerGroup();
@@ -895,6 +912,7 @@
         marker.addTo(bleMarkerLayerFS);
       });
       bleMapFS.addLayer(bleMarkerLayerFS);
+      bleMapFS.invalidateSize();
       return;
     }
     bleClusterGroupFS = makeClusterGroup();
@@ -1248,8 +1266,11 @@
     document.getElementById("mapFloatDock")?.addEventListener("click", onFilterTap);
     document.getElementById("mapFsFilters")?.addEventListener("click", onFilterTap);
 
-    document.querySelectorAll(".map-route-select").forEach((sel) => {
-      sel.addEventListener("change", () => setBleMapRouteFilter(sel.value));
+    document.addEventListener("change", (e) => {
+      if (bleRouteFilterApplying) return;
+      const sel = e.target.closest?.(".map-route-select");
+      if (!sel) return;
+      setBleMapRouteFilter(sel.value);
     });
 
     const mapBleSearchEl = document.getElementById("mapBleSearch");

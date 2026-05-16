@@ -342,6 +342,15 @@
       });
     });
 
+    const routeSel = bar.querySelector('.map-route-select');
+    if (routeSel) {
+      routeSel.addEventListener('change', () => {
+        if (typeof window.setBleMapRouteFilter === 'function') {
+          window.setBleMapRouteFilter(routeSel.value);
+        }
+      });
+    }
+
     // Слои
     bar.querySelectorAll('[data-pl]').forEach(btn => {
       btn.addEventListener('click', () => {
