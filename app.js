@@ -1973,15 +1973,19 @@ function persistZonePlacementLocal() {
   } catch (_) {}
 }
 
-/** ФИО табеля за месяц на объекте: только те, у кого в месяце есть смена (коды ON_SHIFT_CODES) */
+/** ФИО табеля за месяц на объекте: смены в месяце; сегодня не ОТ (отпуск) */
 function getZoneRosterNamesForMonth(monthKey, sectionId) {
   if (sectionId !== "ust" && sectionId !== "pilot") return [];
   const data = getDatasetForMonthKey(monthKey);
   if (!data?.employees?.length) return [];
   const { year, monthIndex } = parseMonthKey(monthKey);
+  const dataYear = year;
   const dim = daysInMonth(year, monthIndex);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   return employeesForSection(data.employees, sectionId)
     .filter((emp) => !employeeHasNoShiftsInMonth(emp, dim))
+    .filter((emp) => scheduleCodeOnCalendarDate(emp.name, today, dataYear) !== VACATION_OT)
     .map((e) => e.name)
     .filter(Boolean);
 }
