@@ -2883,7 +2883,8 @@ html.app--blemap-tab {
     display: inline;
   }
 
-  .header .auth-change-pwd-btn {
+  .header .auth-change-pwd-btn,
+  #themeToggle {
     display: none;
   }
 
