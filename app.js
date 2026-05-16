@@ -1173,11 +1173,32 @@ function isAdminAuth() {
 }
 
 function canEditEmployeeSchedule(empName) {
-  if (!isEditSessionUnlocked() || isArchiveView()) return false;
+  if (!isEditSessionUnlocked() || isArchiveView() || state.mode !== "edit") return false;
   const s = getAuthSession();
   if (!s) return false;
   if (s.role === "admin") return true;
+  if (sectionIdForEmployee(s.employeeName) === "ust") return false;
   return s.employeeName === empName;
+}
+
+function scheduleEditHintForUser() {
+  const s = getAuthSession();
+  if (!s) return "Войдите в режиме «Редактирование».";
+  if (s.role === "admin") return "Редактирование всех строк (администратор).";
+  if (sectionIdForEmployee(s.employeeName) === "ust") {
+    return "Усть-Луга: график редактирует только администратор.";
+  }
+  return "Можно менять только свою строку (пилотные проекты).";
+}
+
+function scheduleEditDeniedMessage() {
+  const s = getAuthSession();
+  if (!s) return "Войдите в режиме «Редактирование».";
+  if (s.role === "admin") return "";
+  if (sectionIdForEmployee(s.employeeName) === "ust") {
+    return "Сотрудники Усть-Луги не редактируют график. Изменения вносит администратор.";
+  }
+  return "Можно редактировать только свою строку. Все строки — у администратора.";
 }
 
 function canEditScheduleRow(rowIndex) {
@@ -1377,7 +1398,11 @@ function syncAuthChrome() {
   } else {
     const short = s.employeeName ? s.employeeName.split(" ")[0] : s.login;
     badge.textContent = short;
-    badge.title = `Вход: ${s.employeeName || s.login}. Можно менять только свою строку в графике.${pwdHint}`;
+    const schedHint =
+      sectionIdForEmployee(s.employeeName) === "ust"
+        ? "График только для просмотра (Усть-Луга)."
+        : "Можно менять только свою строку (пилотные проекты).";
+    badge.title = `Вход: ${s.employeeName || s.login}. ${schedHint}${pwdHint}`;
   }
 }
 
