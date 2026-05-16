@@ -2604,6 +2604,11 @@ function bindAppPageNav() {
   document.querySelectorAll(".app-nav__tab").forEach((btn) => {
     btn.addEventListener("click", () => showAppPage(btn.dataset.appPage || "tabel"));
   });
+  window.addEventListener("message", (e) => {
+    if (e.data?.type === "ww-ble-map-fullscreen") {
+      document.getElementById("app")?.classList.toggle("app--blemap-fs", !!e.data.open);
+    }
+  });
 }
 
 function init() {

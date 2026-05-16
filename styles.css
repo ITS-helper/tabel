@@ -2815,3 +2815,18 @@ body.zp-drag-active .person-chip:not(.dragging) {
     min-height: 0;
   }
 }
+
+.app--blemap-fs .header {
+  display: none !important;
+}
+
+.app--blemap-fs .app-page--blemap.is-active {
+  margin: 0;
+}
+
+.app--blemap-fs .app-page__iframe {
+  height: 100dvh !important;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}

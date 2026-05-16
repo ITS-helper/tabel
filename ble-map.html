@@ -42,21 +42,12 @@
               <span class="filter-count" id="fcInsp">0</span>
             </button>
           </div>
-          <div id="mapEditBar" class="map-edit-bar">
-            <button type="button" class="map-edit-toggle" id="mapEditToggle">Редактирование</button>
-            <div id="mapEditTools" class="map-edit-tools" hidden>
-              <select id="mapZoneSelect" class="map-edit-select" aria-label="Зона для правки">
-                <option value="">Зона…</option>
-              </select>
-              <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
-              <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
-            </div>
-          </div>
           <div id="mapBottomControls" class="map-bottom-controls">
             <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap" aria-label="На весь экран">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
               <span class="map-fullscreen-btn__text">Экран</span>
             </button>
+            <button type="button" class="map-edit-fs-btn" id="mapEditFsBtn" title="Полный экран и правка меток">Правка</button>
             <div id="mapLayerToggle" class="map-layer-toggle">
               <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
               <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
@@ -94,6 +85,19 @@
       <div class="map-fullscreen-search">
         <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
         <button type="button" class="map-fullscreen-search-clear" id="mapFsSearchClear" title="Очистить">✕</button>
+      </div>
+    </div>
+    <div class="map-fs-chrome" id="mapFsChrome">
+      <div id="mapFsMsg" class="map-msg map-fs-msg" hidden></div>
+      <div id="mapEditBar" class="map-edit-bar map-edit-bar--fs">
+        <button type="button" class="map-edit-toggle" id="mapEditToggle">Редактирование</button>
+        <div id="mapEditTools" class="map-edit-tools" hidden>
+          <select id="mapZoneSelect" class="map-edit-select" aria-label="Зона для правки">
+            <option value="">Зона…</option>
+          </select>
+          <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
+          <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
+        </div>
       </div>
     </div>
     <div id="bleMapFS"></div>

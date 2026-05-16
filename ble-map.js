@@ -37,6 +37,7 @@
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
   let bleClusterGroupFS = null;
+  let bleMarkerLayerFS = null;
 
   let bleCompanyId = null;
   let bleEditMode = false;
@@ -58,17 +59,59 @@
     return localStorage.getItem(BLE_TOKEN_KEY);
   }
 
+  function isMapFullscreenOpen() {
+    return document.getElementById("mapFullscreenOverlay")?.classList.contains("open");
+  }
+
+  function getActiveMap() {
+    return isMapFullscreenOpen() && bleMapFS ? bleMapFS : bleMap;
+  }
+
+  function notifyMapFullscreenState(open) {
+    document.body.classList.toggle("map-fullscreen", open);
+    document.documentElement.classList.toggle("map-fullscreen", open);
+    try {
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "ww-ble-map-fullscreen", open: !!open }, "*");
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function getFsSearchQuery() {
+    const raw =
+      document.getElementById("pf-search")?.value ??
+      document.getElementById("mapFsSearch")?.value ??
+      "";
+    return raw.trim().toLowerCase().replace(/^ble/i, "");
+  }
+
   function showMapMsg(text, type = "") {
-    const el = document.getElementById("mapMsg");
-    if (!el) return;
-    el.textContent = text;
-    el.className = "map-msg" + (type ? " " + type : "");
-    el.hidden = false;
+    const fsOpen = isMapFullscreenOpen();
+    const targets = [
+      { el: document.getElementById("mapMsg"), show: !fsOpen },
+      { el: document.getElementById("mapFsMsg"), show: fsOpen },
+    ];
+    targets.forEach(({ el, show }) => {
+      if (!el || !show) {
+        if (el) el.hidden = true;
+        return;
+      }
+      el.textContent = text;
+      el.className = "map-msg map-fs-msg" + (type ? " " + type : "");
+      if (el.id === "mapMsg") el.className = "map-msg" + (type ? " " + type : "");
+      el.hidden = false;
+    });
   }
 
   function hideMapMsg() {
-    const el = document.getElementById("mapMsg");
-    if (el) el.hidden = true;
+    const fsOpen = isMapFullscreenOpen();
+    const main = document.getElementById("mapMsg");
+    const fs = document.getElementById("mapFsMsg");
+    if (main && !fsOpen) main.hidden = true;
+    if (fs && fsOpen) fs.hidden = true;
+    if (!fsOpen && main) main.hidden = true;
   }
 
   function getPreferredTransportId() {
@@ -434,8 +477,7 @@
     const sel = document.getElementById("mapZoneSelect");
     if (sel) sel.value = "";
     resetZoneStyles();
-    renderBleMarkers();
-    if (bleMap) drawZones(bleMap, { forEdit: bleEditMode });
+    redrawMapLayers();
     updateEditBarState();
   }
 
@@ -509,22 +551,29 @@
     }
   }
 
-  function setEditMode(on) {
+  function redrawMapLayers() {
+    renderBleMarkers();
+    renderFsMarkers();
+    if (bleMap) drawZones(bleMap);
+    if (bleMapFS) drawZones(bleMapFS);
+  }
+
+  function setEditMode(on, opts = {}) {
     if (on === bleEditMode) return;
-    if (!on && hasUnsavedEdits()) {
+    if (!on && hasUnsavedEdits() && !opts.skipConfirm) {
       if (!window.confirm("Отменить несохранённые изменения?")) return;
       cancelAllEdits();
     }
     if (on) {
-      const fsOpen = document.getElementById("mapFullscreenOverlay")?.classList.contains("open");
-      if (fsOpen) closeFullscreenMap();
       if (
+        !opts.skipConfirm &&
         !window.confirm(
           "Режим редактирования меняет данные на сервере VSM.\n\n• Перетащите метку\n• Выберите зону и двигайте вершины\n\nПродолжить?"
         )
       ) {
         return;
       }
+      if (!isMapFullscreenOpen()) openFullscreenMap();
     }
     bleEditMode = on;
     document.body.classList.toggle("ble-map--edit", bleEditMode);
@@ -537,16 +586,17 @@
       disableAllZonePm();
       bleSelectedZoneId = null;
       bleEditMapMsg = "";
-      if (!document.getElementById("mapMsg")?.classList.contains("error")) hideMapMsg();
+      const fsErr = document.getElementById("mapFsMsg")?.classList.contains("error");
+      const mainErr = document.getElementById("mapMsg")?.classList.contains("error");
+      if (!fsErr && !mainErr) hideMapMsg();
     }
-    renderBleMarkers();
-    if (bleMap) drawZones(bleMap, { forEdit: bleEditMode });
+    redrawMapLayers();
     updateEditBarState();
   }
 
   function drawZones(targetMap, opts = {}) {
     if (!targetMap) return;
-    const forEdit = targetMap === bleMap && bleEditMode && opts.forEdit !== false;
+    const forEdit = bleEditMode && targetMap === getActiveMap() && opts.forEdit !== false;
     let group = bleZoneGroups.get(targetMap);
     if (!group) {
       group = L.layerGroup().addTo(targetMap);
@@ -732,6 +782,11 @@
     updateEditBarState();
   }
 
+  function markerMatchesSearch(pt, query) {
+    if (!query) return true;
+    return pt.ble.toLowerCase() === query || pt.ble.toLowerCase().includes(query);
+  }
+
   function renderBleMarkers() {
     if (!bleMap) return;
     if (bleClusterGroup) {
@@ -742,34 +797,62 @@
       bleMap.removeLayer(bleMarkerLayer);
       bleMarkerLayer = null;
     }
-    if (bleEditMode) {
-      bleMarkerLayer = L.layerGroup();
+    const q = document.getElementById("mapBleSearch")?.value?.trim().toLowerCase().replace(/^ble/i, "") || "";
+    bleClusterGroup = makeClusterGroup();
+    bleMapData.forEach((pt) => {
+      if (!pt.lat || !pt.lng) return;
+      if (bleMapFilter !== "all" && pt.status !== bleMapFilter) return;
+      if (!markerMatchesSearch(pt, q)) return;
+      L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
+        .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
+        .addTo(bleClusterGroup);
+    });
+    bleMap.addLayer(bleClusterGroup);
+  }
+
+  function renderFsMarkers() {
+    if (!bleMapFS) return;
+    if (bleClusterGroupFS) {
+      bleMapFS.removeLayer(bleClusterGroupFS);
+      bleClusterGroupFS = null;
+    }
+    if (bleMarkerLayerFS) {
+      bleMapFS.removeLayer(bleMarkerLayerFS);
+      bleMarkerLayerFS = null;
+    }
+    const q = getFsSearchQuery();
+    if (bleEditMode && isMapFullscreenOpen()) {
+      bleMarkerLayerFS = L.layerGroup();
       bleMapData.forEach((pt) => {
         if (!pt.id || !pt.lat || !pt.lng) return;
-        if (bleMapFilter !== "all" && pt.status !== bleMapFilter) return;
+        if (bleMapFSFilter !== "all" && pt.status !== bleMapFSFilter) return;
+        if (!markerMatchesSearch(pt, q)) return;
         const marker = L.marker([pt.lat, pt.lng], {
           icon: createBleIcon(pt),
           draggable: true,
           autoPan: true,
         });
         marker.on("dragend", () => onMarkerDragEnd(pt, marker));
-        marker.bindPopup(makePopup(pt) + "<p style='margin:8px 0 0;font-size:12px;color:#546E7A'>Перетащите для смены координат</p>", {
-          maxWidth: popupMaxWidth(),
-        });
-        marker.addTo(bleMarkerLayer);
+        marker.bindPopup(
+          makePopup(pt) +
+            "<p style='margin:8px 0 0;font-size:12px;color:#546E7A'>Перетащите для смены координат</p>",
+          { maxWidth: popupMaxWidth() }
+        );
+        marker.addTo(bleMarkerLayerFS);
       });
-      bleMap.addLayer(bleMarkerLayer);
+      bleMapFS.addLayer(bleMarkerLayerFS);
       return;
     }
-    bleClusterGroup = makeClusterGroup();
+    bleClusterGroupFS = makeClusterGroup();
     bleMapData.forEach((pt) => {
       if (!pt.lat || !pt.lng) return;
-      if (bleMapFilter !== "all" && pt.status !== bleMapFilter) return;
+      if (bleMapFSFilter !== "all" && pt.status !== bleMapFSFilter) return;
+      if (!markerMatchesSearch(pt, q)) return;
       L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
         .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
-        .addTo(bleClusterGroup);
+        .addTo(bleClusterGroupFS);
     });
-    bleMap.addLayer(bleClusterGroup);
+    bleMapFS.addLayer(bleClusterGroupFS);
   }
 
   function updateMapStats() {
@@ -800,8 +883,7 @@
     bleMapFilter = allowed;
     bleMapFSFilter = allowed;
     syncFilterUi(allowed);
-    renderBleMarkers();
-    if (bleMapFS) renderFsMarkers();
+    redrawMapLayers();
   }
 
   window.setBleMapFilter = setBleMapFilter;
@@ -839,8 +921,6 @@
   function revealMapControls() {
     const dock = document.getElementById("mapFloatDock");
     if (dock) dock.hidden = false;
-    const editBar = document.getElementById("mapEditBar");
-    if (editBar) editBar.hidden = false;
     const retry = document.getElementById("mapRetryBtn");
     if (retry) retry.hidden = true;
     const retryWrap = document.getElementById("mapRetryBtnWrap");
@@ -912,7 +992,7 @@
               pts: (pointsByZone[z.id] || []).map((p) => [...p]),
             }))
             .filter((z) => z.pts.length > 2);
-          drawZones(bleMap, { forEdit: bleEditMode });
+          drawZones(bleMap);
           populateZoneSelect();
         }
       } catch {
@@ -983,25 +1063,12 @@
     if (pInsp && insp != null) pInsp.textContent = insp;
   };
 
-  function renderFsMarkers() {
-    if (!bleMapFS) return;
-    if (bleClusterGroupFS) bleMapFS.removeLayer(bleClusterGroupFS);
-    bleClusterGroupFS = makeClusterGroup();
-    bleMapData.forEach((pt) => {
-      if (!pt.lat || !pt.lng) return;
-      if (bleMapFSFilter !== "all" && pt.status !== bleMapFSFilter) return;
-      L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
-        .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
-        .addTo(bleClusterGroupFS);
-    });
-    bleMapFS.addLayer(bleClusterGroupFS);
-  }
-
   window.openFullscreenMap = function openFullscreenMap() {
     const overlay = document.getElementById("mapFullscreenOverlay");
     if (!overlay) return;
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
+    notifyMapFullscreenState(true);
     if (!bleMapFSInitialized) {
       const fsMobile = isCoarseMobile();
       bleMapFS = L.map("bleMapFS", {
@@ -1062,12 +1129,22 @@
           const q = fsSearchEl.value.trim().toLowerCase().replace(/^ble/i, "");
           if (!q) return;
           const found = bleMapData.find((p) => p.ble.toLowerCase() === q);
-          if (found?.lat && found?.lng && bleClusterGroupFS) {
-            bleClusterGroupFS.eachLayer((m) => {
-              if (m.getLatLng().lat === found.lat && m.getLatLng().lng === found.lng) {
-                bleClusterGroupFS.zoomToShowLayer(m, () => m.openPopup());
+          if (found?.lat && found?.lng) {
+            const layerGroup = bleMarkerLayerFS || bleClusterGroupFS;
+            if (layerGroup) {
+              let hit = null;
+              layerGroup.eachLayer((m) => {
+                if (m.getLatLng().lat === found.lat && m.getLatLng().lng === found.lng) hit = m;
+              });
+              if (hit) {
+                if (bleClusterGroupFS?.zoomToShowLayer) {
+                  bleClusterGroupFS.zoomToShowLayer(hit, () => hit.openPopup());
+                } else {
+                  bleMapFS.setView(hit.getLatLng(), Math.max(bleMapFS.getZoom(), 17));
+                  hit.openPopup();
+                }
               }
-            });
+            }
           }
         });
         fsSearchClear.addEventListener("click", () => {
@@ -1077,17 +1154,34 @@
           fsSearchEl.focus();
         });
       }
-      drawZones(bleMapFS, { forEdit: false });
+      drawZones(bleMapFS);
       bleMapFSInitialized = true;
     }
     syncFsStats();
     renderFsMarkers();
+    if (bleEditMode && bleMapFS) drawZones(bleMapFS);
     setTimeout(() => bleMapFS?.invalidateSize(), 150);
   };
 
   window.closeFullscreenMap = function closeFullscreenMap() {
+    if (bleEditMode) {
+      if (hasUnsavedEdits() && !window.confirm("Отменить несохранённые изменения?")) return;
+      if (hasUnsavedEdits()) cancelAllEdits();
+      bleEditMode = false;
+      document.body.classList.remove("ble-map--edit");
+      disableAllZonePm();
+      bleSelectedZoneId = null;
+      bleEditMapMsg = "";
+      updateEditBarState();
+    }
     document.getElementById("mapFullscreenOverlay")?.classList.remove("open");
     document.body.style.overflow = "";
+    notifyMapFullscreenState(false);
+    redrawMapLayers();
+    const hasErr =
+      document.getElementById("mapMsg")?.classList.contains("error") ||
+      document.getElementById("mapFsMsg")?.classList.contains("error");
+    if (!hasErr) hideMapMsg();
   };
 
   function bindUi() {
@@ -1135,19 +1229,19 @@
     });
 
     document.getElementById("mapFullscreenBtnWrap")?.addEventListener("click", openFullscreenMap);
+    document.getElementById("mapEditFsBtn")?.addEventListener("click", () => setEditMode(true));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
     document.getElementById("photoViewerOverlay")?.addEventListener("click", closePhotoViewer);
     document.getElementById("photoViewerClose")?.addEventListener("click", closePhotoViewer);
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        if (document.getElementById("mapFullscreenOverlay")?.classList.contains("open")) {
-          closeFullscreenMap();
-        } else {
-          closePhotoViewer();
-        }
+      if (e.key !== "Escape") return;
+      if (document.getElementById("mapFullscreenOverlay")?.classList.contains("open")) {
+        closeFullscreenMap();
+        return;
       }
+      closePhotoViewer();
     });
   }
 

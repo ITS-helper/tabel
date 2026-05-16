@@ -675,6 +675,60 @@ body.ble-map--edit .leaflet-marker-draggable:active {
   display: inline;
 }
 
+.map-edit-fs-btn {
+  font-family: Oswald, sans-serif;
+  font-size: 0.68em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid #90caf9;
+  background: #e3f2fd;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-edit-fs-btn:hover {
+  background: #bbdefb;
+}
+
+.map-fs-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--border);
+}
+
+.map-fs-msg:not([hidden]) {
+  margin: 8px 10px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 8px;
+}
+
+.map-edit-bar--fs {
+  margin: 0 8px 8px;
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+
+body.map-fullscreen .ble-map-page-header {
+  display: none !important;
+}
+
+body.map-fullscreen .ble-map-page-main {
+  padding: 0;
+}
+
+body.map-fullscreen.ble-map-embedded,
+html.map-fullscreen.ble-map-embedded body {
+  overflow: hidden;
+}
+
 /* --- Встроено в табель (iframe) --- */
 html.ble-map-embedded,
 html.ble-map-embedded body {
@@ -838,6 +892,7 @@ html.ble-map-embedded .map-inner {
     gap: 6px;
   }
 
+  .map-edit-fs-btn,
   .map-fullscreen-btn,
   .map-layer-btn {
     min-height: 44px;

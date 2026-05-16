@@ -19,9 +19,29 @@
   // Инжектим стили
   const css = document.createElement('style');
   css.textContent = `
-    /* === ПРЯЧЕМ ТОПНАВ ПРИ FULLSCREEN === */
-    body.map-fullscreen .topnav {
+    /* === ПРЯЧЕМ ШАПКУ ПРИ FULLSCREEN === */
+    body.map-fullscreen .topnav,
+    body.map-fullscreen .ble-map-page-header {
       display: none !important;
+    }
+
+    body.map-fullscreen .ble-map-page-main {
+      padding: 0 !important;
+    }
+
+    .map-fullscreen-overlay.patched .map-fs-chrome {
+      flex-shrink: 0;
+      z-index: 12;
+    }
+
+    .map-fullscreen-overlay.patched .map-fs-chrome .map-edit-bar--fs {
+      margin: 0 8px 4px;
+      border-radius: 10px;
+    }
+
+    .map-fullscreen-overlay.patched .map-fs-msg:not([hidden]) {
+      margin: 6px 8px 0;
+      border-radius: 8px;
     }
 
     /* === ПЕРЕДЕЛЫВАЕМ FULLSCREEN OVERLAY === */
@@ -355,7 +375,6 @@
     // Перехватываем открытие fullscreen
     const origOpen = window.openFullscreenMap;
     window.openFullscreenMap = function () {
-      document.body.classList.add('map-fullscreen');
       origOpen.apply(this, arguments);
       setTimeout(syncStats, 500);
       setTimeout(syncStats, 1500);
@@ -363,7 +382,6 @@
 
     const origClose = window.closeFullscreenMap;
     window.closeFullscreenMap = function () {
-      document.body.classList.remove('map-fullscreen');
       origClose.apply(this, arguments);
     };
 
