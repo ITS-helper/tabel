@@ -4,10 +4,17 @@
   "type": "module",
   "scripts": {
     "ingest-xlsx": "node scripts/ingest-xlsx.mjs",
-    "seed-auth": "node scripts/seed-auth-users.mjs"
+    "seed-auth": "node scripts/seed-auth-users.mjs",
+    "supabase": "supabase",
+    "supabase:login": "supabase login",
+    "supabase:link": "supabase link --project-ref owcuvcshwtivqueftiuk",
+    "supabase:deploy-ble-map": "supabase functions deploy ble-map-proxy --no-verify-jwt"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "supabase": "^2.98.2"
   }
 }
