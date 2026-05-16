@@ -2,11 +2,6 @@
  * Учётки WORK WATCH для всех сотрудников из табеля.
  * Запуск: npm install && npm run seed-auth
  * Затем scripts/auth-users-seed.sql в Supabase SQL Editor (после supabase-auth.sql).
- *
- * Переменные:
- *   ADMIN_LOGIN=admin  ADMIN_PASSWORD=...  — администратор (must_change_password = false)
- *   EMPLOYEE_DEFAULT_PASSWORD=12345678    — начальный пароль сотрудников
- *   SEED_RESET_PASSWORDS=1                — при конфликте логина обновить пароль (по умолчанию да)
  */
 import fs from "fs";
 import path from "path";
@@ -27,6 +22,12 @@ const TRANSLIT = {
   х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
 };
 
+function normalizeTn(tn) {
+  const t = String(tn || "").trim();
+  if (!t || t === "—" || t === "–" || t === "-" || t === "—") return "";
+  return t;
+}
+
 function translitWord(w) {
   return [...String(w).toLowerCase()]
     .map((c) => TRANSLIT[c] ?? (/[a-z0-9]/.test(c) ? c : ""))
@@ -34,7 +35,7 @@ function translitWord(w) {
 }
 
 function loginForEmployee(tn, name) {
-  const t = String(tn || "").trim();
+  const t = normalizeTn(tn);
   if (/^\d+$/.test(t)) return t;
   const parts = String(name).trim().split(/\s+/);
   const fam = translitWord(parts[0] || "user");
@@ -48,11 +49,18 @@ function sqlEscape(s) {
   return String(s).replace(/'/g, "''");
 }
 
+function tnScore(tn) {
+  const t = normalizeTn(tn);
+  if (/^\d+$/.test(t)) return 2;
+  if (t) return 1;
+  return 0;
+}
+
 async function hash(pw) {
   return bcrypt.hash(pw, 10);
 }
 
-/** name → { tn, name } */
+/** name → { tn, name } — лучший ТН по всем месяцам в выгрузке */
 function collectFromParsedFile(filePath) {
   const out = new Map();
   if (!fs.existsSync(filePath)) return out;
@@ -60,11 +68,11 @@ function collectFromParsedFile(filePath) {
   const re = /"tn"\s*:\s*"([^"]*)"\s*,\s*"name"\s*:\s*"([^"]+)"/g;
   let m;
   while ((m = re.exec(text))) {
-    const tn = m[1].trim();
+    const tn = normalizeTn(m[1]);
     const name = m[2].trim();
     if (!name) continue;
     const prev = out.get(name);
-    if (!prev || (tn && !prev.tn)) out.set(name, { tn, name });
+    if (!prev || tnScore(tn) > tnScore(prev.tn)) out.set(name, { tn, name });
   }
   return out;
 }
@@ -89,7 +97,7 @@ function mergeEmployeeMaps(...maps) {
   for (const map of maps) {
     for (const [name, rec] of map) {
       const prev = out.get(name);
-      if (!prev || (rec.tn && !prev.tn)) out.set(name, rec);
+      if (!prev || tnScore(rec.tn) > tnScore(prev.tn)) out.set(name, rec);
     }
   }
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
@@ -110,10 +118,11 @@ if (employees.length === 0) {
 }
 
 const rows = [];
+const migrations = [];
 const credLines = [
-  "# WORK WATCH — начальные пароли (не коммитьте). После первого входа сотрудник меняет пароль.",
+  "# WORK WATCH — начальные пароли (не коммитьте).",
   `# Админ: ${ADMIN_LOGIN}`,
-  `# Сотрудники: пароль по умолчанию ${EMPLOYEE_DEFAULT_PASSWORD}`,
+  `# Сотрудники: ${EMPLOYEE_DEFAULT_PASSWORD}`,
   "",
 ];
 
@@ -126,6 +135,7 @@ credLines.push("");
 
 const usedLogins = new Set([ADMIN_LOGIN.toLowerCase()]);
 const empHash = await hash(EMPLOYEE_DEFAULT_PASSWORD);
+const loginByName = new Map();
 
 for (const { tn, name } of employees) {
   let login = loginForEmployee(tn, name);
@@ -135,7 +145,14 @@ for (const { tn, name } of employees) {
     n++;
   }
   usedLogins.add(login);
-  credLines.push(`${login}\t${EMPLOYEE_DEFAULT_PASSWORD}\t${name}`);
+  loginByName.set(name, login);
+  credLines.push(`${login}\t${EMPLOYEE_DEFAULT_PASSWORD}\t${tn || "—"}\t${name}`);
+
+  migrations.push(
+    `delete from public.workwatch_sessions where login in (select login from public.workwatch_auth_users where employee_name = '${sqlEscape(name)}' and role = 'employee' and login <> '${sqlEscape(login)}');`,
+    `delete from public.workwatch_auth_users where employee_name = '${sqlEscape(name)}' and role = 'employee' and login <> '${sqlEscape(login)}';`
+  );
+
   const conflictPwd = RESET_PASSWORDS
     ? "password_hash = excluded.password_hash, must_change_password = excluded.must_change_password,"
     : "";
@@ -148,8 +165,10 @@ const sqlPath = path.join(__dirname, "auth-users-seed.sql");
 const credPath = path.join(__dirname, "auth-credentials.txt");
 const sqlBody = [
   "-- Сгенерировано scripts/seed-auth-users.mjs",
-  `-- Сотрудников: ${employees.length}, пароль по умолчанию: ${EMPLOYEE_DEFAULT_PASSWORD}`,
+  `-- Сотрудников: ${employees.length}, пароль: ${EMPLOYEE_DEFAULT_PASSWORD}`,
+  "-- Удаляет старые логины (translit), если у сотрудника появился ТН.",
   "begin;",
+  ...migrations,
   ...rows,
   "commit;",
 ].join("\n");

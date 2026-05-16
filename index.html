@@ -354,7 +354,8 @@
         <div class="team-dialog__section">
           <h3 class="team-dialog__subtitle">Сотрудники</h3>
           <p class="team-dialog__hint">
-            ТН, должность и новые сотрудники — в режиме «Редактирование» (пароль). Данные синхронизируются вместе с табелем.
+            ТН, должность и новые сотрудники — в режиме «Редактирование» и вход администратора. Данные синхронизируются вместе с табелем.
+            Для админа: «↺ 12345678» — сброс пароля и обновление логина по текущему ТН.
           </p>
           <div class="team-dialog__scroll">
             <table class="team-dialog__table">
@@ -362,8 +363,10 @@
                 <tr>
                   <th scope="col">ТН</th>
                   <th scope="col">ФИО</th>
+                  <th scope="col">Логин</th>
                   <th scope="col">Должность</th>
                   <th scope="col">Объект</th>
+                  <th scope="col" class="team-dialog__th-auth" id="teamAuthColHead" hidden>Пароль</th>
                 </tr>
               </thead>
               <tbody id="teamAssignBody"></tbody>

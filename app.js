@@ -85,6 +85,13 @@ const STORAGE_SECTION_TITLES = "ww-section-titles";
 /** Сессия входа (sessionStorage): токен и роль после workwatch_login в Supabase */
 const STORAGE_AUTH_SESSION = "ww-auth-session";
 const AUTH_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const AUTH_DEFAULT_EMPLOYEE_PASSWORD = "12345678";
+
+const AUTH_TRANSLIT = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
+  к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+  х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
 
 /** Supabase: общая синхронизация (см. supabase-schema.sql в репозитории) */
 const SUPABASE_URL = "https://owcuvcshwtivqueftiuk.supabase.co";
@@ -410,6 +417,9 @@ function populateTeamAssignTable() {
   const addedList = state.addedEmployeesByMonth[monthKey] || [];
   const addedNames = new Set(addedList.map((a) => a.name));
   const canEditPeople = canEditRosterAndObjects();
+  const showAuthCol = isAdminAuth();
+  const authColHead = document.getElementById("teamAuthColHead");
+  if (authColHead) authColHead.hidden = !showAuthCol;
   if (addPanel) addPanel.hidden = !canEditPeople;
   const secAdd = document.getElementById("teamAddSection");
   if (secAdd) {
@@ -436,6 +446,8 @@ function populateTeamAssignTable() {
         const posVal = posInp ? posInp.value : emp.position ?? "";
         if (isAdded) updateAddedEmployeeFieldsFromDialog(emp.name, inp.value, posVal);
         else updateBaseEmployeeFieldsFromDialog(emp.name, inp.value, posVal);
+        const loginCode = tr.querySelector(".team-dialog__login");
+        if (loginCode) loginCode.textContent = authLoginForEmployee(inp.value, emp.name);
       });
       tdTn.appendChild(inp);
     } else {
@@ -444,6 +456,13 @@ function populateTeamAssignTable() {
 
     const tdName = document.createElement("td");
     tdName.textContent = emp.name;
+
+    const tdLogin = document.createElement("td");
+    tdLogin.className = "team-dialog__login-cell";
+    const loginCode = document.createElement("code");
+    loginCode.className = "team-dialog__login";
+    loginCode.textContent = authLoginForEmployee(emp.tn, emp.name);
+    tdLogin.appendChild(loginCode);
 
     const tdPos = document.createElement("td");
     if (canEditPeople) {
@@ -479,10 +498,33 @@ function populateTeamAssignTable() {
     sel.addEventListener("change", () => setEmployeeSection(emp.name, sel.value));
     tdSel.appendChild(sel);
 
-    tr.appendChild(tdTn);
-    tr.appendChild(tdName);
-    tr.appendChild(tdPos);
-    tr.appendChild(tdSel);
+    if (showAuthCol) {
+      const tdAuth = document.createElement("td");
+      tdAuth.className = "team-dialog__auth-cell";
+      const resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "btn btn--outline btn--sm team-dialog__reset-pwd";
+      resetBtn.textContent = "↺ " + AUTH_DEFAULT_EMPLOYEE_PASSWORD;
+      resetBtn.title = "Сбросить пароль и привязать логин к текущему ТН";
+      resetBtn.addEventListener("click", () => {
+        const tnInp = tr.querySelector("td:first-child input");
+        const tnVal = tnInp ? tnInp.value : emp.tn ?? "";
+        void adminResetEmployeeAuth(emp.name, tnVal, resetBtn);
+      });
+      tdAuth.appendChild(resetBtn);
+      tr.appendChild(tdTn);
+      tr.appendChild(tdName);
+      tr.appendChild(tdLogin);
+      tr.appendChild(tdPos);
+      tr.appendChild(tdSel);
+      tr.appendChild(tdAuth);
+    } else {
+      tr.appendChild(tdTn);
+      tr.appendChild(tdName);
+      tr.appendChild(tdLogin);
+      tr.appendChild(tdPos);
+      tr.appendChild(tdSel);
+    }
     tbody.appendChild(tr);
   });
 }
@@ -1051,6 +1093,30 @@ function isWeekend(year, monthIndex, day) {
 
 const STORAGE_UI_BLOCKS = "ww-ui-blocks";
 
+function normalizeEmployeeTn(tn) {
+  const t = String(tn ?? "").trim();
+  if (!t || t === "—" || t === "–" || t === "-") return "";
+  return t;
+}
+
+function authTransliterateWord(w) {
+  return [...String(w).toLowerCase()]
+    .map((c) => AUTH_TRANSLIT[c] ?? (/[a-z0-9]/.test(c) ? c : ""))
+    .join("");
+}
+
+/** Логин как в seed-auth-users.mjs: ТН или фамилия_и */
+function authLoginForEmployee(tn, name) {
+  const t = normalizeEmployeeTn(tn);
+  if (/^\d+$/.test(t)) return t;
+  const parts = String(name).trim().split(/\s+/);
+  const fam = authTransliterateWord(parts[0] || "user");
+  const ini = authTransliterateWord((parts[1] || "x")[0]);
+  let base = `${fam}_${ini}`.replace(/[^a-z0-9_]/g, "").slice(0, 28);
+  if (!base) base = "user";
+  return base;
+}
+
 function getAuthSession() {
   try {
     const raw = sessionStorage.getItem(STORAGE_AUTH_SESSION);
@@ -1151,6 +1217,75 @@ async function supabaseRpcLogout(token) {
       body: JSON.stringify({ p_token: token }),
     });
   } catch (_) {}
+}
+
+async function supabaseRpcAdminResetEmployeeAuth(token, employeeName, login) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/workwatch_admin_reset_employee_auth`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: supabaseRestHeaders({ Prefer: "return=representation" }),
+    body: JSON.stringify({
+      p_token: token,
+      p_employee_name: employeeName,
+      p_login: login,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.message || data?.hint || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+function adminResetErrorMessageRu(errCode) {
+  switch (errCode) {
+    case "invalid_session":
+      return "Сессия истекла. Войдите снова как администратор.";
+    case "forbidden":
+      return "Сброс пароля доступен только администратору.";
+    case "invalid_input":
+      return "Укажите ФИО и логин (ТН или ярлык).";
+    default:
+      return "Не удалось сбросить пароль.";
+  }
+}
+
+async function adminResetEmployeeAuth(employeeName, tn, triggerBtn) {
+  if (!isAdminAuth()) {
+    alert("Сброс пароля доступен только администратору.");
+    return;
+  }
+  const session = getAuthSession();
+  if (!session?.token) {
+    alert("Войдите как администратор.");
+    return;
+  }
+  const login = authLoginForEmployee(tn, employeeName);
+  const tnLabel = normalizeEmployeeTn(tn) || "—";
+  const ok = confirm(
+    `Сбросить пароль для «${employeeName}»?\n\n` +
+      `ТН: ${tnLabel}\nЛогин: ${login}\nПароль: ${AUTH_DEFAULT_EMPLOYEE_PASSWORD}\n\n` +
+      "Учётка будет создана или обновлена. При следующем входе сотрудник задаст новый пароль."
+  );
+  if (!ok) return;
+  if (triggerBtn) triggerBtn.disabled = true;
+  try {
+    const data = await supabaseRpcAdminResetEmployeeAuth(session.token, employeeName, login);
+    if (!data?.ok) {
+      alert(adminResetErrorMessageRu(data?.error));
+      return;
+    }
+    alert(`Готово.\nЛогин: ${data.login}\nПароль: ${AUTH_DEFAULT_EMPLOYEE_PASSWORD}`);
+  } catch (e) {
+    const msg = String(e?.message || e || "");
+    if (msg.includes("workwatch_admin_reset_employee_auth") || msg.includes("Could not find")) {
+      alert("Сброс в интерфейсе не настроен — выполните supabase-auth.sql в Supabase.");
+    } else {
+      alert(msg.length > 160 ? "Ошибка сброса пароля. См. консоль (F12)." : msg);
+    }
+  } finally {
+    if (triggerBtn) triggerBtn.disabled = false;
+  }
 }
 
 async function supabaseRpcChangePassword(token, currentPassword, newPassword) {

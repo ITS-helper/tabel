@@ -236,6 +236,91 @@ begin
 end;
 $$;
 
+-- Админ: сброс пароля сотрудника и привязка логина к текущему ТН (создаёт учётку, если нет)
+create or replace function public.workwatch_admin_reset_employee_auth(
+  p_token uuid,
+  p_employee_name text,
+  p_login text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_admin_login text;
+  v_admin_role text;
+  v_login text;
+  v_name text;
+  v_old_login text;
+  v_default_pw text := '12345678';
+begin
+  if p_token is null then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  select s.login into v_admin_login
+  from public.workwatch_sessions s
+  where s.token = p_token and s.expires_at > now();
+
+  if v_admin_login is null then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  select role into v_admin_role from public.workwatch_auth_users where login = v_admin_login;
+  if v_admin_role is distinct from 'admin' then
+    return jsonb_build_object('ok', false, 'error', 'forbidden');
+  end if;
+
+  v_name := trim(coalesce(p_employee_name, ''));
+  v_login := lower(trim(coalesce(p_login, '')));
+
+  if length(v_name) < 3 or length(v_login) < 2 then
+    return jsonb_build_object('ok', false, 'error', 'invalid_input');
+  end if;
+
+  select login into v_old_login
+  from public.workwatch_auth_users
+  where employee_name = v_name and role = 'employee'
+  limit 1;
+
+  if v_old_login is not null and v_old_login <> v_login then
+    delete from public.workwatch_sessions where login = v_old_login;
+    delete from public.workwatch_auth_users where login = v_old_login;
+  end if;
+
+  insert into public.workwatch_auth_users (
+    login, password_hash, employee_name, role, must_change_password, failed_attempts, locked_until
+  )
+  values (
+    v_login,
+    crypt(v_default_pw, gen_salt('bf', 10)),
+    v_name,
+    'employee',
+    true,
+    0,
+    null
+  )
+  on conflict (login) do update set
+    password_hash = excluded.password_hash,
+    employee_name = excluded.employee_name,
+    role = 'employee',
+    must_change_password = true,
+    failed_attempts = 0,
+    locked_until = null;
+
+  delete from public.workwatch_sessions
+  where login = v_login and token <> p_token;
+
+  return jsonb_build_object(
+    'ok', true,
+    'login', v_login,
+    'employee_name', v_name,
+    'default_password', v_default_pw
+  );
+end;
+$$;
+
 create or replace function public.workwatch_logout(p_token uuid)
 returns jsonb
 language plpgsql
@@ -250,5 +335,6 @@ $$;
 
 grant execute on function public.workwatch_login(text, text, text) to anon, authenticated;
 grant execute on function public.workwatch_change_password(uuid, text, text) to anon, authenticated;
+grant execute on function public.workwatch_admin_reset_employee_auth(uuid, text, text) to anon, authenticated;
 grant execute on function public.workwatch_logout(uuid) to anon, authenticated;
 grant execute on function public.workwatch_prune_login_attempts() to anon, authenticated;
