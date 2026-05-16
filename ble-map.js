@@ -405,6 +405,80 @@
     return bleDirtyMarkers.size > 0 || !!bleDirtyZone;
   }
 
+  function isZoneEditAllowed() {
+    return bleEditMode && !isCoarseMobile();
+  }
+
+  function getMarkerZoneFilterId() {
+    if (!isZoneEditAllowed() || bleSelectedZoneId == null) return null;
+    return bleSelectedZoneId;
+  }
+
+  function syncZoneEditUiClasses() {
+    document.body.classList.toggle(
+      "ble-map--zone-focus",
+      isZoneEditAllowed() && bleSelectedZoneId != null
+    );
+  }
+
+  function ensureMapGeoman(map) {
+    if (!map?.pm || map._blePmReady) return;
+    try {
+      map.pm.addControls({
+        position: "topleft",
+        drawControls: false,
+        editControls: false,
+        optionsControls: false,
+        customControls: false,
+        oneBlock: true,
+      });
+    } catch {
+      /* controls already on map */
+    }
+    try {
+      if (typeof map.pm.removeControls === "function") map.pm.removeControls();
+      else if (typeof map.pm.toggleControls === "function") map.pm.toggleControls(false);
+    } catch {
+      /* ignore */
+    }
+    map.pm.setGlobalOptions({
+      allowRotation: false,
+      allowScaling: false,
+      allowSelfIntersection: false,
+      snappable: false,
+    });
+    if (typeof map.pm.disableGlobalEditMode === "function") map.pm.disableGlobalEditMode();
+    if (typeof map.pm.disableGlobalDragMode === "function") map.pm.disableGlobalDragMode();
+    map._blePmReady = true;
+  }
+
+  function pointInPolygon(lat, lng, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const yi = ring[i][0];
+      const xi = ring[i][1];
+      const yj = ring[j][0];
+      const xj = ring[j][1];
+      if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function getZoneById(zoneId) {
+    return bleZoneData.find((z) => Number(z.id) === Number(zoneId));
+  }
+
+  function pointBelongsToZone(pt, zoneId) {
+    if (zoneId == null) return true;
+    const zid = Number(zoneId);
+    if (pt.zoneId != null && Number(pt.zoneId) === zid) return true;
+    const zone = getZoneById(zid);
+    if (!zone?.pts || zone.pts.length < 3) return false;
+    return pointInPolygon(pt.lat, pt.lng, zone.pts);
+  }
+
   function polygonLatLngs(layer) {
     let latlngs = layer.getLatLngs();
     if (Array.isArray(latlngs[0]) && Array.isArray(latlngs[0][0])) {
@@ -456,12 +530,27 @@
     const orig = bleZoneData.find((z) => z.id === zoneId);
     const entry = bleZoneLayers.get(zoneId);
     if (entry && orig) {
-      entry.layer.setLatLngs(orig.pts.map((p) => [...p]));
+      entry.layer.setLatLngs(orig.pts.map((p) => L.latLng(p[0], p[1])));
       entry.data.pts = orig.pts.map((p) => [...p]);
     }
   }
 
+  function enableZoneLayerEdit(layer) {
+    const map = layer?._map;
+    if (!map?.pm || !layer?.pm) return false;
+    ensureMapGeoman(map);
+    if (typeof map.pm.disableGlobalEditMode === "function") map.pm.disableGlobalEditMode();
+    if (typeof map.pm.disableGlobalDragMode === "function") map.pm.disableGlobalDragMode();
+    if (typeof layer.pm.disable === "function") layer.pm.disable();
+    if (typeof layer.pm.disableLayerDrag === "function") layer.pm.disableLayerDrag();
+    if (typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
+    if (typeof layer.pm.disableScale === "function") layer.pm.disableScale();
+    layer.pm.enable({ allowSelfIntersection: false });
+    return true;
+  }
+
   function selectZoneForEdit(zoneId) {
+    if (!isZoneEditAllowed()) return;
     const id = Number(zoneId);
     if (!id) {
       if (bleDirtyZone) revertZoneGeometry(bleDirtyZone.zoneId);
@@ -469,6 +558,8 @@
       bleDirtyZone = null;
       disableAllZonePm();
       resetZoneStyles();
+      syncZoneEditUiClasses();
+      redrawMapLayers();
       updateEditBarState();
       return;
     }
@@ -478,15 +569,24 @@
     }
     disableAllZonePm();
     bleSelectedZoneId = id;
+    syncZoneEditUiClasses();
+    redrawMapLayers();
     const entry = bleZoneLayers.get(id);
-    if (!entry) return;
-    resetZoneStyles();
-    const layer = entry.layer;
-    if (layer.pm) {
-      layer.pm.enable({ allowSelfIntersection: false });
+    if (!entry) {
+      updateEditBarState();
+      return;
     }
-    layer.off("pm:edit pm:vertexadded pm:vertexremoved pm:drag");
-    layer.on("pm:edit pm:vertexadded pm:vertexremoved pm:drag", onZoneGeometryChanged);
+    const layer = entry.layer;
+    const map = layer._map || getActiveMap();
+    enableZoneLayerEdit(layer);
+    layer.off("pm:edit pm:vertexadded pm:vertexremoved pm:drag pm:markerdragend");
+    layer.on("pm:edit pm:vertexadded pm:vertexremoved pm:drag pm:markerdragend", onZoneGeometryChanged);
+    try {
+      const bounds = layer.getBounds?.();
+      if (bounds?.isValid?.()) map?.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
+    } catch {
+      /* ignore */
+    }
     updateEditBarState();
   }
 
@@ -515,6 +615,7 @@
     disableAllZonePm();
     bleSelectedZoneId = null;
     resetZoneStyles();
+    syncZoneEditUiClasses();
     redrawMapLayers();
     updateEditBarState();
   }
@@ -603,25 +704,29 @@
       cancelAllEdits();
     }
     if (on) {
-      if (
-        !opts.skipConfirm &&
-        !window.confirm(
-          "Режим редактирования меняет данные на сервере VSM.\n\n• Перетащите метку\n• Нажмите на зону и двигайте вершины\n\nПродолжить?"
-        )
-      ) {
+      const mobile = isCoarseMobile();
+      const confirmText = mobile
+        ? "Режим редактирования меняет данные на сервере VSM.\n\n• Удержите метку 1 сек., затем перетащите\n\nПродолжить?"
+        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: нажмите зону, затем двигайте вершины\n\nПродолжить?";
+      if (!opts.skipConfirm && !window.confirm(confirmText)) {
         return;
       }
     }
     bleEditMode = on;
     document.body.classList.toggle("ble-map--edit", bleEditMode);
+    document.body.classList.toggle("ble-map--zone-edit", bleEditMode && isZoneEditAllowed());
     if (bleEditMode) {
       enterEmbeddedEditLayout();
-      bleEditMapMsg =
-        "Редактирование: удержите метку 1 сек., затем перетащите. Зоны — нажмите и двигайте вершины.";
+      syncZoneEditUiClasses();
+      bleEditMapMsg = isCoarseMobile()
+        ? "Редактирование: удержите метку 1 сек., затем перетащите."
+        : "Метки: удержите 1 сек. Зоны: нажмите зону — останутся только её метки, затем двигайте вершины.";
       hideMapMsg();
     } else {
       disableAllZonePm();
       bleSelectedZoneId = null;
+      syncZoneEditUiClasses();
+      document.body.classList.remove("ble-map--zone-edit");
       bleEditMapMsg = "";
       if (isEmbeddedEditLayout()) exitEmbeddedEditLayout();
       const fsErr = document.getElementById("mapFsMsg")?.classList.contains("error");
@@ -634,7 +739,9 @@
 
   function drawZones(targetMap, opts = {}) {
     if (!targetMap) return;
-    const forEdit = bleEditMode && targetMap === getActiveMap() && opts.forEdit !== false;
+    const forEdit =
+      isZoneEditAllowed() && targetMap === getActiveMap() && opts.forEdit !== false;
+    const zoneFocused = forEdit && bleSelectedZoneId != null;
     let group = bleZoneGroups.get(targetMap);
     if (!group) {
       group = L.layerGroup().addTo(targetMap);
@@ -645,18 +752,24 @@
     if (!bleZoneData.length) return;
     bleZoneData.forEach((z) => {
       if (!z.id || z.pts.length < 3) return;
+      const isSelected = bleSelectedZoneId === z.id;
+      const dimmed = zoneFocused && !isSelected;
       const layer = L.polygon(z.pts, {
         color: z.color,
-        opacity: 0.35,
-        fillOpacity: bleEditMode && forEdit ? 0.22 : 0.15,
-        weight: forEdit && bleSelectedZoneId === z.id ? 3 : 1.5,
-        dashArray: forEdit && bleSelectedZoneId === z.id ? "6 4" : null,
+        opacity: dimmed ? 0.12 : 0.35,
+        fillOpacity: dimmed ? 0.04 : forEdit ? 0.22 : 0.15,
+        weight: isSelected ? 3 : dimmed ? 1 : 1.5,
+        dashArray: isSelected ? "6 4" : null,
+        interactive: forEdit,
       });
       layer.zoneMeta = z;
-      layer.bindTooltip(z.name || `Зона ${z.id}`, { permanent: false, className: "zone-label" });
+      layer.bindTooltip(z.name || `Зона ${z.id}`, {
+        permanent: false,
+        className: "zone-label",
+      });
       if (forEdit) {
         layer.on("click", (e) => {
-          if (!bleEditMode) return;
+          if (!isZoneEditAllowed()) return;
           L.DomEvent.stopPropagation(e);
           selectZoneForEdit(z.id);
         });
@@ -664,6 +777,10 @@
       }
       layer.addTo(group);
     });
+    if (forEdit && bleSelectedZoneId) {
+      const entry = bleZoneLayers.get(bleSelectedZoneId);
+      if (entry?.layer) enableZoneLayerEdit(entry.layer);
+    }
   }
 
   function initBleMap(center, zoom) {
@@ -706,6 +823,7 @@
         );
       });
     });
+    ensureMapGeoman(bleMap);
     setTimeout(() => bleMap.invalidateSize(), 200);
   }
 
@@ -746,6 +864,7 @@
       photoPlace: point.location_image_url || "",
       routeId: point.bleRoute?.id ?? null,
       routeTitle: point.bleRoute?.title || "",
+      zoneId: point.ble_zone_id ?? point.ble_zoneId ?? null,
     };
   }
 
@@ -1064,11 +1183,13 @@
     const statusFilter = opts.statusFilter ?? bleMapFilter;
     const query = opts.query ?? "";
     const requireId = !!opts.requireId;
+    const zoneFilterId = opts.zoneFilterId ?? getMarkerZoneFilterId();
     if (!pt.lat || !pt.lng) return false;
     if (requireId && !pt.id) return false;
     if (statusFilter !== "all" && pt.status !== statusFilter) return false;
     if (!pointPassesRouteFilter(pt)) return false;
     if (!markerMatchesSearch(pt, query)) return false;
+    if (zoneFilterId != null && !pointBelongsToZone(pt, zoneFilterId)) return false;
     return true;
   }
 
@@ -1537,6 +1658,7 @@
         }),
       };
       fsTileLayers.street.addTo(bleMapFS);
+      ensureMapGeoman(bleMapFS);
       if (bleMap) {
         bleMapFS.setView(bleMap.getCenter(), bleMap.getZoom());
       } else if (bleMapData.length) {

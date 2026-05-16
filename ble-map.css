@@ -770,6 +770,22 @@ body.ble-map--edit .ble-dot--hold-armed {
   }
 }
 
+/* Geoman: вершины зоны, без оранжевого bbox и панели */
+body.ble-map--edit .leaflet-pm-toolbar {
+  display: none !important;
+}
+
+body.ble-map--zone-focus .leaflet-pm-dragging-box,
+body.ble-map--zone-focus .pm-rotation-handle,
+body.ble-map--zone-focus .pm-scale-edge {
+  display: none !important;
+}
+
+body.ble-map--zone-focus .leaflet-marker-icon.leaflet-pm-vertex,
+body.ble-map--zone-focus .leaflet-marker-icon.leaflet-pm-midvertex {
+  display: block !important;
+}
+
 .map-fullscreen-btn__text {
   display: inline;
 }
