@@ -964,7 +964,7 @@ html.ble-map-embedded .map-msg:not([hidden]) {
 }
 
 html.ble-map-embedded body.ble-map-mobile .map-msg:not([hidden]) {
-  top: calc(96px + max(6px, env(safe-area-inset-top)));
+  top: calc(52px + max(6px, env(safe-area-inset-top)));
 }
 
 /* Отдельная страница ble-map.html — карта на всю высоту под шапкой */
@@ -1100,25 +1100,22 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     max-width: 100%;
   }
 
-  .map-route-field--toolbar {
-    flex: 1 1 calc(50% - 4px);
+  .map-toolbar .map-route-field--toolbar {
+    order: 1;
+    flex: 1 1 calc(54% - 4px);
     min-width: 0;
     max-width: none;
   }
 
-  .map-search-bar--toolbar {
-    flex: 1 1 calc(50% - 4px);
+  .map-toolbar .map-search-bar--toolbar {
+    order: 2;
+    flex: 1 1 calc(46% - 4px);
     min-width: 0;
     max-width: none;
   }
 
-  html.ble-map-embedded body.ble-map-mobile .map-route-field--toolbar {
-    flex: 1 1 100%;
-  }
-
-  html.ble-map-embedded body.ble-map-mobile .map-search-bar--toolbar {
-    flex: 1 1 100%;
-    order: 12;
+  .map-toolbar > :not(.map-route-field--toolbar):not(.map-search-bar--toolbar) {
+    order: 10;
   }
 
   html.ble-map-embedded body.ble-map-mobile .map-toolbar__sep:not(.map-toolbar__sep--before-layers) {
@@ -1187,12 +1184,6 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     left: 6px;
   }
 
-  .map-search-bar--toolbar {
-    flex: 1 1 72px;
-    min-width: 64px;
-    max-width: none;
-  }
-
   .map-search-bar input {
     min-height: 34px;
     font-size: 16px;
@@ -1213,7 +1204,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   #bleMap .leaflet-control-zoom {
-    margin-top: calc(88px + max(6px, env(safe-area-inset-top))) !important;
+    margin-top: calc(64px + max(6px, env(safe-area-inset-top))) !important;
     margin-bottom: max(8px, env(safe-area-inset-bottom)) !important;
     margin-right: max(8px, env(safe-area-inset-right)) !important;
   }
