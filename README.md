@@ -69,6 +69,22 @@
 
 Повторный seed с `SEED_RESET_PASSWORDS=0` не трогает уже выданные пароли (только ФИО и роль).
 
+**Сменить свой пароль в интерфейсе:** после входа в шапке — **«Сменить пароль»** (между бейджем «Админ» и «Выйти») или клик по бейджу с именем.
+
+**Сбросить пароль сотруднику** (вернуть `12345678` и снова потребовать смену) — в Supabase SQL Editor:
+
+```sql
+update public.workwatch_auth_users
+set
+  password_hash = extensions.crypt('12345678', extensions.gen_salt('bf', 10)),
+  must_change_password = true,
+  failed_attempts = 0,
+  locked_until = null
+where login = '11604';  -- логин сотрудника
+```
+
+Либо заново `npm run seed-auth` и выполнить `auth-users-seed.sql` (сбросит пароли всех, у кого в seed есть запись).
+
 ### Защита от перебора
 
 В [`supabase-auth.sql`](supabase-auth.sql) функция **`workwatch_login`**:

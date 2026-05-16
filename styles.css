@@ -1828,6 +1828,14 @@ body[data-mode="edit"] .pill:hover {
   flex-wrap: wrap;
 }
 
+.auth-badge--clickable {
+  cursor: pointer;
+}
+
+.auth-badge--clickable:hover {
+  filter: brightness(1.05);
+}
+
 .auth-badge {
   display: inline-block;
   padding: 4px 10px;

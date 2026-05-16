@@ -1220,6 +1220,7 @@ function syncAuthChrome() {
   if (!s) {
     badge.hidden = true;
     badge.textContent = "";
+    badge.classList.remove("auth-badge--clickable");
     logoutBtn.hidden = true;
     if (changePwdBtn) changePwdBtn.hidden = true;
     return;
@@ -1227,13 +1228,21 @@ function syncAuthChrome() {
   logoutBtn.hidden = false;
   if (changePwdBtn) changePwdBtn.hidden = false;
   badge.hidden = false;
+  badge.classList.add("auth-badge--clickable");
+  if (!badge.dataset.wwPwdBound) {
+    badge.dataset.wwPwdBound = "1";
+    badge.addEventListener("click", () => {
+      if (getAuthSession()) openChangePasswordDialog({ required: false });
+    });
+  }
+  const pwdHint = " Клик по бейджу или «Сменить пароль» — смена пароля.";
   if (s.role === "admin") {
     badge.textContent = "Админ";
-    badge.title = `Вход: ${s.login}. Редактирование всех строк и настроек объектов.`;
+    badge.title = `Вход: ${s.login}. Редактирование всех строк и настроек объектов.${pwdHint}`;
   } else {
     const short = s.employeeName ? s.employeeName.split(" ")[0] : s.login;
     badge.textContent = short;
-    badge.title = `Вход: ${s.employeeName || s.login}. Можно менять только свою строку в графике.`;
+    badge.title = `Вход: ${s.employeeName || s.login}. Можно менять только свою строку в графике.${pwdHint}`;
   }
 }
 
