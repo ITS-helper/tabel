@@ -38,6 +38,16 @@
   let fsTileLayerCurrent = "street";
   let bleClusterGroupFS = null;
 
+  let bleCompanyId = null;
+  let bleEditMode = false;
+  let bleDirtyMarkers = new Map();
+  let bleDirtyZone = null;
+  let bleSelectedZoneId = null;
+  let bleMarkerLayer = null;
+  const bleZoneGroups = new WeakMap();
+  let bleZoneLayers = new Map();
+  let bleEditMapMsg = "";
+
   function esc(str) {
     return String(str).replace(/[&<>"']/g, (m) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]
@@ -264,12 +274,307 @@
     return res.json();
   }
 
-  function drawZones(targetMap) {
-    if (!targetMap || !bleZoneData.length) return;
+  async function bleApiMutate(method, path, body, retried = false) {
+    let token = getBleToken();
+    if (!token) {
+      if (retried) throw new Error("auth_failed");
+      await bleAutoLogin();
+      return bleApiMutate(method, path, body, true);
+    }
+    const res = await bleHttpFetch(path, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: body != null ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) {
+      if (retried) throw new Error(`HTTP ${res.status}`);
+      localStorage.removeItem(BLE_TOKEN_KEY);
+      await bleAutoLogin();
+      return bleApiMutate(method, path, body, true);
+    }
+    if (!res.ok) {
+      let detail = "";
+      try {
+        detail = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`HTTP ${res.status}${detail ? ": " + detail.slice(0, 120) : ""}`);
+    }
+    const ct = res.headers.get("content-type") || "";
+    if (res.status === 204 || !ct.includes("json")) return null;
+    return res.json();
+  }
+
+  function hasUnsavedEdits() {
+    return bleDirtyMarkers.size > 0 || !!bleDirtyZone;
+  }
+
+  function polygonLatLngs(layer) {
+    let latlngs = layer.getLatLngs();
+    if (Array.isArray(latlngs[0]) && Array.isArray(latlngs[0][0])) {
+      latlngs = latlngs[0];
+    }
+    return latlngs;
+  }
+
+  function latLngsToPts(latlngs) {
+    return latlngs.map((ll) => [ll.lat, ll.lng]);
+  }
+
+  function ptsToApiPoints(pts) {
+    return pts.map((p) => ({ latitude: p[0], longitude: p[1] }));
+  }
+
+  function resetZoneStyles() {
+    bleZoneLayers.forEach((entry) => {
+      const z = entry.data;
+      entry.layer.setStyle({
+        color: z.color,
+        weight: bleSelectedZoneId === z.id ? 3 : 1.5,
+        dashArray: bleSelectedZoneId === z.id ? "6 4" : null,
+      });
+    });
+  }
+
+  function disableAllZonePm() {
+    bleZoneLayers.forEach((entry) => {
+      if (entry.layer.pm) entry.layer.pm.disable();
+    });
+  }
+
+  function onZoneGeometryChanged(e) {
+    const layer = e.layer;
+    const meta = layer.zoneMeta;
+    if (!meta) return;
+    const entry = bleZoneLayers.get(meta.id);
+    bleDirtyZone = {
+      zoneId: meta.id,
+      name: entry?.data.name ?? meta.name,
+      description: entry?.data.description ?? meta.description,
+      layer,
+    };
+    updateEditBarState();
+  }
+
+  function revertZoneGeometry(zoneId) {
+    const orig = bleZoneData.find((z) => z.id === zoneId);
+    const entry = bleZoneLayers.get(zoneId);
+    if (entry && orig) {
+      entry.layer.setLatLngs(orig.pts.map((p) => [...p]));
+      entry.data.pts = orig.pts.map((p) => [...p]);
+    }
+  }
+
+  function selectZoneForEdit(zoneId) {
+    const id = Number(zoneId);
+    if (!id) {
+      if (bleDirtyZone) revertZoneGeometry(bleDirtyZone.zoneId);
+      bleSelectedZoneId = null;
+      bleDirtyZone = null;
+      disableAllZonePm();
+      resetZoneStyles();
+      updateEditBarState();
+      return;
+    }
+    if (bleDirtyZone && bleDirtyZone.zoneId !== id) {
+      revertZoneGeometry(bleDirtyZone.zoneId);
+      bleDirtyZone = null;
+    }
+    disableAllZonePm();
+    bleSelectedZoneId = id;
+    const entry = bleZoneLayers.get(id);
+    if (!entry) return;
+    resetZoneStyles();
+    const layer = entry.layer;
+    if (layer.pm) {
+      layer.pm.enable({ allowSelfIntersection: false });
+    }
+    layer.off("pm:edit pm:vertexadded pm:vertexremoved pm:drag");
+    layer.on("pm:edit pm:vertexadded pm:vertexremoved pm:drag", onZoneGeometryChanged);
+    const sel = document.getElementById("mapZoneSelect");
+    if (sel && String(sel.value) !== String(id)) sel.value = String(id);
+    updateEditBarState();
+  }
+
+  function populateZoneSelect() {
+    const sel = document.getElementById("mapZoneSelect");
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Зона…</option>';
     bleZoneData.forEach((z) => {
-      L.polygon(z.pts, { color: z.color, opacity: 0.35, fillOpacity: 0.15, weight: 1.5 })
-        .bindTooltip(z.name, { permanent: false, className: "zone-label" })
-        .addTo(targetMap);
+      if (!z.id || z.pts.length < 3) return;
+      const opt = document.createElement("option");
+      opt.value = String(z.id);
+      opt.textContent = z.name || `Зона ${z.id}`;
+      sel.appendChild(opt);
+    });
+    if (cur && sel.querySelector(`option[value="${cur}"]`)) sel.value = cur;
+  }
+
+  function updateEditBarState() {
+    const saveBtn = document.getElementById("mapSaveBtn");
+    if (saveBtn) saveBtn.disabled = !hasUnsavedEdits();
+    const toggle = document.getElementById("mapEditToggle");
+    if (toggle) toggle.classList.toggle("active", bleEditMode);
+    const tools = document.getElementById("mapEditTools");
+    if (tools) tools.hidden = !bleEditMode;
+  }
+
+  function cancelAllEdits() {
+    bleDirtyMarkers.forEach(({ point, origLat, origLng }) => {
+      point.lat = origLat;
+      point.lng = origLng;
+    });
+    bleDirtyMarkers.clear();
+    if (bleDirtyZone) revertZoneGeometry(bleDirtyZone.zoneId);
+    bleDirtyZone = null;
+    disableAllZonePm();
+    bleSelectedZoneId = null;
+    const sel = document.getElementById("mapZoneSelect");
+    if (sel) sel.value = "";
+    resetZoneStyles();
+    renderBleMarkers();
+    if (bleMap) drawZones(bleMap, { forEdit: bleEditMode });
+    updateEditBarState();
+  }
+
+  async function saveDirtyMarkers() {
+    const entries = [...bleDirtyMarkers.entries()];
+    if (!entries.length) return 0;
+    if (entries.length === 1) {
+      const [, { lat, lng, point }] = entries[0];
+      await bleApiMutate("PUT", `/api/v1/ble/${point.id}`, { latitude: lat, longitude: lng });
+    } else if (bleCompanyId) {
+      const payload = entries.map(([, { point, lat, lng }]) => ({
+        ble: point.ble || String(point.id),
+        coords: [lat, lng],
+      }));
+      await bleApiMutate("PUT", `/api/v1/map/ble/${bleCompanyId}/bulk`, payload);
+    } else {
+      for (const [, { lat, lng, point }] of entries) {
+        await bleApiMutate("PUT", `/api/v1/ble/${point.id}`, { latitude: lat, longitude: lng });
+      }
+    }
+    entries.forEach(([, { point, lat, lng }]) => {
+      point.lat = lat;
+      point.lng = lng;
+    });
+    bleDirtyMarkers.clear();
+    return entries.length;
+  }
+
+  async function saveDirtyZone() {
+    if (!bleDirtyZone) return 0;
+    const { zoneId, name, description, layer } = bleDirtyZone;
+    const pts = latLngsToPts(polygonLatLngs(layer));
+    if (pts.length < 3) throw new Error("У зоны должно быть минимум 3 точки");
+    await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
+      name: name || `Зона ${zoneId}`,
+      description: description || null,
+      points: ptsToApiPoints(pts),
+    });
+    const z = bleZoneData.find((x) => x.id === zoneId);
+    if (z) z.pts = pts;
+    const entry = bleZoneLayers.get(zoneId);
+    if (entry) entry.data.pts = pts;
+    bleDirtyZone = null;
+    disableAllZonePm();
+    return 1;
+  }
+
+  async function saveAllEdits() {
+    const btn = document.getElementById("mapSaveBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⌛ Сохранение…";
+    }
+    try {
+      const nMarkers = await saveDirtyMarkers();
+      const nZone = await saveDirtyZone();
+      const parts = [];
+      if (nMarkers) parts.push(`меток: ${nMarkers}`);
+      if (nZone) parts.push("зона");
+      showMapMsg("Сохранено (" + parts.join(", ") + ")", "ok");
+      bleEditMapMsg = "";
+      updateEditBarState();
+    } catch (e) {
+      showMapMsg("Ошибка сохранения: " + (e.message || e), "error");
+      throw e;
+    } finally {
+      if (btn) {
+        btn.textContent = "Сохранить";
+        updateEditBarState();
+      }
+    }
+  }
+
+  function setEditMode(on) {
+    if (on === bleEditMode) return;
+    if (!on && hasUnsavedEdits()) {
+      if (!window.confirm("Отменить несохранённые изменения?")) return;
+      cancelAllEdits();
+    }
+    if (on) {
+      const fsOpen = document.getElementById("mapFullscreenOverlay")?.classList.contains("open");
+      if (fsOpen) closeFullscreenMap();
+      if (
+        !window.confirm(
+          "Режим редактирования меняет данные на сервере VSM.\n\n• Перетащите метку\n• Выберите зону и двигайте вершины\n\nПродолжить?"
+        )
+      ) {
+        return;
+      }
+    }
+    bleEditMode = on;
+    document.body.classList.toggle("ble-map--edit", bleEditMode);
+    if (bleEditMode) {
+      populateZoneSelect();
+      bleEditMapMsg =
+        "Редактирование: перетащите метку или выберите зону в списке. Вершины — потяните за точки.";
+      showMapMsg(bleEditMapMsg, "ok");
+    } else {
+      disableAllZonePm();
+      bleSelectedZoneId = null;
+      bleEditMapMsg = "";
+      if (!document.getElementById("mapMsg")?.classList.contains("error")) hideMapMsg();
+    }
+    renderBleMarkers();
+    if (bleMap) drawZones(bleMap, { forEdit: bleEditMode });
+    updateEditBarState();
+  }
+
+  function drawZones(targetMap, opts = {}) {
+    if (!targetMap) return;
+    const forEdit = targetMap === bleMap && bleEditMode && opts.forEdit !== false;
+    let group = bleZoneGroups.get(targetMap);
+    if (!group) {
+      group = L.layerGroup().addTo(targetMap);
+      bleZoneGroups.set(targetMap, group);
+    }
+    group.clearLayers();
+    if (forEdit) bleZoneLayers.clear();
+    if (!bleZoneData.length) return;
+    bleZoneData.forEach((z) => {
+      if (!z.id || z.pts.length < 3) return;
+      const layer = L.polygon(z.pts, {
+        color: z.color,
+        opacity: 0.35,
+        fillOpacity: bleEditMode && forEdit ? 0.22 : 0.15,
+        weight: forEdit && bleSelectedZoneId === z.id ? 3 : 1.5,
+        dashArray: forEdit && bleSelectedZoneId === z.id ? "6 4" : null,
+      });
+      layer.zoneMeta = z;
+      layer.bindTooltip(z.name || `Зона ${z.id}`, { permanent: false, className: "zone-label" });
+      if (forEdit) {
+        layer.on("click", (e) => {
+          if (!bleEditMode) return;
+          L.DomEvent.stopPropagation(e);
+          selectZoneForEdit(z.id);
+        });
+        bleZoneLayers.set(z.id, { layer, data: z });
+      }
+      layer.addTo(group);
     });
   }
 
@@ -335,6 +640,8 @@
     else if (!isInspected) status = "inspection";
     return {
       id: point.id,
+      origLat: point.latitude,
+      origLng: point.longitude,
       ble: String(point.ble_number || ""),
       name: point.name_extended || "",
       lat: point.latitude,
@@ -412,9 +719,48 @@
     });
   }
 
+  function onMarkerDragEnd(pt, marker) {
+    const ll = marker.getLatLng();
+    if (!bleDirtyMarkers.has(pt.id)) {
+      bleDirtyMarkers.set(pt.id, { point: pt, origLat: pt.lat, origLng: pt.lng });
+    }
+    const rec = bleDirtyMarkers.get(pt.id);
+    rec.lat = ll.lat;
+    rec.lng = ll.lng;
+    pt.lat = ll.lat;
+    pt.lng = ll.lng;
+    updateEditBarState();
+  }
+
   function renderBleMarkers() {
     if (!bleMap) return;
-    if (bleClusterGroup) bleMap.removeLayer(bleClusterGroup);
+    if (bleClusterGroup) {
+      bleMap.removeLayer(bleClusterGroup);
+      bleClusterGroup = null;
+    }
+    if (bleMarkerLayer) {
+      bleMap.removeLayer(bleMarkerLayer);
+      bleMarkerLayer = null;
+    }
+    if (bleEditMode) {
+      bleMarkerLayer = L.layerGroup();
+      bleMapData.forEach((pt) => {
+        if (!pt.id || !pt.lat || !pt.lng) return;
+        if (bleMapFilter !== "all" && pt.status !== bleMapFilter) return;
+        const marker = L.marker([pt.lat, pt.lng], {
+          icon: createBleIcon(pt),
+          draggable: true,
+          autoPan: true,
+        });
+        marker.on("dragend", () => onMarkerDragEnd(pt, marker));
+        marker.bindPopup(makePopup(pt) + "<p style='margin:8px 0 0;font-size:12px;color:#546E7A'>Перетащите для смены координат</p>", {
+          maxWidth: popupMaxWidth(),
+        });
+        marker.addTo(bleMarkerLayer);
+      });
+      bleMap.addLayer(bleMarkerLayer);
+      return;
+    }
     bleClusterGroup = makeClusterGroup();
     bleMapData.forEach((pt) => {
       if (!pt.lat || !pt.lng) return;
@@ -493,6 +839,8 @@
   function revealMapControls() {
     const dock = document.getElementById("mapFloatDock");
     if (dock) dock.hidden = false;
+    const editBar = document.getElementById("mapEditBar");
+    if (editBar) editBar.hidden = false;
     const retry = document.getElementById("mapRetryBtn");
     if (retry) retry.hidden = true;
     const retryWrap = document.getElementById("mapRetryBtnWrap");
@@ -527,6 +875,7 @@
         showMapMsg("Не удалось определить companyId", "error");
         return;
       }
+      bleCompanyId = companyId;
       let rawBle;
       let cacheNotice = "";
       try {
@@ -556,12 +905,15 @@
           });
           bleZoneData = mapData.zones
             .map((z) => ({
+              id: z.id,
               name: z.name || "",
+              description: z.description || "",
               color: z.color || "#0088cc",
-              pts: pointsByZone[z.id] || [],
+              pts: (pointsByZone[z.id] || []).map((p) => [...p]),
             }))
             .filter((z) => z.pts.length > 2);
-          drawZones(bleMap);
+          drawZones(bleMap, { forEdit: bleEditMode });
+          populateZoneSelect();
         }
       } catch {
         /* zones optional */
@@ -725,7 +1077,7 @@
           fsSearchEl.focus();
         });
       }
-      drawZones(bleMapFS);
+      drawZones(bleMapFS, { forEdit: false });
       bleMapFSInitialized = true;
     }
     syncFsStats();
@@ -774,6 +1126,13 @@
         mapBleSearchEl.focus();
       });
     }
+
+    document.getElementById("mapEditToggle")?.addEventListener("click", () => setEditMode(!bleEditMode));
+    document.getElementById("mapSaveBtn")?.addEventListener("click", () => saveAllEdits());
+    document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
+    document.getElementById("mapZoneSelect")?.addEventListener("change", (e) => {
+      selectZoneForEdit(e.target.value);
+    });
 
     document.getElementById("mapFullscreenBtnWrap")?.addEventListener("click", openFullscreenMap);
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
