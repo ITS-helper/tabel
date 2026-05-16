@@ -1,6 +1,7 @@
 /**
  * Скачивает список BLE с Worker и сохраняет кэш для карты без VPN.
  * Запуск: node scripts/push-ble-cache.mjs
+ * Windows: двойной клик по push-ble-cache.bat в корне или scripts\push-ble-cache.bat
  * Опционально в Supabase (нужен SUPABASE_SERVICE_ROLE_KEY в env):
  *   set SUPABASE_SERVICE_ROLE_KEY=... && node scripts/push-ble-cache.mjs
  */
