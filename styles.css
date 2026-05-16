@@ -2700,8 +2700,34 @@ body.zp-drag-active .person-chip:not(.dragging) {
 }
 
 @media (max-width: 768px) {
+  .app--blemap-view .header__row--bottom {
+    display: none;
+  }
+
+  .app--blemap-view .header__row--top {
+    padding-bottom: 4px;
+  }
+
+  .app--blemap-view .header__actions .segmented,
+  .app--blemap-view .header__actions #exportBtn,
+  .app--blemap-view .header__actions #themeToggle {
+    display: none;
+  }
+
+  .app-page--blemap.is-active {
+    margin: 0 -8px;
+  }
+
   .app-page__iframe {
-    height: calc(100vh - 260px);
-    min-height: 360px;
+    height: calc(100dvh - 132px);
+    min-height: 280px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .app--blemap-view .app-page__iframe {
+    height: calc(100dvh - 118px);
+    min-height: 0;
   }
 }

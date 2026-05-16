@@ -277,13 +277,27 @@
     if (bleMap) return;
     const placeholder = document.getElementById("mapPlaceholder");
     if (placeholder) placeholder.remove();
-    bleMap = L.map("bleMap", { attributionControl: false, zoomControl: true }).setView(center, zoom);
+    const mobile = isCoarseMobile();
+    bleMap = L.map("bleMap", {
+      attributionControl: false,
+      zoomControl: false,
+      tapTolerance: 18,
+      bounceAtZoomLimits: false,
+      preferCanvas: mobile,
+    }).setView(center, zoom);
+    L.control
+      .zoom({
+        position: mobile ? "bottomright" : "topright",
+      })
+      .addTo(bleMap);
     const tileLayers = {
       satellite: L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { attribution: "Esri" }
+        { attribution: "Esri", updateWhenIdle: mobile }
       ),
-      street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"),
+      street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        updateWhenIdle: mobile,
+      }),
     };
     tileLayers.street.addTo(bleMap);
     let currentTileLayer = "street";
@@ -406,7 +420,7 @@
       if (!pt.lat || !pt.lng) return;
       if (bleMapFilter !== "all" && pt.status !== bleMapFilter) return;
       L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
-        .bindPopup(makePopup(pt), { maxWidth: 280 })
+        .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
         .addTo(bleClusterGroup);
     });
     bleMap.addLayer(bleClusterGroup);
@@ -427,11 +441,39 @@
     set("fcInsp", insp);
   }
 
+  function isCoarseMobile() {
+    return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
+  }
+
+  function popupMaxWidth() {
+    return Math.min(280, Math.max(200, window.innerWidth - 48));
+  }
+
+  function scheduleMapResize() {
+    if (!bleMap) return;
+    bleMap.invalidateSize();
+    setTimeout(() => bleMap?.invalidateSize(), 200);
+    setTimeout(() => bleMap?.invalidateSize(), 600);
+  }
+
+  function applyMapLayoutClasses() {
+    const embedded = window.self !== window.top;
+    document.documentElement.classList.toggle("ble-map-embedded", embedded);
+    document.body.classList.toggle("ble-map-embedded", embedded);
+    document.body.classList.toggle("ble-map-mobile", isCoarseMobile());
+  }
+
+  function bindMapResizeHandlers() {
+    window.addEventListener("resize", scheduleMapResize, { passive: true });
+    window.addEventListener("orientationchange", scheduleMapResize, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", scheduleMapResize, { passive: true });
+    }
+  }
+
   function revealMapControls() {
-    ["mapLayerToggle", "mapFiltersBlock", "mapBottomControls"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.hidden = false;
-    });
+    const dock = document.getElementById("mapFloatDock");
+    if (dock) dock.hidden = false;
     const retry = document.getElementById("mapRetryBtn");
     if (retry) retry.hidden = true;
     const retryWrap = document.getElementById("mapRetryBtnWrap");
@@ -521,6 +563,7 @@
       if (cacheNotice) showMapMsg(cacheNotice, "ok");
       else hideMapMsg();
       bleMapInitialized = true;
+      scheduleMapResize();
     } catch (e) {
       const msg = e?.message || "";
       const isAuth =
@@ -575,7 +618,7 @@
       if (!pt.lat || !pt.lng) return;
       if (bleMapFSFilter !== "all" && pt.status !== bleMapFSFilter) return;
       L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
-        .bindPopup(makePopup(pt), { maxWidth: 280 })
+        .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
         .addTo(bleClusterGroupFS);
     });
     bleMapFS.addLayer(bleClusterGroupFS);
@@ -587,13 +630,27 @@
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
     if (!bleMapFSInitialized) {
-      bleMapFS = L.map("bleMapFS", { attributionControl: false, zoomControl: true });
+      const fsMobile = isCoarseMobile();
+      bleMapFS = L.map("bleMapFS", {
+        attributionControl: false,
+        zoomControl: false,
+        tapTolerance: 18,
+        bounceAtZoomLimits: false,
+        preferCanvas: fsMobile,
+      });
+      L.control
+        .zoom({
+          position: fsMobile ? "bottomright" : "topright",
+        })
+        .addTo(bleMapFS);
       fsTileLayers = {
         satellite: L.tileLayer(
           "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          { attribution: "Esri" }
+          { attribution: "Esri", updateWhenIdle: fsMobile }
         ),
-        street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"),
+        street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          updateWhenIdle: fsMobile,
+        }),
       };
       fsTileLayers.street.addTo(bleMapFS);
       if (bleMap) {
@@ -723,12 +780,24 @@
       const back = document.getElementById("bleMapBackLink");
       if (back) back.hidden = true;
     }
+    applyMapLayoutClasses();
+    bindMapResizeHandlers();
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "ww-ble-map-resize") scheduleMapResize();
+    });
+    try {
+      if (window.self !== window.top && window.parent) {
+        window.parent.postMessage({ type: "ww-ble-map-ready" }, "*");
+      }
+    } catch {
+      /* cross-origin */
+    }
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     initEmbeddedChrome();
     bindUi();
     loadBleMap();
-    setTimeout(() => bleMap?.invalidateSize(), 400);
+    scheduleMapResize();
   });
 })();

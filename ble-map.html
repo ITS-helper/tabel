@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Карта BLE-меток — WORK WATCH</title>
   <meta name="theme-color" content="#2196F3" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -26,28 +27,40 @@
         <div class="map-retry-wrap" id="mapRetryBtnWrap" hidden>
           <button type="button" class="map-auth-btn" id="mapRetryBtn">↺ Обновить карту</button>
         </div>
-        <div id="mapFiltersBlock" class="map-filters" hidden>
-          <button type="button" class="map-filter-btn filter-all active" data-filter="all">Все <span class="filter-count" id="fcAll">0</span></button>
-          <button type="button" class="map-filter-btn filter-ok" data-filter="ok">Норма <span class="filter-count" id="fcOk">0</span></button>
-          <button type="button" class="map-filter-btn filter-battery" data-filter="battery">Батарея <span class="filter-count" id="fcBat">0</span></button>
-          <button type="button" class="map-filter-btn filter-inspection" data-filter="inspection">Не пройдено <span class="filter-count" id="fcInsp">0</span></button>
-        </div>
-        <div id="mapBottomControls" class="map-bottom-controls" hidden>
-          <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-            Полный экран
-          </button>
-          <div id="mapLayerToggle" class="map-layer-toggle">
-            <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
-            <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
-          </div>
-          <div id="mapSearchBlock" class="map-search-bar">
-            <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" />
-            <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить">✕</button>
-          </div>
-        </div>
         <div id="bleMap">
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
+        </div>
+        <div class="map-float-dock" id="mapFloatDock" hidden>
+          <div id="mapFiltersBlock" class="map-filters">
+            <button type="button" class="map-filter-btn filter-all active" data-filter="all">
+              <span class="map-filter-label">Все</span> <span class="filter-count" id="fcAll">0</span>
+            </button>
+            <button type="button" class="map-filter-btn filter-ok" data-filter="ok">
+              <span class="map-filter-label">Норма</span> <span class="filter-count" id="fcOk">0</span>
+            </button>
+            <button type="button" class="map-filter-btn filter-battery" data-filter="battery">
+              <span class="map-filter-label">Батарея</span> <span class="filter-count" id="fcBat">0</span>
+            </button>
+            <button type="button" class="map-filter-btn filter-inspection" data-filter="inspection">
+              <span class="map-filter-label map-filter-label--long">Не пройдено</span>
+              <span class="map-filter-label map-filter-label--short">Н/п</span>
+              <span class="filter-count" id="fcInsp">0</span>
+            </button>
+          </div>
+          <div id="mapBottomControls" class="map-bottom-controls">
+            <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap" aria-label="На весь экран">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              <span class="map-fullscreen-btn__text">Экран</span>
+            </button>
+            <div id="mapLayerToggle" class="map-layer-toggle">
+              <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
+              <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
+            </div>
+            <div id="mapSearchBlock" class="map-search-bar">
+              <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
+              <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить" aria-label="Очистить">✕</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -76,7 +89,7 @@
       <button type="button" class="map-layer-btn" id="btnFsSatellite" data-fslayer="satellite">Спутник</button>
       <button type="button" class="map-layer-btn active" id="btnFsStreet" data-fslayer="street">Схема</button>
       <div class="map-fullscreen-search">
-        <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" />
+        <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
         <button type="button" class="map-fullscreen-search-clear" id="mapFsSearchClear" title="Очистить">✕</button>
       </div>
     </div>

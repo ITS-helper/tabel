@@ -70,11 +70,38 @@
       align-items: center;
       gap: 4px;
       padding: 6px 8px;
+      padding-top: max(6px, env(safe-area-inset-top));
       background: rgba(255,255,255,0.95);
       backdrop-filter: blur(8px);
       border-bottom: 1px solid rgba(0,0,0,0.08);
       flex-shrink: 0;
       z-index: 10;
+    }
+
+    @media (max-width: 768px), (pointer: coarse) {
+      .fs-compact-bar {
+        padding: 8px;
+        padding-top: max(8px, env(safe-area-inset-top));
+        gap: 6px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .fs-compact-bar .fs-chip {
+        min-height: 40px;
+        padding: 8px 10px;
+        font-size: 0.68em;
+        flex-shrink: 0;
+      }
+      .fs-compact-bar .fs-search input {
+        min-height: 40px;
+        font-size: 16px;
+      }
+      .fs-close-btn {
+        width: 44px !important;
+        height: 44px !important;
+        font-size: 18px !important;
+      }
     }
 
     .fs-compact-bar .fs-filters {

@@ -2573,6 +2573,17 @@ function showAppPage(pageId) {
   document.querySelectorAll(".app-nav__tab").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.appPage === valid);
   });
+  document.getElementById("app")?.classList.toggle("app--blemap-view", valid === "blemap");
+  if (valid === "blemap") {
+    const iframe = document.querySelector("#page-blemap iframe");
+    if (iframe?.contentWindow) {
+      try {
+        iframe.contentWindow.postMessage({ type: "ww-ble-map-resize" }, "*");
+      } catch {
+        /* ignore */
+      }
+    }
+  }
   try {
     sessionStorage.setItem(APP_PAGE_STORAGE_KEY, valid);
   } catch {
