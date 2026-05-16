@@ -68,6 +68,10 @@
     return document.getElementById("mapFullscreenOverlay")?.classList.contains("open");
   }
 
+  function isEmbeddedEditLayout() {
+    return document.body.classList.contains("ble-map--edit-layout");
+  }
+
   function getActiveMap() {
     return isMapFullscreenOpen() && bleMapFS ? bleMapFS : bleMap;
   }
@@ -84,6 +88,18 @@
     }
   }
 
+  function enterEmbeddedEditLayout() {
+    document.body.classList.add("ble-map--edit-layout");
+    notifyMapFullscreenState(true);
+    scheduleMapResize();
+  }
+
+  function exitEmbeddedEditLayout() {
+    document.body.classList.remove("ble-map--edit-layout");
+    notifyMapFullscreenState(false);
+    scheduleMapResize();
+  }
+
   function getFsSearchQuery() {
     const raw =
       document.getElementById("pf-search")?.value ??
@@ -95,9 +111,7 @@
   function showMapMsg(text, type = "") {
     if (!text || type !== "error") return;
     const fsOpen = isMapFullscreenOpen();
-    const el = fsOpen
-      ? document.getElementById("mapFsMsg")
-      : document.getElementById("mapMsg");
+    const el = fsOpen ? document.getElementById("mapFsMsg") : document.getElementById("mapMsg");
     if (!el) return;
     el.textContent = text;
     el.className =
@@ -476,6 +490,11 @@
     if (toggle) toggle.classList.toggle("active", bleEditMode);
     const tools = document.getElementById("mapEditTools");
     if (tools) tools.hidden = !bleEditMode;
+    const editBtn = document.getElementById("mapEditModeBtn");
+    if (editBtn) {
+      editBtn.classList.toggle("active", bleEditMode);
+      editBtn.setAttribute("aria-pressed", bleEditMode ? "true" : "false");
+    }
   }
 
   function cancelAllEdits() {
@@ -585,11 +604,11 @@
       ) {
         return;
       }
-      if (!isMapFullscreenOpen()) openFullscreenMap();
     }
     bleEditMode = on;
     document.body.classList.toggle("ble-map--edit", bleEditMode);
     if (bleEditMode) {
+      enterEmbeddedEditLayout();
       bleEditMapMsg =
         "Редактирование: перетащите метку или нажмите на зону на карте. Вершины — потяните за точки.";
       hideMapMsg();
@@ -597,6 +616,7 @@
       disableAllZonePm();
       bleSelectedZoneId = null;
       bleEditMapMsg = "";
+      if (isEmbeddedEditLayout()) exitEmbeddedEditLayout();
       const fsErr = document.getElementById("mapFsMsg")?.classList.contains("error");
       const mainErr = document.getElementById("mapMsg")?.classList.contains("error");
       if (!fsErr && !mainErr) hideMapMsg();
@@ -1335,18 +1355,12 @@
 
   window.closeFullscreenMap = function closeFullscreenMap() {
     if (bleEditMode) {
-      if (hasUnsavedEdits() && !window.confirm("Отменить несохранённые изменения?")) return;
-      if (hasUnsavedEdits()) cancelAllEdits();
-      bleEditMode = false;
-      document.body.classList.remove("ble-map--edit");
-      disableAllZonePm();
-      bleSelectedZoneId = null;
-      bleEditMapMsg = "";
-      updateEditBarState();
+      setEditMode(false);
+      if (bleEditMode) return;
     }
     document.getElementById("mapFullscreenOverlay")?.classList.remove("open");
     document.body.style.overflow = "";
-    notifyMapFullscreenState(false);
+    if (!bleEditMode && !isEmbeddedEditLayout()) notifyMapFullscreenState(false);
     redrawMapLayers();
     const hasErr =
       document.getElementById("mapMsg")?.classList.contains("error") ||
@@ -1399,10 +1413,9 @@
     }
 
     document.getElementById("mapEditToggle")?.addEventListener("click", () => setEditMode(!bleEditMode));
+    document.getElementById("mapEditModeBtn")?.addEventListener("click", () => setEditMode(!bleEditMode));
     document.getElementById("mapSaveBtn")?.addEventListener("click", () => saveAllEdits());
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
-    document.getElementById("mapFullscreenBtnWrap")?.addEventListener("click", openFullscreenMap);
-    document.getElementById("mapEditFsBtn")?.addEventListener("click", () => setEditMode(true));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
     document.getElementById("photoViewerOverlay")?.addEventListener("click", closePhotoViewer);
@@ -1410,6 +1423,10 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (bleEditMode) {
+        setEditMode(false);
+        return;
+      }
       if (document.getElementById("mapFullscreenOverlay")?.classList.contains("open")) {
         closeFullscreenMap();
         return;

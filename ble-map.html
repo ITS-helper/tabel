@@ -45,12 +45,12 @@
               <span class="filter-count" id="fcInsp">0</span>
             </button>
             <button type="button" class="map-retry-btn" id="mapRetryBtn" hidden title="Обновить карту" aria-label="Обновить карту">↺</button>
-            <span class="map-toolbar__sep" aria-hidden="true"></span>
-            <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap" aria-label="На весь экран" title="Экран">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-              <span class="map-fullscreen-btn__text">Экран</span>
-            </button>
-            <button type="button" class="map-edit-fs-btn" id="mapEditFsBtn" title="Правка">Правка</button>
+            <span class="map-toolbar__sep map-toolbar__sep--before-edit" aria-hidden="true"></span>
+            <button type="button" class="map-edit-mode-btn" id="mapEditModeBtn" title="Редактировать метки и зоны">Редактировать</button>
+            <div id="mapEditTools" class="map-edit-tools map-edit-tools--dock" hidden>
+              <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
+              <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
+            </div>
             <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
             <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite" title="Спутник">Спут</button>
             <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street" title="Схема">Схема</button>
@@ -96,12 +96,8 @@
           <option value="">Все маршруты</option>
         </select>
       </label>
-      <div id="mapEditBar" class="map-edit-bar map-edit-bar--fs">
-        <button type="button" class="map-edit-toggle" id="mapEditToggle">Редактирование</button>
-        <div id="mapEditTools" class="map-edit-tools" hidden>
-          <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
-          <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
-        </div>
+      <div id="mapEditBar" class="map-edit-bar map-edit-bar--fs" hidden aria-hidden="true">
+        <button type="button" class="map-edit-toggle" id="mapEditToggle" hidden tabindex="-1">Редактирование</button>
       </div>
     </div>
     <div id="bleMapFS"></div>

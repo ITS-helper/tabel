@@ -645,15 +645,9 @@ body {
 }
 
 .map-toolbar .map-filter-btn,
-.map-toolbar .map-fullscreen-btn,
-.map-toolbar .map-edit-fs-btn,
+.map-toolbar .map-edit-mode-btn,
 .map-toolbar .map-layer-btn {
   flex: 0 0 auto;
-}
-
-/* В iframe табеля на телефоне — компактнее, без лишних кнопок */
-html.ble-map-embedded body.ble-map-mobile .map-fullscreen-btn {
-  display: none;
 }
 
 html.ble-map-embedded body.ble-map-mobile .map-toolbar__sep--before-layers {
@@ -748,12 +742,13 @@ body.ble-map--edit .leaflet-marker-draggable:active {
   display: inline;
 }
 
-.map-edit-fs-btn {
+.map-edit-mode-btn {
   font-family: Oswald, sans-serif;
   font-size: 0.68em;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding: 7px 12px;
+  font-weight: 600;
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid #90caf9;
   background: #e3f2fd;
@@ -762,8 +757,34 @@ body.ble-map--edit .leaflet-marker-draggable:active {
   white-space: nowrap;
 }
 
-.map-edit-fs-btn:hover {
+.map-edit-mode-btn:hover {
   background: #bbdefb;
+}
+
+.map-edit-mode-btn.active {
+  background: linear-gradient(135deg, #1565c0, #2196f3);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(33, 150, 243, 0.35);
+}
+
+.map-edit-tools--dock {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-edit-tools--dock[hidden] {
+  display: none !important;
+}
+
+body.ble-map--edit-layout .ble-map-page-header {
+  display: none !important;
+}
+
+body.ble-map--edit-layout .map-float-dock {
+  z-index: 750;
 }
 
 .map-route-field {
@@ -1144,8 +1165,9 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     display: inline;
   }
 
-  .map-edit-fs-btn,
-  .map-fullscreen-btn,
+  .map-edit-mode-btn,
+  .map-edit-save,
+  .map-edit-cancel,
   .map-layer-btn {
     min-height: 34px;
     padding: 5px 9px;
@@ -1163,10 +1185,6 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     font-size: 9px;
     top: -6px;
     left: 6px;
-  }
-
-  .map-fullscreen-btn__text {
-    display: none;
   }
 
   .map-search-bar--toolbar {
