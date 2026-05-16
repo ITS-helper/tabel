@@ -628,6 +628,15 @@ body {
   flex: 0 0 auto;
 }
 
+/* В iframe табеля на телефоне — компактнее, без лишних кнопок */
+html.ble-map-embedded body.ble-map-mobile .map-fullscreen-btn {
+  display: none;
+}
+
+html.ble-map-embedded body.ble-map-mobile .map-toolbar__sep--before-layers {
+  display: none;
+}
+
 .map-edit-bar {
   display: flex;
   flex-wrap: wrap;
@@ -897,6 +906,10 @@ html.ble-map-embedded .map-msg:not([hidden]) {
   z-index: 800;
 }
 
+html.ble-map-embedded body.ble-map-mobile .map-msg:not([hidden]) {
+  top: calc(96px + max(6px, env(safe-area-inset-top)));
+}
+
 html.ble-map-embedded .map-retry-wrap {
   position: absolute;
   inset: 0;
@@ -1032,23 +1045,48 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 
   .map-float-dock {
     position: absolute;
-    left: 8px;
-    right: 8px;
-    top: max(8px, env(safe-area-inset-top));
+    left: 6px;
+    right: 6px;
+    top: max(6px, env(safe-area-inset-top));
     bottom: auto;
     z-index: 700;
     gap: 0;
     pointer-events: auto;
+    min-width: 0;
   }
 
   .map-toolbar {
-    gap: 5px;
-    padding: 7px 8px;
+    gap: 4px;
+    padding: 6px;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .map-route-field--toolbar {
-    min-width: 96px;
-    max-width: 132px;
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    max-width: none;
+  }
+
+  .map-search-bar--toolbar {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    max-width: none;
+  }
+
+  html.ble-map-embedded body.ble-map-mobile .map-route-field--toolbar {
+    flex: 1 1 100%;
+  }
+
+  html.ble-map-embedded body.ble-map-mobile .map-search-bar--toolbar {
+    flex: 1 1 100%;
+    order: 12;
+  }
+
+  html.ble-map-embedded body.ble-map-mobile .map-toolbar__sep:not(.map-toolbar__sep--before-layers) {
+    display: none;
   }
 
   .map-edit-bar {
@@ -1072,9 +1110,9 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 
   .map-filter-btn {
     flex: 0 0 auto;
-    min-height: 40px;
-    padding: 8px 12px;
-    font-size: 0.72em;
+    min-height: 34px;
+    padding: 5px 9px;
+    font-size: 0.68em;
     touch-action: manipulation;
   }
 
@@ -1094,9 +1132,22 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   .map-edit-fs-btn,
   .map-fullscreen-btn,
   .map-layer-btn {
-    min-height: 44px;
-    padding: 8px 12px;
+    min-height: 34px;
+    padding: 5px 9px;
     flex-shrink: 0;
+    font-size: 0.65em;
+  }
+
+  .map-route-field--toolbar .map-route-select {
+    min-height: 34px;
+    padding: 5px 22px 3px 8px;
+    font-size: 11px;
+  }
+
+  .map-route-field--toolbar .map-route-field__label {
+    font-size: 9px;
+    top: -6px;
+    left: 6px;
   }
 
   .map-fullscreen-btn__text {
@@ -1110,9 +1161,9 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   .map-search-bar input {
-    min-height: 44px;
+    min-height: 34px;
     font-size: 16px;
-    padding: 10px 36px 10px 12px;
+    padding: 6px 32px 6px 10px;
   }
 
   .map-search-clear {
@@ -1129,7 +1180,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   #bleMap .leaflet-control-zoom {
-    margin-top: calc(56px + max(8px, env(safe-area-inset-top))) !important;
+    margin-top: calc(88px + max(6px, env(safe-area-inset-top))) !important;
     margin-bottom: max(8px, env(safe-area-inset-bottom)) !important;
     margin-right: max(8px, env(safe-area-inset-right)) !important;
   }

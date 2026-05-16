@@ -2800,24 +2800,79 @@ html.app--blemap-tab {
 }
 
 @media (max-width: 768px) {
+  :root {
+    --sched-scroll-offset: 148px;
+    --stack-gap: 8px;
+  }
+
+  .app {
+    padding: 6px 8px 8px;
+  }
+
   .header {
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 4px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+  }
+
+  .header__divider {
+    display: none;
   }
 
   .header__logo-mark {
-    height: 28px;
-    max-height: 28px;
-    max-width: 42px;
+    height: 24px;
+    max-height: 24px;
+    max-width: 34px;
   }
 
   .header__logo-type {
-    font-size: 10.5px;
+    display: none;
   }
 
   .header__logo-lockup {
-    max-width: min(200px, 48vw);
-    gap: 6px;
+    max-width: none;
+    gap: 0;
+  }
+
+  .header__page {
+    display: none;
+  }
+
+  .header__row--top {
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  .header__brand {
+    flex: 0 0 auto;
+  }
+
+  .header__actions {
+    flex: 1 1 auto;
+    gap: 4px;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .header .btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .header .btn--ghost {
+    padding: 4px 6px;
+  }
+
+  .header .segmented__btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .header .select {
+    padding: 4px 26px 4px 8px;
+    font-size: 0.75rem;
+    max-width: 118px;
   }
 
   .header__btn-text--long {
@@ -2829,22 +2884,105 @@ html.app--blemap-tab {
   }
 
   .header .auth-change-pwd-btn {
+    display: none;
+  }
+
+  .auth-badge {
+    max-width: 88px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 4px 8px;
+    font-size: 0.72rem;
+  }
+
+  .header__row--bottom {
+    gap: 4px;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .header__toolbar-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 92%, transparent);
+  }
+
+  .header__toolbar-left::-webkit-scrollbar {
+    display: none;
+  }
+
+  .header__toolbar-left .badge {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    font-size: 0.68rem;
+  }
+
+  .header__section-tabs.section-tabs {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .header .section-tabs__list {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .header .section-tabs__list button {
+    padding: 4px 9px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .header__toolbar-controls {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .header__toolbar-controls .btn--outline {
+    padding: 4px 8px;
     font-size: 0.75rem;
-    padding: 5px 8px;
+  }
+
+  .app-nav--top {
+    padding: 2px;
+    gap: 2px;
+    border-radius: 8px;
   }
 
   .app-nav--top .app-nav__tab {
-    padding: 8px 6px;
-    font-size: 0.72em;
+    padding: 6px 4px;
+    font-size: 0.68em;
   }
 
   .app--blemap-view {
     height: 100dvh;
     height: 100svh;
+    padding: 0;
   }
 
   .app--blemap-view .header {
-    padding-top: max(8px, env(safe-area-inset-top));
+    padding: max(4px, env(safe-area-inset-top)) 6px 4px;
+    gap: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: 0 1px 0 rgba(21, 101, 192, 0.08);
+  }
+
+  .app--blemap-view .app-nav--top {
+    margin: 0;
+  }
+
+  .app--blemap-view .app-nav--top .app-nav__tab {
+    padding: 7px 4px;
   }
 }
 

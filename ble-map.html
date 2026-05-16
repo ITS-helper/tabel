@@ -53,8 +53,9 @@
               <span class="map-fullscreen-btn__text">Экран</span>
             </button>
             <button type="button" class="map-edit-fs-btn" id="mapEditFsBtn" title="Правка">Правка</button>
-            <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
-            <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
+            <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
+            <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite" title="Спутник">Спут</button>
+            <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street" title="Схема">Схема</button>
             <div id="mapSearchBlock" class="map-search-bar map-search-bar--toolbar">
               <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" aria-label="№ метки" />
               <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить" aria-label="Очистить">✕</button>
