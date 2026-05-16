@@ -19,6 +19,7 @@
 
   const BLE_FETCH_TIMEOUT_MS = 120000;
   const BLE_LIST_FETCH_TIMEOUT_MS = 22000;
+  const BLE_STATIC_CACHE_FETCH_MS = 90000;
   const BLE_TRANSPORT_KEY = "ww-ble-transport";
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
@@ -151,7 +152,7 @@
       return ["supabase", "worker"];
     }
     if (path && isWorkerOnlyBlePath(path)) {
-      return ["worker"];
+      return ["supabase", "worker"];
     }
     const pref = getPreferredTransportId();
     const ids = BLE_TRANSPORTS.map((t) => t.id);
@@ -175,7 +176,7 @@
         raw +
         " (каналы: " +
         tried.join(" → ") +
-        "). Без VPN метки берутся из кэша Supabase; если кэш пуст — нужен VPN или обновление кэша администратором."
+        "). Без VPN метки берутся из файла data/ble-map-cache.json на сайте; если карта пустая — обновите кэш (ble-cache-push.bat) или включите VPN."
       );
     }
     return raw;
@@ -308,9 +309,12 @@
   async function fetchBleListStatic(companyId) {
     const paths = ["data/ble-map-cache.json", "../data/ble-map-cache.json"];
     for (const rel of paths) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), BLE_STATIC_CACHE_FETCH_MS);
       try {
         const res = await fetch(new URL(rel, window.location.href).href, {
           cache: "no-cache",
+          signal: ctrl.signal,
         });
         if (!res.ok) continue;
         const body = await res.json();
@@ -329,17 +333,19 @@
           companyId: cid != null ? Number(cid) : companyId,
           updatedAt: body.updated_at || body.updatedAt || "",
         };
-      } catch {
-        /* try next path */
+      } catch (e) {
+        console.warn("[ble-map] static cache", rel, e?.message || e);
+      } finally {
+        clearTimeout(timer);
       }
     }
     return null;
   }
 
   async function fetchBleListOffline(companyId) {
-    const cached = await fetchBleListCached(companyId);
-    if (cached) return cached;
-    return fetchBleListStatic(companyId);
+    const fromSite = await fetchBleListStatic(companyId);
+    if (fromSite?.data?.length) return fromSite;
+    return fetchBleListCached(companyId);
   }
 
   async function bleApiFetch(path, retried = false) {
@@ -1049,22 +1055,67 @@
   }
 
   async function resolveCompanyId() {
-    let companyId;
+    const meta = await fetchBleCacheMeta();
+    return meta?.companyId ?? BLE_DEFAULT_COMPANY_ID;
+  }
+
+  async function resolveCompanyIdFromApi() {
     try {
       const ud = await bleApiFetch("/api/v1/user/me/");
-      companyId = ud.companyId || ud.company_id;
+      const fromApi = ud.companyId || ud.company_id;
+      if (fromApi) return Number(fromApi);
     } catch {
       try {
         const ud2 = await bleApiFetch("/api/v1/user/data");
-        companyId = ud2.companyId || ud2.company_id;
+        const fromApi = ud2.companyId || ud2.company_id;
+        if (fromApi) return Number(fromApi);
       } catch {
-        /* offline */
+        /* ignore */
       }
     }
-    if (companyId) return Number(companyId);
-    const meta = await fetchBleCacheMeta();
-    if (meta?.companyId) return meta.companyId;
-    return BLE_DEFAULT_COMPANY_ID;
+    return null;
+  }
+
+  async function refreshBleMapFromApi(companyId) {
+    if (!companyId || bleEditMode) return;
+    try {
+      const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
+      if (!Array.isArray(rawBle) || !rawBle.length) return;
+      bleMapData = rawBle.map(classifyBle);
+      updateMapStats();
+      renderBleMarkers();
+      try {
+        const mapData = await bleApiFetch(`/api/v1/map/${companyId}/map_data`);
+        if (mapData.zones && mapData.points) {
+          const pointsByZone = {};
+          mapData.points.forEach((p) => {
+            if (!pointsByZone[p.zoneId]) pointsByZone[p.zoneId] = [];
+            pointsByZone[p.zoneId].push([p.latitude, p.longitude]);
+          });
+          bleZoneData = mapData.zones
+            .map((z) => ({
+              id: z.id,
+              name: z.name || "",
+              description: z.description || "",
+              color: z.color || "#0088cc",
+              pts: (pointsByZone[z.id] || []).map((p) => [...p]),
+            }))
+            .filter((z) => z.pts.length > 2);
+          drawZones(bleMap);
+        }
+      } catch {
+        /* zones optional */
+      }
+      try {
+        sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
+      } catch {
+        /* ignore */
+      }
+      setRetryVisible(false);
+      hideMapMsg();
+    } catch (e) {
+      console.warn("[ble-map] API refresh failed", e?.message || e);
+    }
   }
 
   async function applyBleListToMap(rawBle, cacheNotice) {
@@ -1129,70 +1180,52 @@
   }
 
   async function loadBleMap() {
+    const placeholder = document.getElementById("mapPlaceholder");
+    if (placeholder) placeholder.textContent = "Загрузка карты…";
     try {
       let center = [53.038, 39.011];
       let zoom = 15;
-      try {
-        const cfg = await bleApiFetch("/api/v1/map/config");
-        if (cfg.defaultView?.latitude) center = [cfg.defaultView.latitude, cfg.defaultView.longitude];
-        if (cfg.defaultZoom) zoom = cfg.defaultZoom;
-      } catch {
-        /* default center */
-      }
       initBleMap(center, zoom);
 
       const companyId = await resolveCompanyId();
       bleCompanyId = companyId;
 
-      let offlineFirst = false;
+      const cached = await fetchBleListOffline(companyId);
+      if (cached?.data?.length) {
+        await applyBleListToMap(cached.data, "");
+        try {
+          sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
+        } catch {
+          /* ignore */
+        }
+        void (async () => {
+          const apiCid = await resolveCompanyIdFromApi();
+          if (apiCid && apiCid !== companyId) {
+            bleCompanyId = apiCid;
+            await refreshBleMapFromApi(apiCid);
+          } else {
+            await refreshBleMapFromApi(companyId);
+          }
+        })();
+        return;
+      }
+
       try {
-        offlineFirst = sessionStorage.getItem(BLE_OFFLINE_FIRST_KEY) === "1";
+        const cfg = await bleApiFetch("/api/v1/map/config");
+        if (cfg.defaultView?.latitude) center = [cfg.defaultView.latitude, cfg.defaultView.longitude];
+        if (cfg.defaultZoom) zoom = cfg.defaultZoom;
+        if (bleMap) bleMap.setView(center, zoom);
+      } catch {
+        /* default center */
+      }
+
+      const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
+      try {
+        sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
       } catch {
         /* ignore */
       }
-
-      let rawBle;
-      let cacheNotice = "";
-
-      if (offlineFirst) {
-        const cached = await fetchBleListOffline(companyId);
-        if (cached?.data?.length) {
-          rawBle = cached.data;
-          cacheNotice =
-            "Показан сохранённый список меток от " +
-            formatCacheAge(cached.updatedAt) +
-            " (офлайн-режим).";
-        }
-      }
-
-      if (!rawBle) {
-        try {
-          rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
-          try {
-            sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
-          } catch {
-            /* ignore */
-          }
-        } catch (bleErr) {
-          const cached = await fetchBleListOffline(companyId);
-          if (cached?.data?.length) {
-            rawBle = cached.data;
-            cacheNotice =
-              "Показан сохранённый список меток от " +
-              formatCacheAge(cached.updatedAt) +
-              " (без прямого доступа к API).";
-            try {
-              sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
-            } catch {
-              /* ignore */
-            }
-          } else {
-            throw bleErr;
-          }
-        }
-      }
-
-      await applyBleListToMap(rawBle, cacheNotice);
+      await applyBleListToMap(rawBle, "");
     } catch (e) {
       const companyId = (await fetchBleCacheMeta())?.companyId || BLE_DEFAULT_COMPANY_ID;
       if (await tryLoadOfflineBleList(companyId)) {

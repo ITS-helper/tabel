@@ -35,6 +35,8 @@ if errorlevel 1 (
 )
 
 echo [1/4] Скачивание меток с API (нужен доступ к workers.dev, часто VPN)...
+echo      Для кэша в Supabase без VPN задайте перед запуском:
+echo      set SUPABASE_SERVICE_ROLE_KEY=ваш_ключ
 echo.
 call npm run ble-cache
 if errorlevel 1 (

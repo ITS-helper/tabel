@@ -126,9 +126,18 @@
 
 ## Карта BLE без VPN
 
-Метки загружаются с API через Cloudflare Worker (`*.workers.dev`). В части сетей без VPN этот домен блокируется — карта пустая, подложка OSM может отображаться.
+Метки с API идут через Cloudflare Worker (`*.workers.dev`); без VPN этот домен часто блокируется.
 
-**Обход:** Edge Function **`ble-map-proxy`** (браузер → `supabase.co` → Worker). Один раз из корня репозитория с [Supabase CLI](https://supabase.com/docs/guides/cli):
+**Без VPN карта берёт метки из файла** [`data/ble-map-cache.json`](data/ble-map-cache.json) на GitHub Pages (публикуется вместе с сайтом). Сначала грузится он (~1,4 МБ), затем в фоне — попытка обновить с API.
+
+**Обновить кэш** (нужен VPN на машине администратора): двойной щелчок [`ble-cache-push.bat`](ble-cache-push.bat) или `npm run ble-cache`. Чтобы дублировать кэш в Supabase (таблица `ble_map_cache`, сейчас может быть пустой):
+
+```bat
+set SUPABASE_SERVICE_ROLE_KEY=ваш_service_role
+ble-cache-push.bat
+```
+
+**Обход API в браузере:** Edge Function **`ble-map-proxy`** (браузер → `supabase.co` → Worker). Один раз из корня репозитория с [Supabase CLI](https://supabase.com/docs/guides/cli):
 
 ```bash
 supabase login
