@@ -15,6 +15,10 @@
 <body>
   <div class="app" id="app">
     <header class="header header--unified" aria-label="График работ и навигация">
+      <nav class="app-nav app-nav--top" aria-label="Разделы приложения">
+        <button type="button" class="app-nav__tab is-active" data-app-page="tabel">График</button>
+        <button type="button" class="app-nav__tab" data-app-page="blemap">Карта BLE</button>
+      </nav>
       <div class="header__row header__row--top">
         <div class="header__brand">
           <div class="header__logo-wrap">
@@ -51,19 +55,19 @@
           <button type="button" class="btn btn--ghost auth-logout-btn" id="authLogoutBtn" hidden>Выйти</button>
           <div class="segmented" role="group" aria-label="Режим просмотра">
             <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
-            <button type="button" class="segmented__btn" data-mode="edit">Редактирование</button>
+            <button type="button" class="segmented__btn" data-mode="edit">
+              <span class="header__btn-text header__btn-text--long">Редактирование</span>
+              <span class="header__btn-text header__btn-text--short">Правка</span>
+            </button>
           </div>
           <button type="button" class="btn btn--primary" id="exportBtn">
             <span class="icon-download" aria-hidden="true"></span>
-            Экспорт для 1С
+            <span class="header__btn-text header__btn-text--long">Экспорт для 1С</span>
+            <span class="header__btn-text header__btn-text--short">1С</span>
           </button>
         </div>
       </div>
       <hr class="header__divider" aria-hidden="true" />
-      <nav class="app-nav" aria-label="Разделы приложения">
-        <button type="button" class="app-nav__tab is-active" data-app-page="tabel">График</button>
-        <button type="button" class="app-nav__tab" data-app-page="blemap">Карта BLE</button>
-      </nav>
       <div class="header__row header__row--bottom">
         <div class="header__toolbar-left">
           <span class="badge" id="employeeCount">6 сотр.</span>
@@ -73,7 +77,8 @@
         </div>
         <div class="header__toolbar-controls">
           <button type="button" class="btn btn--outline" id="teamDialogBtn" title="Кто в каком объекте, названия вкладок">
-            Объекты и состав
+            <span class="header__btn-text header__btn-text--long">Объекты и состав</span>
+            <span class="header__btn-text header__btn-text--short">Объекты</span>
           </button>
           <label class="select-wrap">
             <span class="visually-hidden">Месяц</span>
