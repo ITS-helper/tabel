@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта BLE-меток — WORK WATCH</title>
+  <meta name="theme-color" content="#2196F3" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="ble-map.css" />
+</head>
+<body>
+  <header class="ble-map-page-header" id="bleMapPageHeader">
+    <a class="ble-map-page-back" href="index.html" id="bleMapBackLink">← График</a>
+    <h1 class="ble-map-page-title">Карта BLE-меток</h1>
+  </header>
+
+  <div class="ble-map-page-main">
+    <section class="map-section open" data-map-section="ble" aria-label="Карта BLE-меток">
+      <div class="map-inner">
+        <div id="mapMsg" class="map-msg" hidden></div>
+        <div class="map-retry-wrap" id="mapRetryBtnWrap" hidden>
+          <button type="button" class="map-auth-btn" id="mapRetryBtn">↺ Обновить карту</button>
+        </div>
+        <div id="mapFiltersBlock" class="map-filters" hidden>
+          <button type="button" class="map-filter-btn filter-all active" data-filter="all">Все <span class="filter-count" id="fcAll">0</span></button>
+          <button type="button" class="map-filter-btn filter-ok" data-filter="ok">Норма <span class="filter-count" id="fcOk">0</span></button>
+          <button type="button" class="map-filter-btn filter-battery" data-filter="battery">Батарея <span class="filter-count" id="fcBat">0</span></button>
+          <button type="button" class="map-filter-btn filter-inspection" data-filter="inspection">Не пройдено <span class="filter-count" id="fcInsp">0</span></button>
+        </div>
+        <div id="mapBottomControls" class="map-bottom-controls" hidden>
+          <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            Полный экран
+          </button>
+          <div id="mapLayerToggle" class="map-layer-toggle">
+            <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
+            <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
+          </div>
+          <div id="mapSearchBlock" class="map-search-bar">
+            <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" />
+            <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить">✕</button>
+          </div>
+        </div>
+        <div id="bleMap">
+          <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="photo-viewer-overlay" id="photoViewerOverlay">
+    <button type="button" class="photo-viewer-close" id="photoViewerClose" title="Закрыть">✕</button>
+    <img id="photoViewerImg" src="" alt="" />
+  </div>
+
+  <div class="map-fullscreen-overlay" id="mapFullscreenOverlay">
+    <div class="map-fullscreen-header">
+      <span class="map-fullscreen-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2196F3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Карта BLE-меток
+      </span>
+      <button type="button" class="map-fullscreen-close" id="mapFullscreenClose">✕ Закрыть</button>
+    </div>
+    <div class="map-fullscreen-controls" id="mapFsFilters">
+      <button type="button" class="map-filter-btn filter-all active" data-fsfilter="all">Все <span class="filter-count" id="fcFsAll">0</span></button>
+      <button type="button" class="map-filter-btn filter-ok" data-fsfilter="ok">Норма <span class="filter-count" id="fcFsOk">0</span></button>
+      <button type="button" class="map-filter-btn filter-battery" data-fsfilter="battery">Батарея <span class="filter-count" id="fcFsBat">0</span></button>
+      <button type="button" class="map-filter-btn filter-inspection" data-fsfilter="inspection">Не пройд. <span class="filter-count" id="fcFsInsp">0</span></button>
+    </div>
+    <div class="map-fullscreen-layer">
+      <button type="button" class="map-layer-btn" id="btnFsSatellite" data-fslayer="satellite">Спутник</button>
+      <button type="button" class="map-layer-btn active" id="btnFsStreet" data-fslayer="street">Схема</button>
+      <div class="map-fullscreen-search">
+        <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" />
+        <button type="button" class="map-fullscreen-search-clear" id="mapFsSearchClear" title="Очистить">✕</button>
+      </div>
+    </div>
+    <div id="bleMapFS"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="ble-map.js"></script>
+  <script src="ble-map-fullscreen-patch.js"></script>
+</body>
+</html>

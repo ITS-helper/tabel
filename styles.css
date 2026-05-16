@@ -2637,3 +2637,71 @@ body.zp-drag-active .person-chip:not(.dragging) {
   cursor: pointer;
   text-align: center;
 }
+
+/* Переключение «График» / «Карта BLE» */
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.app-nav__tab {
+  font-family: Oswald, sans-serif;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 18px;
+  border-radius: 8px;
+  border: 1.5px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.app-nav__tab:hover {
+  background: var(--accent-soft);
+  color: var(--portal-accent);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.app-nav__tab.is-active {
+  background: var(--accent-soft);
+  color: var(--portal-accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 1px 4px rgba(33, 150, 243, 0.12);
+}
+
+.app-page {
+  display: none;
+  min-height: 0;
+}
+
+.app-page.is-active {
+  display: block;
+}
+
+.app-page--blemap {
+  margin-top: 0;
+}
+
+.app-page__iframe {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 480px;
+  border: none;
+  border-radius: var(--radius);
+  background: #f5f7fa;
+  box-shadow: 0 1px 6px rgba(21, 101, 192, 0.08);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .app-page__iframe {
+    height: calc(100vh - 260px);
+    min-height: 360px;
+  }
+}

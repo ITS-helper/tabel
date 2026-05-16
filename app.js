@@ -1702,7 +1702,7 @@ function openScheduleCellPicker(rowIndex, day, pillEl) {
   if (isArchiveView()) return;
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
   if (!canEditScheduleRow(rowIndex)) {
-    alert("Можно редактировать только свою строку в графике. Для правок всех строк войдите как администратор.");
+    alert(scheduleEditDeniedMessage());
     return;
   }
   const data = getDataset();
@@ -2561,6 +2561,40 @@ function renderObjectSummary() {
     </div>`;
 }
 
+const APP_PAGE_STORAGE_KEY = "ww-app-page";
+
+function showAppPage(pageId) {
+  const valid = pageId === "blemap" ? "blemap" : "tabel";
+  document.querySelectorAll(".app-page").forEach((el) => {
+    const on = el.id === `page-${valid}`;
+    el.classList.toggle("is-active", on);
+    el.hidden = !on;
+  });
+  document.querySelectorAll(".app-nav__tab").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.appPage === valid);
+  });
+  try {
+    sessionStorage.setItem(APP_PAGE_STORAGE_KEY, valid);
+  } catch {
+    /* ignore */
+  }
+  window.scrollTo(0, 0);
+}
+
+function bindAppPageNav() {
+  const saved = (() => {
+    try {
+      return sessionStorage.getItem(APP_PAGE_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  })();
+  if (saved === "blemap") showAppPage("blemap");
+  document.querySelectorAll(".app-nav__tab").forEach((btn) => {
+    btn.addEventListener("click", () => showAppPage(btn.dataset.appPage || "tabel"));
+  });
+}
+
 function init() {
   applyTheme(state.theme);
   syncAuthChrome();
@@ -2574,6 +2608,7 @@ function init() {
   bindTeamDialog();
   bindCollapsiblePanels();
   syncCollapsiblePanels();
+  bindAppPageNav();
   initZonePlacementModule();
   render();
   void initRemoteSync();
@@ -3047,7 +3082,7 @@ function renderSchedule(data) {
           : "Клик — список; зажмите и тяните — очистить диапазон дней"
         : code
           ? `Код: ${code}`
-          : "Нет отметки — войдите и редактируйте только свою строку (или все — админ)";
+          : scheduleEditHintForUser();
       if (canPick) {
         pill.classList.add("pill--editable");
         pill.addEventListener("pointerdown", (e) => startPillFillInteraction(e, rowIndex, day, pill));

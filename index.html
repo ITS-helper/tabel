@@ -60,6 +60,10 @@
         </div>
       </div>
       <hr class="header__divider" aria-hidden="true" />
+      <nav class="app-nav" aria-label="Разделы приложения">
+        <button type="button" class="app-nav__tab is-active" data-app-page="tabel">График</button>
+        <button type="button" class="app-nav__tab" data-app-page="blemap">Карта BLE</button>
+      </nav>
       <div class="header__row header__row--bottom">
         <div class="header__toolbar-left">
           <span class="badge" id="employeeCount">6 сотр.</span>
@@ -79,6 +83,7 @@
       </div>
     </header>
 
+    <div id="page-tabel" class="app-page is-active">
     <main class="main">
 
       <section
@@ -301,6 +306,16 @@
         </div>
       </section>
     </main>
+    </div>
+
+    <div id="page-blemap" class="app-page app-page--blemap" hidden>
+      <iframe
+        class="app-page__iframe"
+        src="ble-map.html"
+        title="Карта BLE-меток"
+        loading="lazy"
+      ></iframe>
+    </div>
 
     <dialog id="teamDialog" class="team-dialog">
       <div class="team-dialog__panel">
