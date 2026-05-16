@@ -53,6 +53,17 @@ async function main() {
   fs.writeFileSync(outPath, JSON.stringify(record));
   console.log(`Wrote ${outPath} (${payload.length} markers, ${fs.statSync(outPath).size} bytes)`);
 
+  const metaPath = path.join(outDir, "ble-map-cache-meta.json");
+  fs.writeFileSync(
+    metaPath,
+    JSON.stringify({
+      company_id: companyId,
+      updated_at: record.updated_at,
+      count: payload.length,
+    })
+  );
+  console.log(`Wrote ${metaPath}`);
+
   if (SERVICE_KEY) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/ble_map_cache`, {
       method: "POST",

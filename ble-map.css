@@ -220,8 +220,31 @@ body {
   background: #fef2f2;
 }
 
-.map-retry-wrap {
-  text-align: center;
+.map-retry-btn {
+  font-family: Oswald, sans-serif;
+  font-size: 0.85em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: #e3f2fd;
+  color: var(--primary);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.map-retry-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.map-retry-btn:disabled,
+.map-retry-btn[data-busy="1"] {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .map-auth-btn {
@@ -910,20 +933,6 @@ html.ble-map-embedded body.ble-map-mobile .map-msg:not([hidden]) {
   top: calc(96px + max(6px, env(safe-area-inset-top)));
 }
 
-html.ble-map-embedded .map-retry-wrap {
-  position: absolute;
-  inset: 0;
-  z-index: 850;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-html.ble-map-embedded .map-retry-wrap .map-auth-btn {
-  pointer-events: auto;
-}
-
 /* Отдельная страница ble-map.html — карта на всю высоту под шапкой */
 body:not(.ble-map-embedded) {
   min-height: 100dvh;
@@ -1030,17 +1039,10 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   }
 
-  .map-retry-wrap {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 850;
-  }
-
-  .map-auth-btn {
-    min-height: 44px;
-    padding: 10px 18px;
+  .map-retry-btn {
+    min-height: 34px;
+    min-width: 34px;
+    padding: 5px 8px;
   }
 
   .map-float-dock {

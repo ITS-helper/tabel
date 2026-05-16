@@ -25,9 +25,6 @@
     <section class="map-section open" data-map-section="ble" aria-label="Карта BLE-меток">
       <div class="map-inner">
         <div id="mapMsg" class="map-msg" hidden></div>
-        <div class="map-retry-wrap" id="mapRetryBtnWrap" hidden>
-          <button type="button" class="map-auth-btn" id="mapRetryBtn">↺ Обновить карту</button>
-        </div>
         <div id="bleMap">
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
         </div>
@@ -47,6 +44,7 @@
               <span class="map-filter-label map-filter-label--short">Не пройд.</span>
               <span class="filter-count" id="fcInsp">0</span>
             </button>
+            <button type="button" class="map-retry-btn" id="mapRetryBtn" hidden title="Обновить карту" aria-label="Обновить карту">↺</button>
             <span class="map-toolbar__sep" aria-hidden="true"></span>
             <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap" aria-label="На весь экран" title="Экран">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
