@@ -1996,16 +1996,16 @@ function getZoneTodayDayOffNames(monthKey, sectionId) {
 }
 
 function canEditZonePlacement() {
-  return canEditRosterAndObjects();
+  if (isArchiveView() || state.mode !== "edit") return false;
+  return isEditSessionUnlocked();
 }
 
 function getZonePlacementLockHint() {
   if (isArchiveView()) return "В архиве расстановку менять нельзя.";
   if (state.mode !== "edit") return "Включите режим «Редактирование» в шапке страницы.";
   if (!isEditSessionUnlocked()) {
-    return "Нажмите «Редактирование» и войдите (логин и пароль администратора из Supabase).";
+    return "Нажмите «Редактирование» и войдите (логин и пароль из Supabase).";
   }
-  if (!isAdminAuth()) return "Расстановку меняет администратор — войдите под учётной записью admin.";
   return "";
 }
 
