@@ -1,0 +1,3 @@
+# Edge Function: публичный прокси карты BLE (браузер шлёт apikey, не JWT пользователя).
+[functions.ble-map-proxy]
+verify_jwt = false

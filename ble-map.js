@@ -1,7 +1,22 @@
 (function () {
   "use strict";
 
-  const BLE_API_BASE = "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
+  /** Прямой прокси (часто недоступен без VPN из‑за блокировки *.workers.dev) */
+  const BLE_WORKER_BASE = "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
+  /** Тот же API через Supabase Edge (сервер ходит на Worker; браузер — только на supabase.co) */
+  const SUPABASE_URL = "https://owcuvcshwtivqueftiuk.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY =
+    "sb_publishable_zMRDhywx67zYK6SLGAyg-A_4KXV_Ujc";
+  const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
+
+  const BLE_TRANSPORTS = [
+    { id: "supabase", buildUrl: (path) => BLE_SUPABASE_BASE + path },
+    { id: "worker", buildUrl: (path) => BLE_WORKER_BASE + path },
+  ];
+
+  const BLE_FETCH_TIMEOUT_MS = 120000;
+  const BLE_TRANSPORT_KEY = "ww-ble-transport";
+
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
   const BLE_AUTO_PASS = "impl_dept_vsm_2024";
@@ -43,8 +58,96 @@
     if (el) el.hidden = true;
   }
 
+  function getPreferredTransportId() {
+    try {
+      const s = sessionStorage.getItem(BLE_TRANSPORT_KEY);
+      if (s === "worker" || s === "supabase") return s;
+    } catch {
+      /* ignore */
+    }
+    return "supabase";
+  }
+
+  function rememberTransport(id) {
+    try {
+      sessionStorage.setItem(BLE_TRANSPORT_KEY, id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function transportOrder() {
+    const pref = getPreferredTransportId();
+    const ids = BLE_TRANSPORTS.map((t) => t.id);
+    return [pref, ...ids.filter((id) => id !== pref)];
+  }
+
+  function formatBleError(err, tried) {
+    const raw = err?.message || String(err);
+    if (err?.name === "AbortError") {
+      return "Превышено время ожидания ответа API меток (большой объём данных). Повторите или включите VPN.";
+    }
+    if (raw === "Failed to fetch" || err?.name === "TypeError") {
+      return (
+        "Браузер не смог связаться с API меток (" +
+        tried.join(" → ") +
+        "). Частая причина без VPN: блокировка *.workers.dev в сети. " +
+        "Для обхода через Supabase один раз задеплойте Edge Function ble-map-proxy (см. supabase/functions/ble-map-proxy/)."
+      );
+    }
+    return raw;
+  }
+
+  function mergeSupabaseHeaders(headers, bleToken) {
+    const h = new Headers(headers || {});
+    h.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+    if (bleToken) {
+      h.set("Authorization", `Bearer ${bleToken}`);
+    } else if (!h.has("Authorization")) {
+      h.set("Authorization", `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
+    }
+    return h;
+  }
+
+  async function bleHttpFetch(path, init = {}) {
+    const tried = [];
+    let lastErr = null;
+    for (const tid of transportOrder()) {
+      const t = BLE_TRANSPORTS.find((x) => x.id === tid);
+      if (!t) continue;
+      tried.push(tid);
+      const url = t.buildUrl(path);
+      const headers =
+        tid === "supabase"
+          ? mergeSupabaseHeaders(init.headers, null)
+          : new Headers(init.headers || {});
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), BLE_FETCH_TIMEOUT_MS);
+      try {
+        const res = await fetch(url, { ...init, headers, signal: ctrl.signal });
+        if (
+          tid === "supabase" &&
+          !res.ok &&
+          (res.status === 404 || res.status === 502 || res.status === 503)
+        ) {
+          lastErr = new Error(`supabase_proxy_${res.status}`);
+          continue;
+        }
+        rememberTransport(tid);
+        return res;
+      } catch (e) {
+        lastErr = e;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    const err = lastErr || new Error("Failed to fetch");
+    err.bleTriedTransports = tried;
+    throw err;
+  }
+
   async function bleAutoLogin() {
-    const res = await fetch(BLE_API_BASE + "/api/v1/token", {
+    const res = await bleHttpFetch("/api/v1/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `username=${encodeURIComponent(BLE_AUTO_USER)}&password=${encodeURIComponent(BLE_AUTO_PASS)}`,
@@ -64,7 +167,7 @@
       await bleAutoLogin();
       return bleApiFetch(path, true);
     }
-    const res = await fetch(BLE_API_BASE + path, {
+    const res = await bleHttpFetch(path, {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     });
     if (res.status === 401 || res.status === 500) {
@@ -320,8 +423,14 @@
       bleMapInitialized = true;
     } catch (e) {
       localStorage.removeItem(BLE_TOKEN_KEY);
+      try {
+        sessionStorage.removeItem(BLE_TRANSPORT_KEY);
+      } catch {
+        /* ignore */
+      }
+      const tried = e.bleTriedTransports || transportOrder();
       showMapMsg(
-        "Ошибка загрузки карты: " + e.message + ". Нажмите «Обновить» для повторной попытки.",
+        "Ошибка загрузки карты: " + formatBleError(e, tried) + " Нажмите «Обновить».",
         "error"
       );
       const retryWrap = document.getElementById("mapRetryBtnWrap");

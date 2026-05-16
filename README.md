@@ -124,6 +124,22 @@
 
 ---
 
+## Карта BLE без VPN
+
+Метки загружаются с API через Cloudflare Worker (`*.workers.dev`). В части сетей без VPN этот домен блокируется — карта пустая, подложка OSM может отображаться.
+
+**Обход:** Edge Function **`ble-map-proxy`** (браузер → `supabase.co` → Worker). Один раз из корня репозитория с [Supabase CLI](https://supabase.com/docs/guides/cli):
+
+```bash
+supabase login
+supabase link --project-ref owcuvcshwtivqueftiuk
+supabase functions deploy ble-map-proxy --no-verify-jwt
+```
+
+Код: [`supabase/functions/ble-map-proxy/`](supabase/functions/ble-map-proxy/). В `ble-map.js` сначала пробуется Supabase, при ошибке — прямой Worker (как на портале обходов).
+
+---
+
 ## Бэкапы базы в Supabase
 
 Сейчас в облаке одна строка **`tabel_state`** с `id = global` и полем **`payload`** (JSON). Резервное копирование — это сохранение этого JSON (и при росте данных — дамп всей таблицы / проекта).
