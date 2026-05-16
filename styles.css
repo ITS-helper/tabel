@@ -2081,42 +2081,6 @@ body[data-mode="edit"] .pill:hover {
 }
 
 /* ——— Расстановка по зонам ——— */
-.zone-placement-group .zone-placement-toggle {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
-.zone-placement-toggle__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.zone-placement-progress-wrap {
-  display: block;
-  height: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
-  overflow: hidden;
-}
-
-.zone-placement-progress-bar {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #7dd3fc));
-  transition: width 0.35s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .zone-placement-progress-bar {
-    transition: none;
-  }
-}
-
 .zone-placement-inner {
   padding: 4px 2px 8px;
 }

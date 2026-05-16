@@ -28,7 +28,7 @@ alwaysApply: true
 ## Что в облако НЕ попадает (только локально)
 
 - Выбранный **месяц** (`state.monthKey`), **вкладка объекта** (`state.sectionId`), **фильтр легенды** (`legendFilterCodes`), **режим** просмотр/редактирование
-- **Сворачивание панелей** (`uiBlocks` в `ww-ui-blocks`)
+- **Сворачивание панелей** (`uiBlocks` в `ww-ui-blocks-v2`; по умолчанию все свёрнуты)
 - **Видимость закреплённых колонок** (`ww-sticky-cols`)
 - **Тема** — по умолчанию светлая при каждой загрузке; тёмная только после нажатия переключателя (не в `localStorage`, не в Supabase)
 - **Вход** — `workwatch_auth_users` / RPC `workwatch_login` (см. `supabase-auth.sql`, `README.md`); сессия в `sessionStorage`, не в Supabase payload

@@ -29,7 +29,6 @@
 
   let api = null;
   let currentShift = "morning";
-  let rosterCount = 0;
   let selectedPerson = null;
   let dragSession = false;
   /** @type {{ chip: HTMLElement, name: string, from: string, startX: number, startY: number, dragging: boolean, ghost: HTMLElement|null, offsetX: number, offsetY: number, pointerId: number } | null} */
@@ -422,7 +421,6 @@
   }
 
   function updateDeploymentUI() {
-    let totalPlaced = 0;
     for (const z of ZONE_KEYS) {
       const container = $(zoneContainerId(z));
       if (!container) continue;
@@ -430,7 +428,6 @@
       if (z !== "pool") {
         const badge = $("zpBadge-" + z);
         if (badge) badge.textContent = String(chips.length);
-        totalPlaced += chips.length;
         const empty = container.querySelector(".zone-empty");
         if (chips.length === 0 && !empty) {
           const ph = document.createElement("span");
@@ -446,9 +443,6 @@
     const poolCount = poolEl ? poolEl.querySelectorAll(".person-chip").length : 0;
     const poolCountEl = $("zpPoolCount");
     if (poolCountEl) poolCountEl.textContent = String(poolCount);
-    const pct = rosterCount > 0 ? Math.round((totalPlaced / rosterCount) * 100) : 0;
-    const prog = $("zpDeploymentProgress");
-    if (prog) prog.style.width = pct + "%";
     const section = $("zonePlacementSection");
     if (section) section.classList.toggle("zone-placement--readonly", !canEdit());
     const lockHint = $("zonePlacementLockHint");
@@ -687,7 +681,6 @@
     }
     const roster = api.getRosterNames();
     const dayOff = getTodayDayOffSet();
-    rosterCount = roster.length;
     const bucket = getMonthBucket(true);
     if (!bucket) return;
     currentShift = bucket.shift === "evening" ? "evening" : "morning";

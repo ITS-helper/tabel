@@ -83,14 +83,14 @@
 
       <section
         id="objectSummarySection"
-        class="ww-guide-group object-summary-group open"
+        class="ww-guide-group object-summary-group"
         aria-label="Сводка на сегодня и завтра"
       >
         <button
           type="button"
           class="ww-group-header ww-group-header--full"
           id="objectSummaryPanelToggle"
-          aria-expanded="true"
+          aria-expanded="false"
           aria-controls="objectSummaryPanelBody"
         >
           <span class="ww-group-title">Сводка</span>
@@ -111,18 +111,13 @@
       >
         <button
           type="button"
-          class="ww-group-header ww-group-header--full zone-placement-toggle"
+          class="ww-group-header ww-group-header--full"
           id="zonePlacementPanelToggle"
           aria-expanded="false"
           aria-controls="zonePlacementPanelBody"
         >
-          <span class="zone-placement-toggle__row">
-            <span class="ww-group-title">Расстановка по зонам</span>
-            <span class="ww-group-chevron" aria-hidden="true">▼</span>
-          </span>
-          <span class="zone-placement-progress-wrap" aria-hidden="true">
-            <span class="zone-placement-progress-bar" id="zpDeploymentProgress"></span>
-          </span>
+          <span class="ww-group-title">Расстановка по зонам</span>
+          <span class="ww-group-chevron" aria-hidden="true">▼</span>
         </button>
         <div class="ww-guide-body" id="zonePlacementPanelBody">
           <div class="zone-placement-inner">
@@ -227,7 +222,7 @@
           type="button"
           class="ww-group-header ww-group-header--full"
           id="legendPanelToggle"
-          aria-expanded="true"
+          aria-expanded="false"
           aria-controls="legendPanelBody"
         >
           <span class="ww-group-title">Объекты</span>
@@ -261,12 +256,12 @@
 
       <span id="currentSectionTitle" class="visually-hidden">Усть-Луга</span>
 
-      <section id="vacationCardsSection" class="ww-guide-group open" aria-label="Краткая сводка по отпускам">
+      <section id="vacationCardsSection" class="ww-guide-group" aria-label="Краткая сводка по отпускам">
         <button
           type="button"
           class="ww-group-header ww-group-header--full"
           id="vacationPanelToggle"
-          aria-expanded="true"
+          aria-expanded="false"
           aria-controls="vacationPanelBody"
         >
           <span class="ww-group-title">Отпуска</span>

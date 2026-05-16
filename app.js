@@ -1091,7 +1091,7 @@ function isWeekend(year, monthIndex, day) {
   return dow === 0 || dow === 6;
 }
 
-const STORAGE_UI_BLOCKS = "ww-ui-blocks";
+const STORAGE_UI_BLOCKS = "ww-ui-blocks-v2";
 
 function normalizeEmployeeTn(tn) {
   const t = String(tn ?? "").trim();
@@ -1940,18 +1940,19 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl) {
 }
 
 function loadUiBlocks() {
+  const collapsed = { legend: false, vacations: false, summary: false, zones: false };
   try {
     const r = localStorage.getItem(STORAGE_UI_BLOCKS);
-    if (!r) return { legend: true, vacations: true, summary: true, zones: false };
+    if (!r) return collapsed;
     const o = JSON.parse(r);
     return {
-      legend: o.legend !== false,
-      vacations: o.vacations !== false,
-      summary: o.summary !== false,
+      legend: o.legend === true,
+      vacations: o.vacations === true,
+      summary: o.summary === true,
       zones: o.zones === true,
     };
   } catch (_) {
-    return { legend: true, vacations: true, summary: true, zones: false };
+    return collapsed;
   }
 }
 
