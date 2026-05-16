@@ -2731,6 +2731,31 @@ body.zp-drag-active .person-chip:not(.dragging) {
   margin-top: 0;
 }
 
+/* Вкладка «Карта BLE»: без шапки графика (логотип, режим, объекты, месяц) */
+.app--blemap-view .header__row--top,
+.app--blemap-view .header__row--bottom,
+.app--blemap-view .header__divider {
+  display: none;
+}
+
+.app--blemap-view .header {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.app--blemap-view .app-page--blemap.is-active {
+  margin: 0;
+}
+
+.app--blemap-view .app-page__iframe {
+  height: calc(100dvh - 64px);
+  min-height: 320px;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  box-shadow: none;
+}
+
 .app-page__iframe {
   display: block;
   width: 100%;
@@ -2782,32 +2807,8 @@ body.zp-drag-active .person-chip:not(.dragging) {
     font-size: 0.72em;
   }
 
-  .app--blemap-view .header__row--bottom {
-    display: none;
-  }
-
-  .app--blemap-view .header__divider {
-    display: none;
-  }
-
-  .app--blemap-view .header__row--top {
-    display: none;
-  }
-
-  .app--blemap-view .header {
-    padding-bottom: 8px;
-  }
-
   .app-page--blemap.is-active {
     margin: 0 -8px;
-  }
-
-  .app-page__iframe {
-    height: calc(100dvh - 120px);
-    min-height: 280px;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
   }
 
   .app--blemap-view .app-page__iframe {
