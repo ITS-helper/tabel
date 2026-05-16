@@ -4,11 +4,13 @@
   "type": "module",
   "scripts": {
     "ingest-xlsx": "node scripts/ingest-xlsx.mjs",
+    "ble-cache": "node scripts/push-ble-cache.mjs",
     "seed-auth": "node scripts/seed-auth-users.mjs",
     "supabase": "supabase",
     "supabase:login": "supabase login",
     "supabase:link": "supabase link --project-ref owcuvcshwtivqueftiuk",
-    "supabase:deploy-ble-map": "supabase functions deploy ble-map-proxy --no-verify-jwt"
+    "supabase:deploy-ble-map": "supabase functions deploy ble-map-proxy --no-verify-jwt",
+    "supabase:deploy-ble-sync": "supabase functions deploy ble-map-sync --no-verify-jwt"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

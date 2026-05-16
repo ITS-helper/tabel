@@ -14,6 +14,9 @@
     { id: "worker", buildUrl: (path) => BLE_WORKER_BASE + path },
   ];
 
+  /** Список меток (~1.5 МБ): через Supabase Edge пока 500; сначала Worker */
+  const BLE_WORKER_ONLY_PATHS = ["/api/v1/map/ble/"];
+
   const BLE_FETCH_TIMEOUT_MS = 120000;
   const BLE_TRANSPORT_KEY = "ww-ble-transport";
 
@@ -76,7 +79,13 @@
     }
   }
 
-  function transportOrder() {
+  function transportOrder(path) {
+    if (path && path.includes("/token")) {
+      return ["supabase", "worker"];
+    }
+    if (path && isWorkerOnlyBlePath(path)) {
+      return ["worker"];
+    }
     const pref = getPreferredTransportId();
     const ids = BLE_TRANSPORTS.map((t) => t.id);
     return [pref, ...ids.filter((id) => id !== pref)];
@@ -91,20 +100,32 @@
       return (
         "Браузер не смог связаться с API меток (" +
         tried.join(" → ") +
-        "). Частая причина без VPN: блокировка *.workers.dev в сети. " +
-        "Для обхода через Supabase один раз задеплойте Edge Function ble-map-proxy (см. supabase/functions/ble-map-proxy/)."
+        "). Без VPN часто блокируют *.workers.dev — включите VPN или откройте сайт из другой сети."
+      );
+    }
+    if (raw.startsWith("HTTP 5")) {
+      return (
+        raw +
+        " (каналы: " +
+        tried.join(" → ") +
+        "). Без VPN метки берутся из кэша Supabase; если кэш пуст — нужен VPN или обновление кэша администратором."
       );
     }
     return raw;
   }
 
+  function isWorkerOnlyBlePath(path) {
+    return BLE_WORKER_ONLY_PATHS.some(
+      (prefix) => path === prefix || path.startsWith(prefix)
+    );
+  }
+
   function mergeSupabaseHeaders(headers, bleToken) {
     const h = new Headers(headers || {});
     h.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+    h.set("Authorization", `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
     if (bleToken) {
-      h.set("Authorization", `Bearer ${bleToken}`);
-    } else if (!h.has("Authorization")) {
-      h.set("Authorization", `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
+      h.set("x-ble-token", bleToken);
     }
     return h;
   }
@@ -112,26 +133,33 @@
   async function bleHttpFetch(path, init = {}) {
     const tried = [];
     let lastErr = null;
-    for (const tid of transportOrder()) {
+    const bleToken =
+      init.headers?.Authorization?.replace(/^Bearer\s+/i, "") ||
+      init.headers?.authorization?.replace(/^Bearer\s+/i, "") ||
+      null;
+    for (const tid of transportOrder(path)) {
       const t = BLE_TRANSPORTS.find((x) => x.id === tid);
       if (!t) continue;
       tried.push(tid);
       const url = t.buildUrl(path);
       const headers =
         tid === "supabase"
-          ? mergeSupabaseHeaders(init.headers, null)
+          ? mergeSupabaseHeaders(init.headers, bleToken)
           : new Headers(init.headers || {});
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), BLE_FETCH_TIMEOUT_MS);
       try {
         const res = await fetch(url, { ...init, headers, signal: ctrl.signal });
-        if (
-          tid === "supabase" &&
-          !res.ok &&
-          (res.status === 404 || res.status === 502 || res.status === 503)
-        ) {
-          lastErr = new Error(`supabase_proxy_${res.status}`);
-          continue;
+        if (tid === "supabase" && !res.ok) {
+          const failover =
+            res.status === 404 ||
+            res.status === 500 ||
+            res.status === 502 ||
+            res.status === 503;
+          if (failover) {
+            lastErr = new Error(`supabase_proxy_${res.status}`);
+            continue;
+          }
         }
         rememberTransport(tid);
         return res;
@@ -160,6 +188,62 @@
     return token;
   }
 
+  function formatCacheAge(iso) {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleString("ru-RU", {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+    } catch {
+      return String(iso);
+    }
+  }
+
+  async function fetchBleListCached(companyId) {
+    const url = `${SUPABASE_URL}/rest/v1/ble_map_cache?company_id=eq.${companyId}&select=payload,updated_at`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      },
+    });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    if (!rows?.length || !Array.isArray(rows[0].payload)) return null;
+    return { data: rows[0].payload, updatedAt: rows[0].updated_at };
+  }
+
+  async function fetchBleListStatic(companyId) {
+    const paths = ["data/ble-map-cache.json", "../data/ble-map-cache.json"];
+    for (const rel of paths) {
+      try {
+        const res = await fetch(new URL(rel, window.location.href).href, {
+          cache: "no-cache",
+        });
+        if (!res.ok) continue;
+        const body = await res.json();
+        const cid = body.company_id ?? body.companyId;
+        if (cid != null && Number(cid) !== Number(companyId)) continue;
+        const payload = body.payload;
+        if (!Array.isArray(payload)) continue;
+        return {
+          data: payload,
+          updatedAt: body.updated_at || body.updatedAt || "",
+        };
+      } catch {
+        /* try next path */
+      }
+    }
+    return null;
+  }
+
+  async function fetchBleListOffline(companyId) {
+    const cached = await fetchBleListCached(companyId);
+    if (cached) return cached;
+    return fetchBleListStatic(companyId);
+  }
+
   async function bleApiFetch(path, retried = false) {
     let token = getBleToken();
     if (!token) {
@@ -170,7 +254,7 @@
     const res = await bleHttpFetch(path, {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     });
-    if (res.status === 401 || res.status === 500) {
+    if (res.status === 401) {
       if (retried) throw new Error(`HTTP ${res.status}`);
       localStorage.removeItem(BLE_TOKEN_KEY);
       await bleAutoLogin();
@@ -382,7 +466,22 @@
         showMapMsg("Не удалось определить companyId", "error");
         return;
       }
-      const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
+      let rawBle;
+      let cacheNotice = "";
+      try {
+        rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
+      } catch (bleErr) {
+        const cached = await fetchBleListOffline(companyId);
+        if (cached) {
+          rawBle = cached.data;
+          cacheNotice =
+            "Показан сохранённый список меток от " +
+            formatCacheAge(cached.updatedAt) +
+            " (без прямого доступа к API).";
+        } else {
+          throw bleErr;
+        }
+      }
       bleMapData = rawBle.map(classifyBle);
       updateMapStats();
       renderBleMarkers();
@@ -419,14 +518,20 @@
         );
       }
       revealMapControls();
-      hideMapMsg();
+      if (cacheNotice) showMapMsg(cacheNotice, "ok");
+      else hideMapMsg();
       bleMapInitialized = true;
     } catch (e) {
-      localStorage.removeItem(BLE_TOKEN_KEY);
-      try {
-        sessionStorage.removeItem(BLE_TRANSPORT_KEY);
-      } catch {
-        /* ignore */
+      const msg = e?.message || "";
+      const isAuth =
+        msg.includes("auth") || msg === "HTTP 401" || msg === "auto_auth_failed";
+      if (isAuth) {
+        localStorage.removeItem(BLE_TOKEN_KEY);
+        try {
+          sessionStorage.removeItem(BLE_TRANSPORT_KEY);
+        } catch {
+          /* ignore */
+        }
       }
       const tried = e.bleTriedTransports || transportOrder();
       showMapMsg(
