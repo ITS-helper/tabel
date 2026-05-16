@@ -571,7 +571,61 @@ body {
 .map-float-dock {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+}
+
+.map-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(21, 101, 192, 0.08);
+  box-shadow: 0 4px 20px rgba(21, 101, 192, 0.15);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.map-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.map-toolbar__sep {
+  flex: 0 0 1px;
+  align-self: center;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+}
+
+.map-route-field--toolbar {
+  flex: 0 0 auto;
+  min-width: 108px;
+  max-width: 148px;
+  margin-bottom: 0;
+}
+
+.map-route-field--toolbar .map-route-select {
+  padding: 6px 24px 4px 8px;
+  font-size: 12px;
+}
+
+.map-search-bar--toolbar {
+  flex: 1 1 88px;
+  min-width: 72px;
+  max-width: 160px;
+}
+
+.map-toolbar .map-filter-btn,
+.map-toolbar .map-fullscreen-btn,
+.map-toolbar .map-edit-fs-btn,
+.map-toolbar .map-layer-btn {
+  flex: 0 0 auto;
 }
 
 .map-edit-bar {
@@ -738,7 +792,7 @@ body.ble-map--edit .leaflet-marker-draggable:active {
 }
 
 .map-float-dock .map-route-field {
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 
 .map-fs-chrome {
@@ -825,7 +879,8 @@ html.ble-map-embedded .map-float-dock {
   position: absolute;
   left: 8px;
   right: 8px;
-  bottom: max(8px, env(safe-area-inset-bottom));
+  top: max(8px, env(safe-area-inset-top));
+  bottom: auto;
   z-index: 700;
   pointer-events: none;
 }
@@ -836,7 +891,7 @@ html.ble-map-embedded .map-float-dock > * {
 
 html.ble-map-embedded .map-msg:not([hidden]) {
   position: absolute;
-  top: max(8px, env(safe-area-inset-top));
+  top: calc(52px + max(8px, env(safe-area-inset-top)));
   left: 8px;
   right: 8px;
   z-index: 800;
@@ -900,7 +955,8 @@ body:not(.ble-map-embedded) .map-float-dock {
   position: absolute;
   left: 8px;
   right: 8px;
-  bottom: max(8px, env(safe-area-inset-bottom));
+  top: max(8px, env(safe-area-inset-top));
+  bottom: auto;
   z-index: 700;
   pointer-events: none;
 }
@@ -978,34 +1034,30 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     position: absolute;
     left: 8px;
     right: 8px;
-    bottom: max(8px, env(safe-area-inset-bottom));
+    top: max(8px, env(safe-area-inset-top));
+    bottom: auto;
     z-index: 700;
-    gap: 6px;
+    gap: 0;
     pointer-events: auto;
   }
 
-  .map-filters,
-  .map-route-field,
-  .map-edit-bar,
-  .map-bottom-controls {
+  .map-toolbar {
+    gap: 5px;
+    padding: 7px 8px;
+  }
+
+  .map-route-field--toolbar {
+    min-width: 96px;
+    max-width: 132px;
+  }
+
+  .map-edit-bar {
     background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: 14px;
     padding: 8px;
     box-shadow: 0 4px 20px rgba(21, 101, 192, 0.15);
-  }
-
-  .map-filters {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    gap: 6px;
-  }
-
-  .map-filters::-webkit-scrollbar {
-    display: none;
   }
 
   .map-edit-toggle,
@@ -1026,8 +1078,8 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     touch-action: manipulation;
   }
 
-  .map-filters .map-filter-btn {
-    flex: 1 1 auto;
+  .map-toolbar .map-filter-btn {
+    flex: 0 0 auto;
     justify-content: center;
   }
 
@@ -1037,12 +1089,6 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 
   .map-filter-label--short {
     display: inline;
-  }
-
-  .map-bottom-controls {
-    flex-wrap: nowrap;
-    align-items: stretch;
-    gap: 6px;
   }
 
   .map-edit-fs-btn,
@@ -1057,9 +1103,10 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     display: none;
   }
 
-  .map-search-bar {
-    flex: 1;
-    min-width: 0;
+  .map-search-bar--toolbar {
+    flex: 1 1 72px;
+    min-width: 64px;
+    max-width: none;
   }
 
   .map-search-bar input {
@@ -1082,7 +1129,8 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   #bleMap .leaflet-control-zoom {
-    margin-bottom: calc(120px + env(safe-area-inset-bottom)) !important;
+    margin-top: calc(56px + max(8px, env(safe-area-inset-top))) !important;
+    margin-bottom: max(8px, env(safe-area-inset-bottom)) !important;
     margin-right: max(8px, env(safe-area-inset-right)) !important;
   }
 

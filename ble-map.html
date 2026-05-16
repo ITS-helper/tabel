@@ -32,13 +32,13 @@
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
         </div>
         <div class="map-float-dock" id="mapFloatDock" hidden>
-          <label class="map-route-field" id="mapRouteFieldDock" hidden>
-            <span class="map-route-field__label">Маршрут</span>
-            <select class="map-route-select" id="mapRouteSelectDock" aria-label="Маршрут">
-              <option value="">Все маршруты</option>
-            </select>
-          </label>
-          <div id="mapFiltersBlock" class="map-filters">
+          <div class="map-toolbar" id="mapToolbar">
+            <label class="map-route-field map-route-field--toolbar" id="mapRouteFieldDock" hidden>
+              <span class="map-route-field__label">Маршрут</span>
+              <select class="map-route-select" id="mapRouteSelectDock" aria-label="Маршрут">
+                <option value="">Все</option>
+              </select>
+            </label>
             <button type="button" class="map-filter-btn filter-all active" data-filter="all">
               Все <span class="filter-count" id="fcAll">0</span>
             </button>
@@ -47,19 +47,16 @@
               <span class="map-filter-label map-filter-label--short">Не пройд.</span>
               <span class="filter-count" id="fcInsp">0</span>
             </button>
-          </div>
-          <div id="mapBottomControls" class="map-bottom-controls">
-            <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap" aria-label="На весь экран">
+            <span class="map-toolbar__sep" aria-hidden="true"></span>
+            <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtnWrap" aria-label="На весь экран" title="Экран">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
               <span class="map-fullscreen-btn__text">Экран</span>
             </button>
-            <button type="button" class="map-edit-fs-btn" id="mapEditFsBtn" title="Полный экран и правка меток">Правка</button>
-            <div id="mapLayerToggle" class="map-layer-toggle">
-              <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
-              <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
-            </div>
-            <div id="mapSearchBlock" class="map-search-bar">
-              <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
+            <button type="button" class="map-edit-fs-btn" id="mapEditFsBtn" title="Правка">Правка</button>
+            <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite">Спутник</button>
+            <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street">Схема</button>
+            <div id="mapSearchBlock" class="map-search-bar map-search-bar--toolbar">
+              <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" aria-label="№ метки" />
               <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить" aria-label="Очистить">✕</button>
             </div>
           </div>
