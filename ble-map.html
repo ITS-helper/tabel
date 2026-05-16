@@ -32,6 +32,12 @@
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
         </div>
         <div class="map-float-dock" id="mapFloatDock" hidden>
+          <label class="map-route-field" id="mapRouteFieldDock" hidden>
+            <span class="map-route-field__label">Маршрут</span>
+            <select class="map-route-select" id="mapRouteSelectDock" aria-label="Маршрут">
+              <option value="">Все маршруты</option>
+            </select>
+          </label>
           <div id="mapFiltersBlock" class="map-filters">
             <button type="button" class="map-filter-btn filter-all active" data-filter="all">
               Все <span class="filter-count" id="fcAll">0</span>
@@ -88,6 +94,12 @@
       </div>
     </div>
     <div class="map-fs-chrome" id="mapFsChrome">
+      <label class="map-route-field map-route-field--fs" id="mapRouteFieldFs" hidden>
+        <span class="map-route-field__label">Маршрут</span>
+        <select class="map-route-select" id="mapRouteSelectFs" aria-label="Маршрут">
+          <option value="">Все маршруты</option>
+        </select>
+      </label>
       <div id="mapFsMsg" class="map-msg map-fs-msg" hidden></div>
       <div id="mapEditBar" class="map-edit-bar map-edit-bar--fs">
         <button type="button" class="map-edit-toggle" id="mapEditToggle">Редактирование</button>

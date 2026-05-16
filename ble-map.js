@@ -27,6 +27,8 @@
   let bleMap = null;
   let bleMapData = [];
   let bleMapFilter = "all";
+  let bleMapRouteFilter = "";
+  let bleRoutes = [];
   let bleMapInitialized = false;
   let bleZoneData = [];
   let bleClusterGroup = null;
@@ -686,6 +688,8 @@
       status,
       photoTag: point.ble_image_url || "",
       photoPlace: point.location_image_url || "",
+      routeId: point.bleRoute?.id ?? null,
+      routeTitle: point.bleRoute?.title || "",
     };
   }
 
@@ -722,7 +726,10 @@
           )
           .join("")}</div>`
       : "";
-    return `<div style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${photoHtml}</div>`;
+    const routeLine = pt.routeTitle
+      ? `<div style="color:#1565C0;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.routeTitle)}</div>`
+      : "";
+    return `<div style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${photoHtml}</div>`;
   }
 
   function makeClusterGroup() {
@@ -767,6 +774,77 @@
     return pt.ble.toLowerCase() === query || pt.ble.toLowerCase().includes(query);
   }
 
+  function pointPassesRouteFilter(pt) {
+    if (!bleMapRouteFilter) return true;
+    return pt.routeId != null && String(pt.routeId) === String(bleMapRouteFilter);
+  }
+
+  function pointVisibleOnMap(pt, opts = {}) {
+    const statusFilter = opts.statusFilter ?? bleMapFilter;
+    const query = opts.query ?? "";
+    const requireId = !!opts.requireId;
+    if (!pt.lat || !pt.lng) return false;
+    if (requireId && !pt.id) return false;
+    if (statusFilter !== "all" && pt.status !== statusFilter) return false;
+    if (!pointPassesRouteFilter(pt)) return false;
+    if (!markerMatchesSearch(pt, query)) return false;
+    return true;
+  }
+
+  function routeOptionLabel(route) {
+    const title = route.title || `Маршрут ${route.id}`;
+    const insp = route.inspectedToday ?? 0;
+    const total = route.total ?? 0;
+    return `${title} ${insp}/${total}`;
+  }
+
+  function setRouteFieldsVisible(visible) {
+    ["mapRouteFieldDock", "mapRouteFieldFs", "mapRouteFieldCompact", "mapRouteSepCompact"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = !visible;
+    });
+  }
+
+  function populateRouteSelect() {
+    document.querySelectorAll(".map-route-select").forEach((sel) => {
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">Все маршруты</option>';
+      bleRoutes.forEach((r) => {
+        const opt = document.createElement("option");
+        opt.value = String(r.id);
+        opt.textContent = routeOptionLabel(r);
+        sel.appendChild(opt);
+      });
+      const next = bleMapRouteFilter || cur;
+      if (next && [...sel.options].some((o) => o.value === next)) sel.value = next;
+    });
+    const compact = document.getElementById("mapRouteSelectCompact");
+    if (compact?.options[0]) compact.options[0].textContent = "Все";
+  }
+
+  function setBleMapRouteFilter(value) {
+    bleMapRouteFilter = value ? String(value) : "";
+    document.querySelectorAll(".map-route-select").forEach((sel) => {
+      if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
+    });
+    redrawMapLayers();
+  }
+
+  window.setBleMapRouteFilter = setBleMapRouteFilter;
+  window.populateRouteSelect = populateRouteSelect;
+
+  async function loadBleRoutes() {
+    try {
+      const data = await bleApiFetch("/api/v1/ble/route");
+      bleRoutes = Array.isArray(data) ? data : [];
+      populateRouteSelect();
+      setRouteFieldsVisible(bleRoutes.length > 0);
+    } catch {
+      bleRoutes = [];
+      setRouteFieldsVisible(false);
+    }
+  }
+
   function renderBleMarkers() {
     if (!bleMap) return;
     if (bleClusterGroup) {
@@ -780,9 +858,7 @@
     const q = document.getElementById("mapBleSearch")?.value?.trim().toLowerCase().replace(/^ble/i, "") || "";
     bleClusterGroup = makeClusterGroup();
     bleMapData.forEach((pt) => {
-      if (!pt.lat || !pt.lng) return;
-      if (bleMapFilter !== "all" && pt.status !== bleMapFilter) return;
-      if (!markerMatchesSearch(pt, q)) return;
+      if (!pointVisibleOnMap(pt, { statusFilter: bleMapFilter, query: q })) return;
       L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
         .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
         .addTo(bleClusterGroup);
@@ -804,9 +880,7 @@
     if (bleEditMode && isMapFullscreenOpen()) {
       bleMarkerLayerFS = L.layerGroup();
       bleMapData.forEach((pt) => {
-        if (!pt.id || !pt.lat || !pt.lng) return;
-        if (bleMapFSFilter !== "all" && pt.status !== bleMapFSFilter) return;
-        if (!markerMatchesSearch(pt, q)) return;
+        if (!pointVisibleOnMap(pt, { statusFilter: bleMapFSFilter, query: q, requireId: true })) return;
         const marker = L.marker([pt.lat, pt.lng], {
           icon: createBleIcon(pt),
           draggable: true,
@@ -825,9 +899,7 @@
     }
     bleClusterGroupFS = makeClusterGroup();
     bleMapData.forEach((pt) => {
-      if (!pt.lat || !pt.lng) return;
-      if (bleMapFSFilter !== "all" && pt.status !== bleMapFSFilter) return;
-      if (!markerMatchesSearch(pt, q)) return;
+      if (!pointVisibleOnMap(pt, { statusFilter: bleMapFSFilter, query: q })) return;
       L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
         .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
         .addTo(bleClusterGroupFS);
@@ -990,6 +1062,7 @@
         );
       }
       revealMapControls();
+      loadBleRoutes();
       if (cacheNotice) showMapMsg(cacheNotice, "ok");
       else hideMapMsg();
       bleMapInitialized = true;
@@ -1174,6 +1247,10 @@
     };
     document.getElementById("mapFloatDock")?.addEventListener("click", onFilterTap);
     document.getElementById("mapFsFilters")?.addEventListener("click", onFilterTap);
+
+    document.querySelectorAll(".map-route-select").forEach((sel) => {
+      sel.addEventListener("change", () => setBleMapRouteFilter(sel.value));
+    });
 
     const mapBleSearchEl = document.getElementById("mapBleSearch");
     const mapSearchClearEl = document.getElementById("mapSearchClear");

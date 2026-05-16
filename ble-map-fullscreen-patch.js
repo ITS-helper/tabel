@@ -144,6 +144,12 @@
       flex-shrink: 0;
     }
 
+    .fs-compact-bar .fs-route {
+      flex: 1 1 140px;
+      min-width: 100px;
+      max-width: 220px;
+    }
+
     .fs-compact-bar .fs-search {
       flex: 1;
       min-width: 60px;
@@ -291,6 +297,15 @@
         <button type="button" class="fs-chip f-insp" data-pf="inspection">Не пройд. <span class="fc" id="pf-insp">0</span></button>
       </div>
       <div class="fs-sep"></div>
+            <div class="fs-route" id="mapRouteFieldCompact" hidden>
+        <label class="map-route-field map-route-field--compact">
+          <span class="map-route-field__label">Маршрут</span>
+          <select class="map-route-select" id="mapRouteSelectCompact" aria-label="Маршрут">
+            <option value="">Все</option>
+          </select>
+        </label>
+      </div>
+      <div class="fs-sep fs-route-sep" id="mapRouteSepCompact" hidden></div>
       <div class="fs-layers">
         <button class="fs-chip" data-pl="satellite" id="pl-sat">Спут</button>
         <button class="fs-chip l-active" data-pl="street" id="pl-str">Схема</button>
@@ -392,6 +407,10 @@
         origSyncFsStats.apply(this, arguments);
         setTimeout(syncStats, 100);
       };
+    }
+
+    if (typeof window.populateRouteSelect === 'function') {
+      window.populateRouteSelect();
     }
 
     // Наблюдаем за изменениями счётчиков

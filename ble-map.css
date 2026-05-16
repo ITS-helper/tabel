@@ -680,6 +680,67 @@ body.ble-map--edit .leaflet-marker-draggable:active {
   background: #bbdefb;
 }
 
+.map-route-field {
+  position: relative;
+  display: block;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.map-route-field__label {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  padding: 0 6px;
+  font-family: "Source Sans 3", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  background: #fff;
+  z-index: 1;
+  line-height: 1;
+}
+
+.map-route-select {
+  width: 100%;
+  font-family: "Source Sans 3", sans-serif;
+  font-size: 13px;
+  padding: 10px 12px 8px;
+  border-radius: 8px;
+  border: 1.5px solid var(--accent);
+  background: #fff;
+  color: #37474f;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378909C' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.map-route-field--fs {
+  margin: 8px 10px 0;
+}
+
+.map-route-field--compact {
+  min-width: 120px;
+  flex: 1 1 140px;
+}
+
+.map-route-field--compact .map-route-select {
+  padding: 8px 26px 6px 8px;
+  font-size: 12px;
+}
+
+.map-route-field--compact .map-route-field__label {
+  font-size: 10px;
+  top: -7px;
+  left: 6px;
+}
+
+.map-float-dock .map-route-field {
+  margin-bottom: 2px;
+}
+
 .map-fs-chrome {
   display: flex;
   flex-direction: column;
@@ -820,6 +881,7 @@ html.ble-map-embedded .map-inner {
   }
 
   .map-filters,
+  .map-route-field,
   .map-edit-bar,
   .map-bottom-controls {
     background: rgba(255, 255, 255, 0.96);
@@ -845,6 +907,10 @@ html.ble-map-embedded .map-inner {
   .map-edit-toggle,
   .map-edit-save,
   .map-edit-cancel {
+    min-height: 40px;
+  }
+
+  .map-route-select {
     min-height: 40px;
   }
 
