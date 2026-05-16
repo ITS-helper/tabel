@@ -428,18 +428,37 @@
 
   function updateMapStats() {
     const all = bleMapData.length;
-    const ok = bleMapData.filter((p) => p.status === "ok").length;
-    const bat = bleMapData.filter((p) => p.status === "battery").length;
     const insp = bleMapData.filter((p) => p.status === "inspection").length;
     const set = (id, v) => {
       const el = document.getElementById(id);
       if (el) el.textContent = v;
     };
     set("fcAll", all);
-    set("fcOk", ok);
-    set("fcBat", bat);
     set("fcInsp", insp);
+    set("fcFsAll", all);
+    set("fcFsInsp", insp);
   }
+
+  function syncFilterUi(value) {
+    document.querySelectorAll(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]").forEach((b) => {
+      const v = b.dataset.filter || b.dataset.fsfilter;
+      b.classList.toggle("active", v === value);
+    });
+    document.querySelectorAll(".fs-chip[data-pf]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.pf === value);
+    });
+  }
+
+  function setBleMapFilter(value) {
+    const allowed = value === "inspection" ? "inspection" : "all";
+    bleMapFilter = allowed;
+    bleMapFSFilter = allowed;
+    syncFilterUi(allowed);
+    renderBleMarkers();
+    if (bleMapFS) renderFsMarkers();
+  }
+
+  window.setBleMapFilter = setBleMapFilter;
 
   function isCoarseMobile() {
     return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
@@ -603,11 +622,13 @@
   }
 
   window.syncFsStats = function syncFsStats() {
-    const el = (id) => document.getElementById(id);
-    if (el("fcFsAll")) el("fcFsAll").textContent = bleMapData.length;
-    if (el("fcFsOk")) el("fcFsOk").textContent = bleMapData.filter((p) => p.status === "ok").length;
-    if (el("fcFsBat")) el("fcFsBat").textContent = bleMapData.filter((p) => p.status === "battery").length;
-    if (el("fcFsInsp")) el("fcFsInsp").textContent = bleMapData.filter((p) => p.status === "inspection").length;
+    updateMapStats();
+    const all = document.getElementById("fcFsAll")?.textContent;
+    const insp = document.getElementById("fcFsInsp")?.textContent;
+    const pAll = document.getElementById("pf-all");
+    const pInsp = document.getElementById("pf-insp");
+    if (pAll && all != null) pAll.textContent = all;
+    if (pInsp && insp != null) pInsp.textContent = insp;
   };
 
   function renderFsMarkers() {
@@ -678,12 +699,7 @@
         });
       });
       document.querySelectorAll("[data-fsfilter]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          document.querySelectorAll("[data-fsfilter]").forEach((b) => b.classList.remove("active"));
-          btn.classList.add("active");
-          bleMapFSFilter = btn.dataset.fsfilter;
-          renderFsMarkers();
-        });
+        btn.addEventListener("click", () => setBleMapFilter(btn.dataset.fsfilter));
       });
       const fsSearchEl = document.getElementById("mapFsSearch");
       const fsSearchClear = document.getElementById("mapFsSearchClear");
@@ -723,14 +739,16 @@
   };
 
   function bindUi() {
-    document.querySelectorAll(".map-filter-btn[data-filter]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".map-filter-btn[data-filter]").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        bleMapFilter = btn.dataset.filter;
-        renderBleMarkers();
-      });
-    });
+    const onFilterTap = (e) => {
+      const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const value = btn.dataset.filter || btn.dataset.fsfilter;
+      setBleMapFilter(value);
+    };
+    document.getElementById("mapFloatDock")?.addEventListener("click", onFilterTap);
+    document.getElementById("mapFsFilters")?.addEventListener("click", onFilterTap);
 
     const mapBleSearchEl = document.getElementById("mapBleSearch");
     const mapSearchClearEl = document.getElementById("mapSearchClear");

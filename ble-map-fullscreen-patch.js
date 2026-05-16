@@ -267,10 +267,8 @@
     bar.id = 'fsCompactBar';
     bar.innerHTML = `
       <div class="fs-filters">
-        <button class="fs-chip f-all active" data-pf="all">Все <span class="fc" id="pf-all">0</span></button>
-        <button class="fs-chip f-ok" data-pf="ok">ОК <span class="fc" id="pf-ok">0</span></button>
-        <button class="fs-chip f-bat" data-pf="battery">Бат <span class="fc" id="pf-bat">0</span></button>
-        <button class="fs-chip f-insp" data-pf="inspection">Н/п <span class="fc" id="pf-insp">0</span></button>
+        <button type="button" class="fs-chip f-all active" data-pf="all">Все <span class="fc" id="pf-all">0</span></button>
+        <button type="button" class="fs-chip f-insp" data-pf="inspection">Не пройд. <span class="fc" id="pf-insp">0</span></button>
       </div>
       <div class="fs-sep"></div>
       <div class="fs-layers">
@@ -300,19 +298,12 @@
 
     // Фильтры
     bar.querySelectorAll('[data-pf]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        bar.querySelectorAll('[data-pf]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        // Используем глобальную переменную
-        if (typeof bleMapFSFilter !== 'undefined') {
-          window.bleMapFSFilter = btn.dataset.pf;
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.setBleMapFilter === 'function') {
+          window.setBleMapFilter(btn.dataset.pf);
         }
-        if (typeof renderFsMarkers === 'function') renderFsMarkers();
-
-        // Синхронизируем со старыми кнопками (на случай если логика завязана)
-        document.querySelectorAll('[data-fsfilter]').forEach(b => b.classList.remove('active'));
-        const oldBtn = document.querySelector(`[data-fsfilter="${btn.dataset.pf}"]`);
-        if (oldBtn) oldBtn.classList.add('active');
       });
     });
 
@@ -356,12 +347,8 @@
     // Синхронизация счётчиков
     function syncStats() {
       const pAll = document.getElementById('pf-all');
-      const pOk = document.getElementById('pf-ok');
-      const pBat = document.getElementById('pf-bat');
       const pInsp = document.getElementById('pf-insp');
       if (pAll) pAll.textContent = document.getElementById('fcFsAll')?.textContent || '0';
-      if (pOk) pOk.textContent = document.getElementById('fcFsOk')?.textContent || '0';
-      if (pBat) pBat.textContent = document.getElementById('fcFsBat')?.textContent || '0';
       if (pInsp) pInsp.textContent = document.getElementById('fcFsInsp')?.textContent || '0';
     }
 
@@ -391,7 +378,7 @@
 
     // Наблюдаем за изменениями счётчиков
     const observer = new MutationObserver(syncStats);
-    ['fcFsAll', 'fcFsOk', 'fcFsBat', 'fcFsInsp'].forEach(id => {
+    ['fcFsAll', 'fcFsInsp'].forEach(id => {
       const el = document.getElementById(id);
       if (el) observer.observe(el, { childList: true, characterData: true, subtree: true });
     });

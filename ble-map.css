@@ -678,10 +678,6 @@ html.ble-map-embedded .map-inner {
     bottom: max(8px, env(safe-area-inset-bottom));
     z-index: 700;
     gap: 6px;
-    pointer-events: none;
-  }
-
-  .map-float-dock > * {
     pointer-events: auto;
   }
 
@@ -712,6 +708,12 @@ html.ble-map-embedded .map-inner {
     min-height: 40px;
     padding: 8px 12px;
     font-size: 0.72em;
+    touch-action: manipulation;
+  }
+
+  .map-filters .map-filter-btn {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 
   .map-filter-label--long {

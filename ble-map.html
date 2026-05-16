@@ -33,17 +33,11 @@
         <div class="map-float-dock" id="mapFloatDock" hidden>
           <div id="mapFiltersBlock" class="map-filters">
             <button type="button" class="map-filter-btn filter-all active" data-filter="all">
-              <span class="map-filter-label">Все</span> <span class="filter-count" id="fcAll">0</span>
-            </button>
-            <button type="button" class="map-filter-btn filter-ok" data-filter="ok">
-              <span class="map-filter-label">Норма</span> <span class="filter-count" id="fcOk">0</span>
-            </button>
-            <button type="button" class="map-filter-btn filter-battery" data-filter="battery">
-              <span class="map-filter-label">Батарея</span> <span class="filter-count" id="fcBat">0</span>
+              Все <span class="filter-count" id="fcAll">0</span>
             </button>
             <button type="button" class="map-filter-btn filter-inspection" data-filter="inspection">
-              <span class="map-filter-label map-filter-label--long">Не пройдено</span>
-              <span class="map-filter-label map-filter-label--short">Н/п</span>
+              <span class="map-filter-label map-filter-label--long">Не пройденные</span>
+              <span class="map-filter-label map-filter-label--short">Не пройд.</span>
               <span class="filter-count" id="fcInsp">0</span>
             </button>
           </div>
@@ -81,9 +75,7 @@
     </div>
     <div class="map-fullscreen-controls" id="mapFsFilters">
       <button type="button" class="map-filter-btn filter-all active" data-fsfilter="all">Все <span class="filter-count" id="fcFsAll">0</span></button>
-      <button type="button" class="map-filter-btn filter-ok" data-fsfilter="ok">Норма <span class="filter-count" id="fcFsOk">0</span></button>
-      <button type="button" class="map-filter-btn filter-battery" data-fsfilter="battery">Батарея <span class="filter-count" id="fcFsBat">0</span></button>
-      <button type="button" class="map-filter-btn filter-inspection" data-fsfilter="inspection">Не пройд. <span class="filter-count" id="fcFsInsp">0</span></button>
+      <button type="button" class="map-filter-btn filter-inspection" data-fsfilter="inspection">Не пройденные <span class="filter-count" id="fcFsInsp">0</span></button>
     </div>
     <div class="map-fullscreen-layer">
       <button type="button" class="map-layer-btn" id="btnFsSatellite" data-fslayer="satellite">Спутник</button>
