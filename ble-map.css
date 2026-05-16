@@ -730,12 +730,44 @@ html.ble-map-embedded body.ble-map-mobile .map-toolbar__sep--before-layers {
   color: #546e7a;
 }
 
+body.ble-map--edit .leaflet-marker-icon {
+  touch-action: none;
+}
+
+body.ble-map--edit .ble-marker-icon--edit .ble-dot {
+  width: 30px;
+  height: 30px;
+  font-size: 10px;
+}
+
 body.ble-map--edit .leaflet-marker-draggable {
   cursor: grab;
 }
 
 body.ble-map--edit .leaflet-marker-draggable:active {
   cursor: grabbing;
+}
+
+body.ble-map--edit .ble-dot--hold-pending {
+  animation: ble-dot-hold-pulse 1s linear forwards;
+}
+
+body.ble-map--edit .ble-dot--hold-armed {
+  transform: scale(1.18);
+  z-index: 10000 !important;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px var(--accent),
+    0 4px 14px rgba(21, 101, 192, 0.45);
+}
+
+@keyframes ble-dot-hold-pulse {
+  0% {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(33, 150, 243, 0.55);
+  }
+  100% {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 0 12px rgba(33, 150, 243, 0);
+  }
 }
 
 .map-fullscreen-btn__text {
@@ -1257,5 +1289,12 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   .ble-dot-battery,
   .ble-dot-inspection {
     animation: none !important;
+  }
+
+  body.ble-map--edit .ble-dot--hold-pending {
+    animation: none !important;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.3),
+      0 0 0 4px rgba(33, 150, 243, 0.45);
   }
 }

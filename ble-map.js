@@ -23,6 +23,7 @@
   const BLE_TRANSPORT_KEY = "ww-ble-transport";
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
+  const BLE_MARKER_HOLD_MS = 1000;
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -616,7 +617,7 @@
     if (bleEditMode) {
       enterEmbeddedEditLayout();
       bleEditMapMsg =
-        "Редактирование: перетащите метку или нажмите на зону на карте. Вершины — потяните за точки.";
+        "Редактирование: удержите метку 1 сек., затем перетащите. Зоны — нажмите и двигайте вершины.";
       hideMapMsg();
     } else {
       disableAllZonePm();
@@ -748,12 +749,12 @@
     };
   }
 
-  function createBleIcon(point) {
+  function createBleIcon(point, editTouchTarget = false) {
     return L.divIcon({
-      className: "",
+      className: editTouchTarget ? "ble-marker-icon--edit" : "",
       html: `<div class="ble-dot ble-dot-${point.status}">${point.ble}</div>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
+      iconSize: editTouchTarget ? [30, 30] : [22, 22],
+      iconAnchor: editTouchTarget ? [15, 15] : [11, 11],
     });
   }
 
@@ -822,6 +823,231 @@
     pt.lat = ll.lat;
     pt.lng = ll.lng;
     updateEditBarState();
+  }
+
+  function shouldUseEditMarkersOnMap(map) {
+    if (!bleEditMode) return false;
+    if (map === bleMapFS) return isMapFullscreenOpen();
+    if (map === bleMap) return !isMapFullscreenOpen();
+    return false;
+  }
+
+  function clientXYFromEvent(e) {
+    if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches && e.changedTouches.length) {
+      return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    }
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  function setMarkerLatLngFromClient(marker, map, clientX, clientY) {
+    const containerPoint = map.mouseEventToContainerPoint({ clientX, clientY });
+    marker.setLatLng(map.containerPointToLatLng(containerPoint));
+  }
+
+  function findTouch(touchList, id) {
+    if (id == null || !touchList) return null;
+    for (let i = 0; i < touchList.length; i++) {
+      if (touchList[i].identifier === id) return touchList[i];
+    }
+    return null;
+  }
+
+  function touchEnded(e, id) {
+    if (id == null || !e.changedTouches) return false;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === id) return true;
+    }
+    return false;
+  }
+
+  function attachMarkerHoldDrag(marker, pt) {
+    let holdTimer = null;
+    let dragArmed = false;
+    let manualDragging = false;
+    let suppressClick = false;
+    let touchBound = false;
+    let activePointer = null;
+
+    const dotEl = () => marker.getElement()?.querySelector(".ble-dot");
+    const getMap = () => marker._map;
+
+    const setPending = (on) => dotEl()?.classList.toggle("ble-dot--hold-pending", on);
+    const setArmedVisual = (on) => dotEl()?.classList.toggle("ble-dot--hold-armed", on);
+
+    const clearHoldTimer = () => {
+      if (holdTimer == null) return;
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    };
+
+    const detachDocumentDrag = () => {
+      document.removeEventListener("touchmove", onDocMove, { capture: true });
+      document.removeEventListener("mousemove", onDocMove, true);
+      document.removeEventListener("touchend", onDocEnd, true);
+      document.removeEventListener("touchcancel", onDocEnd, true);
+      document.removeEventListener("mouseup", onDocEnd, true);
+    };
+
+    const resetDragSession = () => {
+      clearHoldTimer();
+      detachDocumentDrag();
+      setPending(false);
+      setArmedVisual(false);
+      dragArmed = false;
+      manualDragging = false;
+      activePointer = null;
+      const map = getMap();
+      if (map?.dragging?.enabled() === false) map.dragging.enable();
+    };
+
+    const finishManualDrag = () => {
+      if (!manualDragging) return;
+      manualDragging = false;
+      onMarkerDragEnd(pt, marker);
+      suppressClick = true;
+      setTimeout(() => {
+        suppressClick = false;
+      }, 450);
+    };
+
+    const attachDocumentDrag = () => {
+      document.addEventListener("touchmove", onDocMove, { capture: true, passive: false });
+      document.addEventListener("mousemove", onDocMove, true);
+      document.addEventListener("touchend", onDocEnd, true);
+      document.addEventListener("touchcancel", onDocEnd, true);
+      document.addEventListener("mouseup", onDocEnd, true);
+    };
+
+    const armDrag = () => {
+      holdTimer = null;
+      setPending(false);
+      dragArmed = true;
+      setArmedVisual(true);
+      attachDocumentDrag();
+      try {
+        navigator.vibrate?.(40);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const onDocMove = (e) => {
+      if (!dragArmed) return;
+      const map = getMap();
+      if (!map) return;
+      let x;
+      let y;
+      if (e.type === "touchmove") {
+        const t = findTouch(e.touches, activePointer);
+        if (!t) return;
+        x = t.clientX;
+        y = t.clientY;
+      } else if (activePointer === "mouse") {
+        if (e.buttons === 0) return;
+        x = e.clientX;
+        y = e.clientY;
+      } else {
+        return;
+      }
+
+      if (!manualDragging) {
+        manualDragging = true;
+        marker.closePopup();
+        if (map.dragging) map.dragging.disable();
+      }
+
+      if (e.cancelable) e.preventDefault();
+      L.DomEvent.stopPropagation(e);
+      setMarkerLatLngFromClient(marker, map, x, y);
+    };
+
+    const onDocEnd = (e) => {
+      if (e.type === "touchend" || e.type === "touchcancel") {
+        if (activePointer !== "mouse" && !touchEnded(e, activePointer)) return;
+      } else if (activePointer !== "mouse") {
+        return;
+      }
+      if (!dragArmed && holdTimer == null) return;
+      finishManualDrag();
+      resetDragSession();
+    };
+
+    const onHoldStart = (e) => {
+      if (!bleEditMode) return;
+      if (e.type === "mousedown" && e.button !== 0) return;
+      L.DomEvent.stopPropagation(e);
+      if (e.cancelable) e.preventDefault();
+      resetDragSession();
+      activePointer = e.type === "touchstart" ? e.touches[0]?.identifier ?? 0 : "mouse";
+      setPending(true);
+      holdTimer = setTimeout(armDrag, BLE_MARKER_HOLD_MS);
+    };
+
+    const onHoldEndEarly = (e) => {
+      if (dragArmed || manualDragging) return;
+      if (holdTimer != null) {
+        L.DomEvent.stopPropagation(e);
+        clearHoldTimer();
+        setPending(false);
+      }
+    };
+
+    const bindPointer = () => {
+      const el = marker.getElement();
+      if (!el || touchBound) return;
+      touchBound = true;
+      L.DomEvent.on(el, "mousedown", onHoldStart, marker);
+      el.addEventListener("touchstart", onHoldStart, { passive: false, capture: true });
+      L.DomEvent.on(el, "mouseup", onHoldEndEarly, marker);
+      el.addEventListener("touchend", onHoldEndEarly, { passive: false, capture: true });
+      el.addEventListener("touchcancel", onHoldEndEarly, { passive: false, capture: true });
+      L.DomEvent.on(el, "contextmenu", L.DomEvent.stopPropagation);
+    };
+
+    const unbindPointer = () => {
+      const el = marker.getElement();
+      if (!el) return;
+      touchBound = false;
+      L.DomEvent.off(el, "mousedown", onHoldStart, marker);
+      el.removeEventListener("touchstart", onHoldStart, { capture: true });
+      L.DomEvent.off(el, "mouseup", onHoldEndEarly, marker);
+      el.removeEventListener("touchend", onHoldEndEarly, { capture: true });
+      el.removeEventListener("touchcancel", onHoldEndEarly, { capture: true });
+      L.DomEvent.off(el, "contextmenu", L.DomEvent.stopPropagation);
+    };
+
+    marker.on("add", bindPointer);
+    marker.on("remove", () => {
+      unbindPointer();
+      resetDragSession();
+    });
+
+    marker.on("click", (e) => {
+      if (suppressClick || holdTimer != null || dragArmed || manualDragging) {
+        L.DomEvent.stopPropagation(e);
+      }
+    });
+
+    marker.bindPopup(
+      makePopup(pt) +
+        "<p style='margin:8px 0 0;font-size:12px;color:#546E7A'>Удержите 1 сек., затем перетащите</p>",
+      { maxWidth: popupMaxWidth() }
+    );
+  }
+
+  function addEditableMarkersToGroup(group, opts = {}) {
+    const statusFilter = opts.statusFilter ?? bleMapFilter;
+    const query = opts.query ?? "";
+    bleMapData.forEach((pt) => {
+      if (!pointVisibleOnMap(pt, { statusFilter, query, requireId: true })) return;
+      const marker = L.marker([pt.lat, pt.lng], {
+        icon: createBleIcon(pt, true),
+        draggable: false,
+      });
+      attachMarkerHoldDrag(marker, pt);
+      marker.addTo(group);
+    });
   }
 
   function markerMatchesSearch(pt, query) {
@@ -935,6 +1161,15 @@
       bleMarkerLayer = null;
     }
     const q = document.getElementById("mapBleSearch")?.value?.trim().toLowerCase().replace(/^ble/i, "") || "";
+
+    if (shouldUseEditMarkersOnMap(bleMap)) {
+      bleMarkerLayer = L.layerGroup();
+      addEditableMarkersToGroup(bleMarkerLayer, { statusFilter: bleMapFilter, query: q });
+      bleMap.addLayer(bleMarkerLayer);
+      bleMap.invalidateSize();
+      return;
+    }
+
     bleClusterGroup = makeClusterGroup();
     bleMapData.forEach((pt) => {
       if (!pointVisibleOnMap(pt, { statusFilter: bleMapFilter, query: q })) return;
@@ -949,23 +1184,9 @@
     if (!bleMapFS) return;
     clearFsMarkerLayers();
     const q = getFsSearchQuery();
-    if (bleEditMode && isMapFullscreenOpen()) {
+    if (shouldUseEditMarkersOnMap(bleMapFS)) {
       bleMarkerLayerFS = L.layerGroup();
-      bleMapData.forEach((pt) => {
-        if (!pointVisibleOnMap(pt, { statusFilter: bleMapFSFilter, query: q, requireId: true })) return;
-        const marker = L.marker([pt.lat, pt.lng], {
-          icon: createBleIcon(pt),
-          draggable: true,
-          autoPan: true,
-        });
-        marker.on("dragend", () => onMarkerDragEnd(pt, marker));
-        marker.bindPopup(
-          makePopup(pt) +
-            "<p style='margin:8px 0 0;font-size:12px;color:#546E7A'>Перетащите для смены координат</p>",
-          { maxWidth: popupMaxWidth() }
-        );
-        marker.addTo(bleMarkerLayerFS);
-      });
+      addEditableMarkersToGroup(bleMarkerLayerFS, { statusFilter: bleMapFSFilter, query: q });
       bleMapFS.addLayer(bleMarkerLayerFS);
       bleMapFS.invalidateSize();
       return;
