@@ -133,10 +133,10 @@
       margin: 0 2px;
     }
 
-    .fs-compact-bar .fs-layers {
-      display: flex;
-      gap: 3px;
-      flex-shrink: 0;
+    .fs-compact-bar .fs-layer {
+      flex: 0 1 118px;
+      min-width: 96px;
+      max-width: 140px;
     }
 
     .fs-compact-bar .fs-route {
@@ -301,9 +301,15 @@
         </label>
       </div>
       <div class="fs-sep fs-route-sep" id="mapRouteSepCompact" hidden></div>
-      <div class="fs-layers">
-        <button class="fs-chip" data-pl="satellite" id="pl-sat">Спут</button>
-        <button class="fs-chip l-active" data-pl="street" id="pl-str">Схема</button>
+      <div class="fs-layer">
+        <label class="map-route-field map-route-field--compact">
+          <span class="map-route-field__label">Карта</span>
+          <select class="map-route-select map-layer-select" id="mapLayerSelectCompact" aria-label="Подложка карты">
+            <option value="street">Схема</option>
+            <option value="satellite">Спутник</option>
+            <option value="hybrid">Гибрид</option>
+          </select>
+        </label>
       </div>
       <div class="fs-sep"></div>
       <div class="fs-search">
@@ -346,17 +352,19 @@
       });
     }
 
-    // Слои
-    bar.querySelectorAll('[data-pl]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const layer = btn.dataset.pl;
-        bar.querySelectorAll('[data-pl]').forEach(b => b.classList.remove('l-active'));
-        btn.classList.add('l-active');
-        // Кликаем по оригинальной кнопке
-        const orig = document.querySelector(`[data-fslayer="${layer}"]`);
-        if (orig) orig.click();
+    const layerSel = bar.querySelector('.map-layer-select');
+    if (layerSel) {
+      if (typeof window.setBleBaseLayer === 'function') {
+        layerSel.value = document.getElementById('mapLayerSelect')?.value
+          || document.getElementById('mapLayerSelectFs')?.value
+          || layerSel.value;
+      }
+      layerSel.addEventListener('change', () => {
+        if (typeof window.setBleBaseLayer === 'function') {
+          window.setBleBaseLayer(layerSel.value);
+        }
       });
-    });
+    }
 
     // Поиск
     const searchInput = bar.querySelector('#pf-search');

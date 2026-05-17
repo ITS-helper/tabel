@@ -24,7 +24,9 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517s";
+  const BLE_MAP_BUILD = "20260517t";
+  const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
+  const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -42,6 +44,8 @@
   let bleMapFS = null;
   let bleMapFSFilter = "all";
   let bleMapFSInitialized = false;
+  let bleTileLayers = null;
+  let bleBaseLayerCurrent = "street";
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
   let bleClusterGroupFS = null;
@@ -1041,6 +1045,9 @@
     document.body.classList.toggle("ble-map--edit", bleEditMode);
     document.body.classList.toggle("ble-map--zone-edit", bleEditMode && isZoneEditAllowed());
     if (bleEditMode) {
+      if (bleBaseLayerCurrent === "street" && !opts.keepBaseLayer) {
+        setBleBaseLayer("hybrid");
+      }
       enterEmbeddedEditLayout();
       syncZoneEditUiClasses();
       bleEditMapMsg = isCoarseMobile()
@@ -1082,11 +1089,12 @@
       const isSelected = bleSelectedZoneId === z.id;
       const dimmed = zoneFocused && !isSelected;
       const pts = getZoneDisplayPts(z);
+      const hybridBoost = bleBaseLayerCurrent === "hybrid";
       const layer = L.polygon(pts, {
-        color: z.color,
-        opacity: dimmed ? 0.12 : 0.35,
-        fillOpacity: dimmed ? 0.04 : forEdit ? 0.22 : 0.15,
-        weight: isSelected ? 3 : dimmed ? 1 : 1.5,
+        color: hybridBoost && isSelected ? "#ffffff" : z.color,
+        opacity: dimmed ? 0.12 : hybridBoost ? 0.72 : 0.35,
+        fillOpacity: dimmed ? 0.04 : forEdit ? (hybridBoost ? 0.4 : 0.22) : hybridBoost ? 0.3 : 0.15,
+        weight: isSelected ? (hybridBoost ? 4 : 3) : dimmed ? 1 : hybridBoost ? 2.5 : 1.5,
         dashArray: isSelected ? "6 4" : null,
         interactive: forEdit,
       });
@@ -1111,6 +1119,94 @@
     }
   }
 
+  function buildBleTileLayers(mobile) {
+    const satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { attribution: "Esri", updateWhenIdle: mobile }
+    );
+    const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      updateWhenIdle: mobile,
+    });
+    const streetOverlay = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      updateWhenIdle: mobile,
+      opacity: 0.4,
+      className: "ble-tile-hybrid-overlay",
+    });
+    const hybrid = L.layerGroup([satellite, streetOverlay]);
+    return { satellite, street, hybrid };
+  }
+
+  function readStoredBaseLayer() {
+    try {
+      const stored = localStorage.getItem(BLE_BASE_LAYER_KEY);
+      if (BLE_BASE_LAYERS.includes(stored)) return stored;
+    } catch {
+      /* ignore */
+    }
+    return "street";
+  }
+
+  function syncBaseLayerSelects(layerId) {
+    document.querySelectorAll(".map-layer-select").forEach((sel) => {
+      if (sel.value !== layerId) sel.value = layerId;
+    });
+  }
+
+  function syncBaseLayerBodyClass(layerId) {
+    document.body.classList.toggle("ble-map--layer-hybrid", layerId === "hybrid");
+    document.body.classList.toggle("ble-map--layer-satellite", layerId === "satellite");
+  }
+
+  function applyBleBaseLayerToMap(map, tileLayers, nextId, prevId) {
+    if (!map || !tileLayers || nextId === prevId) return prevId;
+    if (tileLayers[prevId]) map.removeLayer(tileLayers[prevId]);
+    if (tileLayers[nextId]) tileLayers[nextId].addTo(map);
+    return nextId;
+  }
+
+  function setBleBaseLayer(layerId, opts = {}) {
+    if (!BLE_BASE_LAYERS.includes(layerId)) return;
+    const prevMain = bleBaseLayerCurrent;
+    const prevFs = fsTileLayerCurrent;
+    if (layerId === prevMain && layerId === prevFs && !opts.force) return;
+
+    bleBaseLayerCurrent = layerId;
+    fsTileLayerCurrent = layerId;
+
+    if (bleMap && bleTileLayers) {
+      bleBaseLayerCurrent = applyBleBaseLayerToMap(bleMap, bleTileLayers, layerId, prevMain);
+    }
+    if (bleMapFS && fsTileLayers) {
+      fsTileLayerCurrent = applyBleBaseLayerToMap(bleMapFS, fsTileLayers, layerId, prevFs);
+    }
+
+    if (opts.syncUi !== false) syncBaseLayerSelects(layerId);
+    syncBaseLayerBodyClass(layerId);
+    try {
+      localStorage.setItem(BLE_BASE_LAYER_KEY, layerId);
+    } catch {
+      /* ignore */
+    }
+    if (layerId !== prevMain || layerId !== prevFs) {
+      redrawMapLayers({ markers: false });
+    }
+  }
+  window.setBleBaseLayer = setBleBaseLayer;
+
+  function wireBaseLayerSelects() {
+    document.querySelectorAll(".map-layer-select").forEach((sel) => {
+      if (sel.dataset.layerWired === "1") return;
+      sel.dataset.layerWired = "1";
+      sel.addEventListener("change", () => setBleBaseLayer(sel.value));
+    });
+  }
+
+  function mountBleBaseLayer(map, tileLayers, layerId) {
+    if (!map || !tileLayers?.[layerId]) return layerId;
+    tileLayers[layerId].addTo(map);
+    return layerId;
+  }
+
   function initBleMap(center, zoom) {
     if (bleMap) return;
     const placeholder = document.getElementById("mapPlaceholder");
@@ -1131,29 +1227,12 @@
         position: mobile ? "bottomright" : "topright",
       })
       .addTo(bleMap);
-    const tileLayers = {
-      satellite: L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { attribution: "Esri", updateWhenIdle: mobile }
-      ),
-      street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        updateWhenIdle: mobile,
-      }),
-    };
-    tileLayers.street.addTo(bleMap);
-    let currentTileLayer = "street";
-    document.querySelectorAll(".map-layer-btn[data-layer]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const layer = btn.dataset.layer;
-        if (layer === currentTileLayer) return;
-        bleMap.removeLayer(tileLayers[currentTileLayer]);
-        tileLayers[layer].addTo(bleMap);
-        currentTileLayer = layer;
-        document.querySelectorAll(".map-layer-btn[data-layer]").forEach((b) =>
-          b.classList.toggle("active", b.dataset.layer === layer)
-        );
-      });
-    });
+    bleTileLayers = buildBleTileLayers(mobile);
+    bleBaseLayerCurrent = readStoredBaseLayer();
+    mountBleBaseLayer(bleMap, bleTileLayers, bleBaseLayerCurrent);
+    wireBaseLayerSelects();
+    syncBaseLayerSelects(bleBaseLayerCurrent);
+    syncBaseLayerBodyClass(bleBaseLayerCurrent);
     setTimeout(() => bleMap.invalidateSize(), 200);
   }
 
@@ -2242,16 +2321,9 @@
           position: fsMobile ? "bottomright" : "topright",
         })
         .addTo(bleMapFS);
-      fsTileLayers = {
-        satellite: L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          { attribution: "Esri", updateWhenIdle: fsMobile }
-        ),
-        street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          updateWhenIdle: fsMobile,
-        }),
-      };
-      fsTileLayers.street.addTo(bleMapFS);
+      fsTileLayers = buildBleTileLayers(fsMobile);
+      fsTileLayerCurrent = bleBaseLayerCurrent || readStoredBaseLayer();
+      mountBleBaseLayer(bleMapFS, fsTileLayers, fsTileLayerCurrent);
       if (bleMap) {
         bleMapFS.setView(bleMap.getCenter(), bleMap.getZoom());
       } else if (bleMapData.length) {
@@ -2264,18 +2336,8 @@
       } else {
         bleMapFS.setView([53.038, 39.011], 15);
       }
-      document.querySelectorAll("[data-fslayer]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const layer = btn.dataset.fslayer;
-          if (layer === fsTileLayerCurrent) return;
-          bleMapFS.removeLayer(fsTileLayers[fsTileLayerCurrent]);
-          fsTileLayers[layer].addTo(bleMapFS);
-          fsTileLayerCurrent = layer;
-          document.querySelectorAll("[data-fslayer]").forEach((b) =>
-            b.classList.toggle("active", b.dataset.fslayer === layer)
-          );
-        });
-      });
+      wireBaseLayerSelects();
+      syncBaseLayerSelects(fsTileLayerCurrent);
       document.querySelectorAll("[data-fsfilter]").forEach((btn) => {
         btn.addEventListener("click", () => setBleMapFilter(btn.dataset.fsfilter));
       });

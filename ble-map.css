@@ -504,9 +504,31 @@ body {
   align-items: center;
 }
 
-.map-fullscreen-layer .map-layer-btn {
-  font-size: 0.65em;
-  padding: 4px 8px;
+.map-layer-field--toolbar {
+  flex: 0 0 auto;
+  min-width: 104px;
+  max-width: 132px;
+  margin-bottom: 0;
+}
+
+.map-layer-field--fs {
+  flex: 0 0 auto;
+  min-width: 108px;
+  max-width: 140px;
+  margin: 0;
+}
+
+.map-layer-field--toolbar .map-route-select,
+.map-layer-field--fs .map-route-select {
+  text-overflow: ellipsis;
+}
+
+.ble-tile-hybrid-overlay {
+  filter: contrast(1.04) brightness(1.03);
+}
+
+body.ble-map--layer-hybrid .leaflet-overlay-pane svg path.leaflet-interactive {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.55));
 }
 
 .map-fullscreen-search {
@@ -776,10 +798,14 @@ body {
 
   .map-toolbar .map-filter-btn,
   .map-toolbar .map-edit-mode-btn,
-  .map-toolbar .map-layer-btn {
+  .map-layer-field--toolbar {
     min-height: var(--map-toolbar-control-h);
-    padding: 6px 11px;
     box-sizing: border-box;
+  }
+
+  .map-layer-field--toolbar .map-route-select {
+    min-height: var(--map-toolbar-control-h);
+    height: var(--map-toolbar-control-h);
   }
 
 }
@@ -855,6 +881,24 @@ body {
     left: 6px;
   }
 
+  .map-layer-field--toolbar {
+    flex: 0 0 auto;
+    min-width: 88px;
+    max-width: 108px;
+  }
+
+  .map-layer-field--toolbar .map-route-select {
+    padding: 4px 18px 3px 6px;
+    font-size: 11px;
+    text-overflow: ellipsis;
+  }
+
+  .map-layer-field--toolbar .map-route-field__label {
+    font-size: 9px;
+    top: -6px;
+    left: 6px;
+  }
+
   .map-search-bar--toolbar {
     flex: 1 1 88px;
     min-width: 72px;
@@ -864,7 +908,7 @@ body {
 
 .map-toolbar .map-filter-btn,
 .map-toolbar .map-edit-mode-btn,
-.map-toolbar .map-layer-btn {
+.map-layer-field--toolbar {
   flex: 0 0 auto;
 }
 
@@ -1453,12 +1497,16 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 
   .map-edit-mode-btn,
   .map-edit-save,
-  .map-edit-cancel,
-  .map-layer-btn {
+  .map-edit-cancel {
     min-height: 34px;
     padding: 5px 9px;
     flex-shrink: 0;
     font-size: 0.65em;
+  }
+
+  .map-layer-field--toolbar {
+    min-width: 92px;
+    max-width: 108px;
   }
 
   .map-route-field--toolbar .map-route-select {
@@ -1488,7 +1536,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     right: 2px;
   }
 
-  .map-layer-toggle {
+  .map-layer-field--toolbar {
     flex-shrink: 0;
   }
 

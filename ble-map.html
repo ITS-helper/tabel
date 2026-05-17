@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260517s" />
+  <link rel="stylesheet" href="ble-map.css?v=20260517t" />
 </head>
 <body>
   <header class="ble-map-page-header" id="bleMapPageHeader">
@@ -61,8 +61,14 @@
               <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
             </div>
             <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
-            <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite" title="Спутник">Спут</button>
-            <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street" title="Схема">Схема</button>
+            <label class="map-route-field map-route-field--toolbar map-layer-field--toolbar" id="mapLayerField">
+              <span class="map-route-field__label">Карта</span>
+              <select class="map-route-select map-layer-select" id="mapLayerSelect" aria-label="Подложка карты">
+                <option value="street">Схема</option>
+                <option value="satellite">Спутник</option>
+                <option value="hybrid">Гибрид</option>
+              </select>
+            </label>
             </div>
           </div>
           <p id="mapZoneEditHint" class="map-zone-edit-hint" hidden></p>
@@ -89,8 +95,14 @@
       <button type="button" class="map-filter-btn filter-inspection" data-fsfilter="inspection">Не пройденные <span class="filter-count" id="fcFsInsp">0</span></button>
     </div>
     <div class="map-fullscreen-layer">
-      <button type="button" class="map-layer-btn" id="btnFsSatellite" data-fslayer="satellite">Спутник</button>
-      <button type="button" class="map-layer-btn active" id="btnFsStreet" data-fslayer="street">Схема</button>
+      <label class="map-route-field map-route-field--compact map-layer-field--fs">
+        <span class="map-route-field__label">Карта</span>
+        <select class="map-route-select map-layer-select" id="mapLayerSelectFs" aria-label="Подложка карты">
+          <option value="street">Схема</option>
+          <option value="satellite">Спутник</option>
+          <option value="hybrid">Гибрид</option>
+        </select>
+      </label>
       <div class="map-fullscreen-search">
         <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
         <button type="button" class="map-fullscreen-search-clear" id="mapFsSearchClear" title="Очистить">✕</button>
@@ -113,7 +125,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="ble-map.js?v=20260517s"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260517s"></script>
+  <script src="ble-map.js?v=20260517t"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260517t"></script>
 </body>
 </html>
