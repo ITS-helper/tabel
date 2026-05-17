@@ -24,7 +24,8 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260519b";
+  const BLE_MAP_BUILD = "20260519c";
+  const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
   const BLE_FIELD_PACK_FETCH_TIMEOUT_MS = 25 * 60 * 1000;
   const BLE_DOT_PX = 20;
   const BLE_FIELD_DB = "ww-ble-field-v1";
@@ -963,6 +964,178 @@
     return bleDirtyMarkers.size > 0 || bleDirtyZones.size > 0;
   }
 
+  function loadOfflineMarkerQueue() {
+    try {
+      const raw = localStorage.getItem(BLE_OFFLINE_MARKER_EDITS_KEY);
+      if (!raw) return { version: 1, companyId: null, edits: [] };
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.edits)) return { version: 1, companyId: null, edits: [] };
+      return data;
+    } catch {
+      return { version: 1, companyId: null, edits: [] };
+    }
+  }
+
+  function saveOfflineMarkerQueue(queue) {
+    try {
+      localStorage.setItem(BLE_OFFLINE_MARKER_EDITS_KEY, JSON.stringify(queue));
+    } catch (e) {
+      console.warn("[ble-map] offline queue save", e?.message || e);
+    }
+  }
+
+  function countOfflinePendingEdits() {
+    return loadOfflineMarkerQueue().edits.length;
+  }
+
+  function upsertOfflineMarkerEdit(rec) {
+    if (!rec?.point?.id) return;
+    const q = loadOfflineMarkerQueue();
+    const entry = {
+      id: rec.point.id,
+      ble: rec.point.ble || String(rec.point.id),
+      lat: rec.lat,
+      lng: rec.lng,
+      origLat: rec.origLat,
+      origLng: rec.origLng,
+      updatedAt: new Date().toISOString(),
+    };
+    const idx = q.edits.findIndex((e) => e.id === entry.id);
+    if (idx >= 0) q.edits[idx] = entry;
+    else q.edits.push(entry);
+    q.companyId = bleCompanyId ?? q.companyId;
+    saveOfflineMarkerQueue(q);
+    updateOfflineEditChrome();
+  }
+
+  function removeOfflineMarkerEdit(id) {
+    const q = loadOfflineMarkerQueue();
+    const next = q.edits.filter((e) => e.id !== id);
+    if (next.length === q.edits.length) return;
+    q.edits = next;
+    saveOfflineMarkerQueue(q);
+    updateOfflineEditChrome();
+  }
+
+  function clearOfflineMarkerEditsByIds(ids) {
+    if (!ids?.length) return;
+    const set = new Set(ids);
+    const q = loadOfflineMarkerQueue();
+    const next = q.edits.filter((e) => !set.has(e.id));
+    if (next.length === q.edits.length) return;
+    q.edits = next;
+    saveOfflineMarkerQueue(q);
+    updateOfflineEditChrome();
+  }
+
+  function mergeDirtyMarkersIntoOfflineQueue() {
+    if (!bleDirtyMarkers.size) return;
+    bleDirtyMarkers.forEach((rec) => upsertOfflineMarkerEdit(rec));
+  }
+
+  function applyOfflineMarkerQueueToMapData() {
+    const q = loadOfflineMarkerQueue();
+    if (!q.edits.length) return 0;
+    let n = 0;
+    for (const e of q.edits) {
+      const pt = bleMapData.find((p) => p.id === e.id);
+      if (!pt || e.lat == null || e.lng == null) continue;
+      pt.lat = e.lat;
+      pt.lng = e.lng;
+      n++;
+    }
+    if (n) invalidateMarkerRegistry();
+    return n;
+  }
+
+  function setOfflineSyncStatus(text, kind = "") {
+    const el = document.getElementById("mapOfflineSyncStatus");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      el.className = "map-offline-sync-status";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+    el.className = `map-offline-sync-status${kind ? ` map-offline-sync-status--${kind}` : ""}`;
+  }
+
+  function updateOfflineEditChrome() {
+    const pending = countOfflinePendingEdits();
+    const offline = !navigator.onLine;
+    document.body.classList.toggle("ble-map--offline", offline);
+    document.body.classList.toggle("ble-map--offline-pending", pending > 0);
+
+    const saveBtn = document.getElementById("mapSaveBtn");
+    if (saveBtn && bleEditMode) {
+      if (offline && hasUnsavedEdits()) {
+        saveBtn.textContent = "Сохранить локально";
+      } else if (!offline && pending > 0) {
+        saveBtn.textContent = pending === 1 ? "Отправить (1)" : `Отправить (${pending})`;
+      } else {
+        saveBtn.textContent = "Сохранить";
+      }
+    }
+
+    if (offline || pending > 0) {
+      const parts = [];
+      if (offline) parts.push("Офлайн");
+      if (pending) parts.push(`${pending} ${pending === 1 ? "правка" : "правок"} ждёт отправки`);
+      setOfflineSyncStatus(parts.join(" · "), offline ? "offline" : "pending");
+    } else {
+      setOfflineSyncStatus("");
+    }
+  }
+
+  async function flushOfflineMarkerEditQueue(opts = {}) {
+    const q = loadOfflineMarkerQueue();
+    if (!q.edits.length) return 0;
+    if (!navigator.onLine) return 0;
+
+    if (!(await ensureBleTokenForField())) {
+      throw new Error("auth_failed");
+    }
+
+    const prevDirty = bleDirtyMarkers;
+    bleDirtyMarkers = new Map();
+    for (const e of q.edits) {
+      let pt = bleMapData.find((p) => p.id === e.id);
+      if (!pt) {
+        pt = {
+          id: e.id,
+          ble: e.ble || String(e.id),
+          lat: e.lat,
+          lng: e.lng,
+          origLat: e.origLat,
+          origLng: e.origLng,
+        };
+      }
+      bleDirtyMarkers.set(e.id, {
+        point: pt,
+        lat: e.lat,
+        lng: e.lng,
+        origLat: e.origLat,
+        origLng: e.origLng,
+      });
+    }
+
+    try {
+      const n = await saveDirtyMarkers();
+      saveOfflineMarkerQueue({ version: 1, companyId: bleCompanyId ?? q.companyId, edits: [] });
+      updateOfflineEditChrome();
+      if (!opts.silent && n > 0) {
+        showMapMsg(`Отправлено на сервер: ${n} ${n === 1 ? "метка" : "меток"}`, "");
+        setTimeout(hideMapMsg, 4000);
+      }
+      return n;
+    } catch (e) {
+      bleDirtyMarkers = prevDirty;
+      throw e;
+    }
+  }
+
   function getZoneDisplayPts(z) {
     const dirty = bleDirtyZones.get(Number(z.id));
     return dirty ? dirty.pts : z.pts;
@@ -1356,7 +1529,9 @@
 
   function updateEditBarState() {
     const saveBtn = document.getElementById("mapSaveBtn");
-    if (saveBtn) saveBtn.disabled = !hasUnsavedEdits();
+    const pending = countOfflinePendingEdits();
+    const canSave = hasUnsavedEdits() || (pending > 0 && navigator.onLine);
+    if (saveBtn) saveBtn.disabled = !canSave;
     const toggle = document.getElementById("mapEditToggle");
     if (toggle) toggle.classList.toggle("active", bleEditMode);
     const tools = document.getElementById("mapEditTools");
@@ -1366,12 +1541,14 @@
       editBtn.classList.toggle("active", bleEditMode);
       editBtn.setAttribute("aria-pressed", bleEditMode ? "true" : "false");
     }
+    updateOfflineEditChrome();
   }
 
   function cancelAllEdits() {
     bleDirtyMarkers.forEach(({ point, origLat, origLng }) => {
       point.lat = origLat;
       point.lng = origLng;
+      removeOfflineMarkerEdit(point.id);
     });
     bleDirtyMarkers.clear();
     [...bleDirtyZones.keys()].forEach((zid) => revertZoneGeometry(zid));
@@ -1388,6 +1565,7 @@
   async function saveDirtyMarkers() {
     const entries = [...bleDirtyMarkers.entries()];
     if (!entries.length) return 0;
+    const savedIds = entries.map(([, { point }]) => point.id);
     if (entries.length === 1) {
       const [, { lat, lng, point }] = entries[0];
       await bleApiMutate("PUT", `/api/v1/ble/${point.id}`, { latitude: lat, longitude: lng });
@@ -1407,6 +1585,7 @@
       point.lng = lng;
     });
     bleDirtyMarkers.clear();
+    clearOfflineMarkerEditsByIds(savedIds);
     return entries.length;
   }
 
@@ -1462,21 +1641,51 @@
       btn.textContent = "⌛ Сохранение…";
     }
     try {
-      const nMarkers = await saveDirtyMarkers();
-      const nZone = await saveDirtyZones();
+      mergeDirtyMarkersIntoOfflineQueue();
+
+      if (!navigator.onLine) {
+        const pending = countOfflinePendingEdits();
+        showMapMsg(
+          pending
+            ? `Офлайн: ${pending} ${pending === 1 ? "правка сохранена" : "правок сохранено"} на устройстве. Отправка — при появлении сети.`
+            : "Нет правок для сохранения.",
+          ""
+        );
+        bleDirtyMarkers.clear();
+        redrawMapLayers();
+        updateEditBarState();
+        return;
+      }
+
+      let nMarkers = await flushOfflineMarkerEditQueue({ silent: true });
+      if (hasUnsavedEdits()) {
+        nMarkers += await saveDirtyMarkers();
+      }
+      let nZone = 0;
+      if (bleDirtyZones.size) {
+        nZone = await saveDirtyZones();
+      }
       const parts = [];
       if (nMarkers) parts.push(`меток: ${nMarkers}`);
       if (nZone) parts.push(`зон: ${nZone}`);
+      if (parts.length) {
+        showMapMsg(`Сохранено на сервере (${parts.join(", ")})`, "");
+        setTimeout(hideMapMsg, 3500);
+      }
       bleEditMapMsg = "";
-      hideMapMsg();
       redrawMapLayers();
       updateEditBarState();
     } catch (e) {
-      showMapMsg("Ошибка сохранения: " + formatZoneSaveError(e), "error");
+      const msg = formatZoneSaveError(e);
+      showMapMsg(
+        "Ошибка сохранения: " +
+          msg +
+          (countOfflinePendingEdits() ? " Правки остались в очереди на устройстве." : ""),
+        "error"
+      );
       throw e;
     } finally {
       if (btn) {
-        btn.textContent = "Сохранить";
         updateEditBarState();
       }
     }
@@ -1503,9 +1712,12 @@
     }
     if (on) {
       const mobile = isCoarseMobile();
+      const offlineHint = !navigator.onLine
+        ? "\n\nСейчас без сети: метки можно двигать, правки сохранятся на телефоне и уйдут на сервер, когда появится интернет."
+        : "";
       const confirmText = mobile
-        ? "Режим редактирования меняет данные на сервере VSM.\n\n• Удержите метку 1 сек., затем перетащите\n\nПродолжить?"
-        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: оранжевые точки — вершины; Shift + перетаскивание — зона целиком\n• «Сохранить» — записать все зоны\n\nПродолжить?";
+        ? `Режим редактирования меток VSM.\n\n• Удержите метку 1 сек., затем перетащите${offlineHint}\n\nПродолжить?`
+        : `Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: оранжевые точки — вершины; Shift + перетаскивание — зона целиком\n• «Сохранить» — записать на сервер (или локально без сети)${offlineHint}\n\nПродолжить?`;
       if (!opts.skipConfirm && !window.confirm(confirmText)) {
         return;
       }
@@ -1520,8 +1732,12 @@
       enterEmbeddedEditLayout();
       syncZoneEditUiClasses();
       bleEditMapMsg = isCoarseMobile()
-        ? "Редактирование: удержите метку 1 сек., затем перетащите."
-        : "Метки: удержите 1 сек. Зоны: вершины; Shift — перетащить целиком. «Сохранить» — записать.";
+        ? navigator.onLine
+          ? "Удержите метку 1 сек., перетащите. «Сохранить» — на сервер."
+          : "Офлайн: удержите метку 1 сек., перетащите. Правки сохранятся на устройстве."
+        : navigator.onLine
+          ? "Метки: удержите 1 сек. Зоны: вершины; Shift — перетащить. «Сохранить» — на сервер."
+          : "Офлайн: метки можно двигать; «Сохранить локально» — в очередь на отправку.";
       hideMapMsg();
     } else {
       disableAllZonePm();
@@ -2871,6 +3087,7 @@
         /* ignore */
       }
     }
+    upsertOfflineMarkerEdit(rec);
     updateEditBarState();
   }
 
@@ -3414,6 +3631,7 @@
 
   async function applyBleListToMap(rawBle, cacheNotice, opts = {}) {
     setBleMapData(mergeBleMapDataFromRaw(rawBle));
+    applyOfflineMarkerQueueToMapData();
     if (opts.liveApi && Array.isArray(rawBle) && rawBle.length && bleCompanyId) {
       bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: bleCompanyId, live: true };
     }
@@ -3455,6 +3673,7 @@
     hideMapMsg();
     bleMapInitialized = true;
     scheduleMapResize();
+    updateOfflineEditChrome();
   }
 
   async function tryLoadOfflineBleList(companyId) {
@@ -3806,6 +4025,7 @@
     applyMapLayoutClasses();
     bindMapResizeHandlers();
     window.addEventListener("offline", () => {
+      updateOfflineEditChrome();
       void (async () => {
         if (bleMapInitialized) return;
         const cid = bleCompanyId || (await resolveCompanyId());
@@ -3815,6 +4035,19 @@
     window.addEventListener("online", () => {
       hideMapMsg();
       setRetryVisible(false);
+      updateOfflineEditChrome();
+      void (async () => {
+        if (!countOfflinePendingEdits()) return;
+        try {
+          await flushOfflineMarkerEditQueue();
+        } catch (e) {
+          console.warn("[ble-map] auto sync offline edits", e?.message || e);
+          showMapMsg(
+            "Сеть есть, но отправка правок не удалась. Нажмите «Отправить» в режиме правки.",
+            "error"
+          );
+        }
+      })();
     });
     window.addEventListener("message", (e) => {
       if (e.data?.type === "ww-ble-map-resize") {
@@ -3842,6 +4075,7 @@
     initBlePopupPhotoClicks();
     bindUi();
     void refreshFieldPackChrome();
+    updateOfflineEditChrome();
     loadBleMap();
     scheduleMapResize();
   });

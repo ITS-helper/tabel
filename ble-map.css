@@ -264,6 +264,32 @@ body {
   cursor: wait;
 }
 
+.map-offline-sync-status {
+  margin: 0;
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #e65100;
+  background: rgba(255, 243, 224, 0.98);
+  border: 1px solid rgba(230, 81, 0, 0.2);
+  border-top: none;
+}
+
+.map-offline-sync-status--offline {
+  color: #bf360c;
+}
+
+.map-offline-sync-status--pending {
+  color: #1565c0;
+  background: rgba(227, 242, 253, 0.98);
+  border-color: rgba(21, 101, 192, 0.2);
+}
+
+.map-offline-sync-status[hidden] {
+  display: none !important;
+}
+
 .map-field-pack-status {
   margin: 0;
   padding: 2px 10px 6px;
