@@ -1089,12 +1089,19 @@
       const isSelected = bleSelectedZoneId === z.id;
       const dimmed = zoneFocused && !isSelected;
       const pts = getZoneDisplayPts(z);
-      const hybridBoost = bleBaseLayerCurrent === "hybrid";
+      const layerMode = bleBaseLayerCurrent;
+      const zoneStyle = getZonePolygonStyle(z, {
+        dimmed,
+        forEdit,
+        isSelected,
+        layerMode,
+        ptCount: pts.length,
+      });
       const layer = L.polygon(pts, {
-        color: hybridBoost && isSelected ? "#ffffff" : z.color,
-        opacity: dimmed ? 0.12 : hybridBoost ? 0.5 : 0.35,
-        fillOpacity: dimmed ? 0.04 : forEdit ? (hybridBoost ? 0.16 : 0.22) : hybridBoost ? 0.1 : 0.15,
-        weight: isSelected ? (hybridBoost ? 4 : 3) : dimmed ? 1 : hybridBoost ? 2.5 : 1.5,
+        color: zoneStyle.color,
+        opacity: zoneStyle.opacity,
+        fillOpacity: zoneStyle.fillOpacity,
+        weight: zoneStyle.weight,
         dashArray: isSelected ? "6 4" : null,
         interactive: forEdit,
       });
@@ -1119,6 +1126,50 @@
     }
   }
 
+  function isMainSitePolygonZone(z) {
+    const label = `${z.name || ""} ${z.description || ""}`.toLowerCase();
+    return label.includes("spg_tsb") || label.includes("spg-tsb");
+  }
+
+  function isMarkerClusterZone(z, ptCount) {
+    return ptCount > 12;
+  }
+
+  function getZonePolygonStyle(z, ctx) {
+    const strokeColor = z.color || "#0088cc";
+    const outlineOnly = isMainSitePolygonZone(z) || isMarkerClusterZone(z, ctx.ptCount);
+    if (outlineOnly) {
+      return {
+        color: ctx.isSelected && ctx.layerMode === "hybrid" ? "#ffffff" : strokeColor,
+        opacity: ctx.dimmed ? 0.2 : ctx.layerMode === "hybrid" ? 0.95 : 0.55,
+        fillOpacity: 0,
+        weight: ctx.isSelected ? 3.5 : ctx.layerMode === "hybrid" ? 2.5 : 1.75,
+      };
+    }
+    if (ctx.layerMode === "hybrid") {
+      return {
+        color: ctx.isSelected ? "#ffffff" : strokeColor,
+        opacity: ctx.dimmed ? 0.25 : 0.92,
+        fillOpacity: ctx.dimmed ? 0 : ctx.forEdit ? 0.05 : 0.02,
+        weight: ctx.isSelected ? 4 : ctx.dimmed ? 1 : 2.75,
+      };
+    }
+    if (ctx.layerMode === "satellite") {
+      return {
+        color: strokeColor,
+        opacity: ctx.dimmed ? 0.12 : 0.4,
+        fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.18 : 0.12,
+        weight: ctx.isSelected ? 3 : ctx.dimmed ? 1 : 1.5,
+      };
+    }
+    return {
+      color: strokeColor,
+      opacity: ctx.dimmed ? 0.12 : 0.35,
+      fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.22 : 0.15,
+      weight: ctx.isSelected ? 3 : ctx.dimmed ? 1 : 1.5,
+    };
+  }
+
   function buildBleTileLayers(mobile) {
     const satellite = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -1127,13 +1178,7 @@
     const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       updateWhenIdle: mobile,
     });
-    const streetOverlay = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      updateWhenIdle: mobile,
-      opacity: 0.4,
-      className: "ble-tile-hybrid-overlay",
-    });
-    const hybrid = L.layerGroup([satellite, streetOverlay]);
-    return { satellite, street, hybrid };
+    return { satellite, street, hybrid: satellite };
   }
 
   function readStoredBaseLayer() {
