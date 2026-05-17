@@ -1092,8 +1092,8 @@
       const hybridBoost = bleBaseLayerCurrent === "hybrid";
       const layer = L.polygon(pts, {
         color: hybridBoost && isSelected ? "#ffffff" : z.color,
-        opacity: dimmed ? 0.12 : hybridBoost ? 0.72 : 0.35,
-        fillOpacity: dimmed ? 0.04 : forEdit ? (hybridBoost ? 0.4 : 0.22) : hybridBoost ? 0.3 : 0.15,
+        opacity: dimmed ? 0.12 : hybridBoost ? 0.5 : 0.35,
+        fillOpacity: dimmed ? 0.04 : forEdit ? (hybridBoost ? 0.16 : 0.22) : hybridBoost ? 0.1 : 0.15,
         weight: isSelected ? (hybridBoost ? 4 : 3) : dimmed ? 1 : hybridBoost ? 2.5 : 1.5,
         dashArray: isSelected ? "6 4" : null,
         interactive: forEdit,
