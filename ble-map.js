@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518j";
+  const BLE_MAP_BUILD = "20260518k";
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
   const BLE_FIELD_PHOTOS_STORE = "photos";
@@ -1664,11 +1664,13 @@
   }
 
   function createBleIcon(point, editTouchTarget = false) {
+    const hitSize = editTouchTarget ? (isCoarseMobile() ? 32 : 28) : 22;
+    const anchor = hitSize / 2;
     return L.divIcon({
       className: editTouchTarget ? "ble-marker-icon--edit" : "",
       html: `<div class="ble-dot ble-dot-${point.status}">${point.ble}</div>`,
-      iconSize: editTouchTarget ? [30, 30] : [22, 22],
-      iconAnchor: editTouchTarget ? [15, 15] : [11, 11],
+      iconSize: [hitSize, hitSize],
+      iconAnchor: [anchor, anchor],
     });
   }
 

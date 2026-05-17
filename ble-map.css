@@ -1161,10 +1161,19 @@ body.ble-map--edit .leaflet-marker-icon:not(.ble-zone-vertex-icon) {
   touch-action: none;
 }
 
+body.ble-map--edit .ble-marker-icon--edit {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+}
+
 body.ble-map--edit .ble-marker-icon--edit .ble-dot {
-  width: 30px;
-  height: 30px;
-  font-size: 10px;
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+  flex-shrink: 0;
 }
 
 body.ble-map--edit .leaflet-marker-draggable {
@@ -1180,7 +1189,7 @@ body.ble-map--edit .ble-dot--hold-pending {
 }
 
 body.ble-map--edit .ble-dot--hold-armed {
-  transform: scale(1.18);
+  transform: scale(1.08);
   z-index: 10000 !important;
   box-shadow:
     0 0 0 3px #fff,
