@@ -20,6 +20,8 @@ if errorlevel 1 (
 call npm install
 if errorlevel 1 goto :end_pause
 
+echo Сборка: 2 фото на метку (метка + место). Для одного фото: npm run ble-field-pack:tag-only
+echo.
 call npm run ble-field-pack
 if errorlevel 1 (
   echo.

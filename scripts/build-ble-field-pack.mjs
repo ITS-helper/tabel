@@ -1,7 +1,7 @@
 /**
  * Сборка офлайн-пакета для карты BLE (один .zip для телефона).
  * Запуск: npm run ble-field-pack
- *   --full   оба фото на метку (метка + место), файл больше
+ *   --tag-only   только фото метки (меньший архив)
  * Без VPN нужен доступ к workers.dev. Результат: data/ble-field-pack.zip + meta.json
  */
 import fs from "fs";
@@ -15,7 +15,7 @@ const ROOT = path.join(__dirname, "..");
 const WORKER = "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
 const USER = process.env.BLE_AUTO_USER || "impl_dept";
 const PASS = process.env.BLE_AUTO_PASS || "impl_dept_vsm_2024";
-const TAG_ONLY = !process.argv.includes("--full");
+const TAG_ONLY = process.argv.includes("--tag-only");
 const CONCURRENCY = Number(process.env.BLE_PACK_CONCURRENCY || 12) || 12;
 const MAX_PHOTO_BYTES = 2.5 * 1024 * 1024;
 

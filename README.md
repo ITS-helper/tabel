@@ -139,7 +139,7 @@
 
 **Офлайн-пакет с фото для телефона** (рекомендуется вместо «Скачать в браузере» на телефоне):
 
-1. На ПК с VPN: `npm install` → `npm run ble-field-pack` (только фото метки, меньше размер) или `npm run ble-field-pack:full` (метка + место).
+1. На ПК с VPN: `npm install` → `npm run ble-field-pack` (метка + место, 2 фото) или `npm run ble-field-pack:tag-only` (только фото метки, меньше архив).
 2. Появятся `data/ble-field-pack.zip` (в git не коммитится, >100 МБ) и `data/ble-field-pack-meta.json` (укажите `packUrl`, закоммитьте meta).
 3. Выложите zip на GitHub Pages рядом с сайтом или в Supabase Storage и пропишите URL в meta.
 4. На телефоне в карте: **«Офлайн-пакет»** → скачать с сайта **или** «Загрузить .zip» (AirDrop/USB с ПК).

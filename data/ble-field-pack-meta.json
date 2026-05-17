@@ -1,10 +1,11 @@
 {
-  "packUrl": null,
-  "updated_at": null,
+  "packUrl": "data/ble-field-pack.zip",
+  "updated_at": "2026-05-17T15:41:46.619Z",
   "company_id": 1,
-  "markerCount": 0,
-  "photosOk": 0,
-  "bytesTotal": 0,
-  "tagOnly": true,
-  "note": "Соберите пакет на ПК: npm run ble-field-pack (нужен VPN). Затем положите ble-field-pack.zip в data/ или укажите packUrl."
+  "markerCount": 860,
+  "photosOk": 824,
+  "photosFail": 0,
+  "bytesTotal": 57751862,
+  "zipBytes": 57751862,
+  "tagOnly": false
 }

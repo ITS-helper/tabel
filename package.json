@@ -6,7 +6,7 @@
     "ingest-xlsx": "node scripts/ingest-xlsx.mjs",
     "ble-cache": "node scripts/push-ble-cache.mjs",
     "ble-field-pack": "node scripts/build-ble-field-pack.mjs",
-    "ble-field-pack:full": "node scripts/build-ble-field-pack.mjs --full",
+    "ble-field-pack:tag-only": "node scripts/build-ble-field-pack.mjs --tag-only",
     "seed-auth": "node scripts/seed-auth-users.mjs",
     "supabase": "supabase",
     "supabase:login": "supabase login",

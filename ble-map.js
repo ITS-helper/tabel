@@ -2388,7 +2388,7 @@
       meta.photosOk != null
         ? `${meta.photosOk}${meta.photosFail ? `/${meta.photosOk + meta.photosFail}` : ""} фото`
         : `${meta.photoCount || 0} фото`;
-    const modeHint = meta.tagOnly ? " · 1 фото/метка" : "";
+    const modeHint = meta.tagOnly ? " · 1 фото/метка" : " · 2 фото/метка";
     setFieldPackStatus(
       `Пакет для поля: ${meta.markerCount || meta.raw?.length || 0} меток, ${photos}${modeHint}${mb}${when ? ` · ${when}` : ""}`,
       "ready"
