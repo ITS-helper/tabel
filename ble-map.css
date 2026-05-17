@@ -684,30 +684,63 @@ body {
 
 @media (min-width: 769px) {
   .map-toolbar {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    --map-toolbar-side: 152px;
+    display: grid;
+    grid-template-columns: var(--map-toolbar-side) minmax(0, 1fr) var(--map-toolbar-side);
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 6px;
+    overflow: visible;
   }
 
-  .map-toolbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .map-toolbar-row--fields,
-  .map-toolbar-row--actions {
+  .map-toolbar-row--fields {
     display: contents;
   }
 
-  .map-toolbar .map-route-field--toolbar {
-    order: 99;
-    margin-left: auto;
+  .map-toolbar-row--actions {
+    display: flex;
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 6px;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .map-toolbar-row--actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  #mapSearchBlock.map-search-bar--toolbar {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex: none;
+  }
+
+  .map-route-field--toolbar {
+    grid-column: 3;
+    grid-row: 1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .map-route-field--toolbar .map-route-select {
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .map-zone-edit-hint {
-    flex: 1 1 100%;
-    order: 99;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    order: unset;
+    flex: unset;
   }
 }
 
@@ -1278,14 +1311,21 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   .map-toolbar-row--fields .map-search-bar--toolbar {
-    flex: 1 1 100%;
+    flex: 1 1 calc(50% - 2px);
     min-width: 0;
+    max-width: none;
   }
 
-  .map-toolbar-row--actions .map-route-field--toolbar {
-    min-width: 64px;
-    max-width: 84px;
-    flex-shrink: 0;
+  .map-toolbar-row--fields .map-route-field--toolbar {
+    flex: 1 1 calc(50% - 2px);
+    min-width: 0;
+    max-width: none;
+    width: auto;
+  }
+
+  .map-toolbar-row--fields .map-route-field--toolbar .map-route-select {
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .map-toolbar-text--long {
