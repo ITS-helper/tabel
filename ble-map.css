@@ -624,16 +624,15 @@ body {
   flex: 0 0 auto;
 }
 
-.map-toolbar-row--fields .map-route-field--toolbar {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: none;
-}
-
 .map-toolbar-row--fields .map-search-bar--toolbar {
   flex: 1 1 auto;
   min-width: 72px;
   max-width: none;
+}
+
+.map-toolbar-row--actions .map-route-field--toolbar {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .map-toolbar-row--actions {
@@ -669,6 +668,10 @@ body {
     display: contents;
   }
 
+  .map-toolbar .map-route-field--toolbar {
+    margin-left: auto;
+  }
+
   .map-zone-edit-hint {
     flex: 1 1 100%;
     order: 99;
@@ -685,14 +688,21 @@ body {
 
 .map-route-field--toolbar {
   flex: 0 0 auto;
-  min-width: 108px;
-  max-width: 148px;
+  min-width: 68px;
+  max-width: 92px;
   margin-bottom: 0;
 }
 
 .map-route-field--toolbar .map-route-select {
-  padding: 6px 24px 4px 8px;
-  font-size: 12px;
+  padding: 4px 18px 3px 6px;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.map-route-field--toolbar .map-route-field__label {
+  font-size: 9px;
+  top: -6px;
+  left: 6px;
 }
 
 .map-search-bar--toolbar {
@@ -1234,14 +1244,15 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     gap: 4px;
   }
 
-  .map-toolbar-row--fields .map-route-field--toolbar {
-    flex: 1 1 calc(50% - 2px);
+  .map-toolbar-row--fields .map-search-bar--toolbar {
+    flex: 1 1 100%;
     min-width: 0;
   }
 
-  .map-toolbar-row--fields .map-search-bar--toolbar {
-    flex: 1 1 calc(50% - 2px);
-    min-width: 0;
+  .map-toolbar-row--actions .map-route-field--toolbar {
+    min-width: 64px;
+    max-width: 84px;
+    flex-shrink: 0;
   }
 
   .map-toolbar-text--long {
