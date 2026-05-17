@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517q";
+  const BLE_MAP_BUILD = "20260517r";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -539,7 +539,7 @@
   }
 
   function isZoneEditAllowed() {
-    return bleEditMode && !isNarrowLayout();
+    return bleEditMode;
   }
 
   function getMarkerZoneFilterId() {
@@ -620,18 +620,27 @@
     });
   }
 
+  const BLE_VERTEX_HIT_PX = 24;
+
   function clearZoneVertexHandles(targetMap) {
     if (!targetMap) return;
     const state = bleZoneVertexByMap.get(targetMap);
     if (!state) return;
     try {
-    state.handles?.forEach((h) => {
-      try {
-        if (h._map) h._map.removeLayer(h);
-      } catch {
-        /* ignore */
+      const c = state.container || targetMap.getContainer();
+      if (c && state.onPointerDown) {
+        c.removeEventListener("pointerdown", state.onPointerDown, true);
+        c.removeEventListener("pointermove", state.onPointerMove, true);
+        c.removeEventListener("pointerup", state.onPointerUp, true);
+        c.removeEventListener("pointercancel", state.onPointerUp, true);
       }
-    });
+      state.handles?.forEach((h) => {
+        try {
+          if (h._map) targetMap.removeLayer(h);
+        } catch {
+          /* ignore */
+        }
+      });
       if (state.group?._map) targetMap.removeLayer(state.group);
     } catch {
       /* ignore */
@@ -644,114 +653,45 @@
     clearZoneVertexHandles(bleMapFS);
   }
 
-  function ensureZoneVertexPane(map) {
-    const paneName = "ble-zone-vertex-pane";
-    if (!map.getPane(paneName)) {
-      const pane = map.createPane(paneName);
-      pane.style.zIndex = "850";
-    }
-    return paneName;
-  }
-
   function clientPointToLatLng(map, clientX, clientY) {
     const rect = map.getContainer().getBoundingClientRect();
     const pt = L.point(clientX - rect.left, clientY - rect.top);
     return map.containerPointToLatLng(pt);
   }
 
-  function attachZoneVertexPointerDrag(handle, layer, zoneData, vertexIndex, map) {
-    let dragging = false;
-    let pointerId = null;
+  function clientPointToContainer(map, clientX, clientY) {
+    const rect = map.getContainer().getBoundingClientRect();
+    return L.point(clientX - rect.left, clientY - rect.top);
+  }
 
-    const syncRingFromHandle = () => {
-      const ringNow = polygonLatLngs(layer);
-      if (!ringNow[vertexIndex]) return;
-      ringNow[vertexIndex] = handle.getLatLng();
-      layer.setLatLngs(ringNow.map((p) => L.latLng(p.lat, p.lng)));
-    };
-
-    const finishDrag = () => {
-      if (!dragging) return;
-      dragging = false;
-      const el = handle.getElement();
-      try {
-        if (el?.hasPointerCapture?.(pointerId)) el.releasePointerCapture(pointerId);
-      } catch {
-        /* ignore */
+  function findVertexIndexNearPoint(map, layer, clientX, clientY, thresholdPx) {
+    const ring = polygonLatLngs(layer);
+    if (!ring.length) return -1;
+    const clickPt = clientPointToContainer(map, clientX, clientY);
+    let best = -1;
+    let bestD = thresholdPx;
+    ring.forEach((ll, i) => {
+      const d = map.latLngToContainerPoint(ll).distanceTo(clickPt);
+      if (d <= bestD) {
+        bestD = d;
+        best = i;
       }
-      pointerId = null;
-      el?.classList.remove("ble-zone-vertex--dragging");
-      document.removeEventListener("pointermove", onDocMove, true);
-      document.removeEventListener("pointerup", onDocEnd, true);
-      document.removeEventListener("pointercancel", onDocEnd, true);
-      if (map.dragging) map.dragging.enable();
-      syncRingFromHandle();
-      const entry = bleZoneLayers.get(zoneData.id);
-      const pts = latLngsToPts(polygonLatLngs(layer));
-      if (entry) entry.data.pts = pts;
-      onZoneGeometryChanged(layer);
-    };
+    });
+    return best;
+  }
 
-    const onDocMove = (e) => {
-      if (!dragging || e.pointerId !== pointerId) return;
-      if (e.cancelable) e.preventDefault();
-      L.DomEvent.stopPropagation(e);
-      handle.setLatLng(clientPointToLatLng(map, e.clientX, e.clientY));
-      syncRingFromHandle();
-    };
+  function setPolygonVertex(layer, index, latlng) {
+    const ring = polygonLatLngs(layer).map((p) => L.latLng(p.lat, p.lng));
+    if (index < 0 || index >= ring.length) return;
+    ring[index] = latlng;
+    layer.setLatLngs(ring);
+  }
 
-    const onDocEnd = (e) => {
-      if (!dragging || e.pointerId !== pointerId) return;
-      finishDrag();
-    };
-
-    const onPointerDown = (e) => {
-      if (!isZoneEditAllowed()) return;
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      L.DomEvent.stopPropagation(e);
-      if (e.cancelable) e.preventDefault();
-      dragging = true;
-      pointerId = e.pointerId;
-      const el = handle.getElement();
-      try {
-        el?.setPointerCapture?.(pointerId);
-      } catch {
-        /* ignore */
-      }
-      el?.classList.add("ble-zone-vertex--dragging");
-      if (map.dragging) map.dragging.disable();
-      layer.closeTooltip?.();
-      map.closeTooltip?.();
-      document.addEventListener("pointermove", onDocMove, true);
-      document.addEventListener("pointerup", onDocEnd, true);
-      document.addEventListener("pointercancel", onDocEnd, true);
-    };
-
-    const bind = () => {
-      const el = handle.getElement();
-      if (!el || el.dataset.bleVertexDrag === "1") return;
-      el.dataset.bleVertexDrag = "1";
-      const onDown = (e) => onPointerDown(e);
-      el._bleVertexOnDown = onDown;
-      el.addEventListener("pointerdown", onDown, { capture: true });
-      L.DomEvent.on(el, "click", L.DomEvent.stopPropagation);
-    };
-
-    const unbind = () => {
-      const el = handle.getElement();
-      if (!el) return;
-      if (el._bleVertexOnDown) {
-        el.removeEventListener("pointerdown", el._bleVertexOnDown, { capture: true });
-        delete el._bleVertexOnDown;
-      }
-      delete el.dataset.bleVertexDrag;
-      L.DomEvent.off(el, "click", L.DomEvent.stopPropagation);
-      if (dragging) finishDrag();
-    };
-
-    handle.on("add", bind);
-    handle.on("remove", unbind);
-    if (handle.getElement()) bind();
+  function refreshVertexHandlePositions(handles, layer) {
+    const ring = polygonLatLngs(layer);
+    handles.forEach((h, i) => {
+      if (ring[i]) h.setLatLng(ring[i]);
+    });
   }
 
   function syncZoneVertexHandles(layer, zoneData) {
@@ -762,38 +702,89 @@
     const ring = polygonLatLngs(layer);
     if (ring.length < 3) return;
 
-    const paneName = ensureZoneVertexPane(map);
+    const group = L.layerGroup().addTo(map);
     const handles = [];
 
-    ring.forEach((ll, index) => {
+    ring.forEach((ll) => {
       const handle = L.circleMarker([ll.lat, ll.lng], {
-        radius: 11,
+        radius: 12,
         color: "#ffffff",
         weight: 3,
         opacity: 1,
         fillColor: "#ff6f00",
         fillOpacity: 1,
-        pane: paneName,
-        interactive: true,
-        bubblingMouseEvents: false,
-        draggable: false,
+        interactive: false,
         className: "ble-zone-vertex-handle",
       });
-
-      attachZoneVertexPointerDrag(handle, layer, zoneData, index, map);
-      handle.addTo(map);
-      handle.bringToFront?.();
+      handle.addTo(group);
       handles.push(handle);
     });
+
+    let drag = null;
+    const container = map.getContainer();
+
+    const finishDrag = () => {
+      if (!drag) return;
+      drag = null;
+      container.style.cursor = "";
+      if (map.dragging) map.dragging.enable();
+      refreshVertexHandlePositions(handles, layer);
+      const entry = bleZoneLayers.get(zoneData.id);
+      const pts = latLngsToPts(polygonLatLngs(layer));
+      if (entry) entry.data.pts = pts;
+      onZoneGeometryChanged(layer);
+    };
+
+    const onPointerMove = (e) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (e.cancelable) e.preventDefault();
+      const ll = clientPointToLatLng(map, e.clientX, e.clientY);
+      setPolygonVertex(layer, drag.index, ll);
+      refreshVertexHandlePositions(handles, layer);
+    };
+
+    const onPointerUp = (e) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      finishDrag();
+    };
+
+    const onPointerDown = (e) => {
+      if (!isZoneEditAllowed() || bleSelectedZoneId !== zoneData.id) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const idx = findVertexIndexNearPoint(map, layer, e.clientX, e.clientY, BLE_VERTEX_HIT_PX);
+      if (idx < 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      drag = { index: idx, pointerId: e.pointerId };
+      container.style.cursor = "grabbing";
+      if (map.dragging) map.dragging.disable();
+      layer.closeTooltip?.();
+      map.closeTooltip?.();
+    };
+
+    container.addEventListener("pointerdown", onPointerDown, true);
+    container.addEventListener("pointermove", onPointerMove, true);
+    container.addEventListener("pointerup", onPointerUp, true);
+    container.addEventListener("pointercancel", onPointerUp, true);
 
     try {
       layer.closeTooltip?.();
       map.closeTooltip?.();
-      layer.bringToBack?.();
+      group.bringToFront?.();
     } catch {
       /* ignore */
     }
-    bleZoneVertexByMap.set(map, { group: null, layer, zoneId: zoneData.id, handles });
+
+    bleZoneVertexByMap.set(map, {
+      group,
+      layer,
+      zoneId: zoneData.id,
+      handles,
+      container,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+    });
     updateZoneEditHint(
       `Вершин: ${ring.length} — тяните оранжевые точки. Повторный клик по зоне скрывает вершины.`
     );
@@ -801,9 +792,6 @@
 
   function scheduleZoneVertexHandles(layer, zoneData) {
     syncZoneVertexHandles(layer, zoneData);
-    requestAnimationFrame(() => {
-      if (bleSelectedZoneId === zoneData.id) syncZoneVertexHandles(layer, zoneData);
-    });
   }
 
   function onZoneGeometryChanged(layer) {
@@ -866,7 +854,9 @@
     disableAllZonePm();
     bleSelectedZoneId = id;
     syncZoneEditUiClasses();
-    redrawMapLayers();
+    renderBleMarkers();
+    if (bleMap) drawZones(bleMap);
+    if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
     const entry = bleZoneLayers.get(id);
     if (!entry) {
       updateEditBarState();

@@ -1012,6 +1012,11 @@ body.ble-map--zone-focus .leaflet-pm-dragging-box {
   display: none !important;
 }
 
+body.ble-map--zone-focus #bleMap,
+body.ble-map--zone-focus #bleMapFS {
+  cursor: default;
+}
+
 .map-fullscreen-btn__text {
   display: inline;
 }
