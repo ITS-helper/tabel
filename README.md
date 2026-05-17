@@ -137,12 +137,7 @@
 
 **Без VPN карта берёт метки из файла** [`data/ble-map-cache.json`](data/ble-map-cache.json) на GitHub Pages (публикуется вместе с сайтом). Сначала грузится он (~1,4 МБ), затем в фоне — попытка обновить с API.
 
-**Офлайн-пакет с фото для телефона** (рекомендуется вместо «Скачать в браузере» на телефоне):
-
-1. На ПК с VPN: `npm install` → `npm run ble-field-pack` (метка + место, 2 фото) или `npm run ble-field-pack:tag-only` (только фото метки, меньше архив).
-2. Появятся `data/ble-field-pack.zip` (в git не коммитится, >100 МБ) и `data/ble-field-pack-meta.json` (укажите `packUrl`, закоммитьте meta).
-3. Выложите zip на GitHub Pages рядом с сайтом или в Supabase Storage и пропишите URL в meta.
-4. На телефоне в карте: **«Офлайн-пакет»** → скачать с сайта **или** «Загрузить .zip» (AirDrop/USB с ПК).
+**Офлайн-пакет с фото для телефона** — подробная инструкция: **[`docs/ble-field-pack.md`](docs/ble-field-pack.md)** (сборка на ПК, публикация zip, meta, телефон).
 
 **Обновить кэш меток** (нужен VPN на машине администратора): двойной щелчок [`ble-cache-push.bat`](ble-cache-push.bat) или `npm run ble-cache`. Чтобы дублировать кэш в Supabase (таблица `ble_map_cache`, сейчас может быть пустой):
 
@@ -188,6 +183,7 @@ supabase functions deploy ble-map-proxy --no-verify-jwt
 | Путь | Назначение |
 |------|------------|
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Руководство пользователя (гайд по функциям) |
+| [`docs/ble-field-pack.md`](docs/ble-field-pack.md) | Офлайн-пакет BLE: сборка и публикация |
 | [`index.html`](index.html) | Разметка |
 | [`ble-map.html`](ble-map.html), [`ble-map.js`](ble-map.js) | Карта BLE-меток |
 | [`styles.css`](styles.css) | Стили (в т.ч. сводка, шапка-«капсулы», график) |
