@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517r";
+  const BLE_MAP_BUILD = "20260517s";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -525,10 +525,19 @@
     return dirty ? dirty.pts : z.pts;
   }
 
+  function resolveZoneRecordName(zoneId, nameHint) {
+    const hint = String(nameHint ?? "").trim();
+    if (hint) return hint;
+    const zone = getZoneById(zoneId);
+    return String(zone?.name ?? "").trim();
+  }
+
   function markZoneDirty(zoneId, pts, name, description) {
-    bleDirtyZones.set(Number(zoneId), {
-      name: name ?? "",
-      description: description ?? null,
+    const id = Number(zoneId);
+    const zone = getZoneById(id);
+    bleDirtyZones.set(id, {
+      name: resolveZoneRecordName(id, name),
+      description: description ?? zone?.description ?? null,
       pts: pts.map((p) => [p[0], p[1]]),
     });
     updateEditBarState();
@@ -928,17 +937,36 @@
     return entries.length;
   }
 
+  function formatZoneSaveError(err) {
+    const raw = String(err?.message || err || "");
+    if (raw.includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
+      return "Конфликт имени зоны на сервере. Обновите страницу и сохраните снова.";
+    }
+    return raw;
+  }
+
   async function saveDirtyZones() {
     if (!bleDirtyZones.size) return 0;
     let saved = 0;
     for (const [zoneId, dirty] of bleDirtyZones) {
       const pts = dirty.pts;
       if (pts.length < 3) throw new Error(`У зоны ${zoneId} должно быть минимум 3 точки`);
-      await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
-        name: dirty.name || `Зона ${zoneId}`,
-        description: dirty.description || null,
-        points: ptsToApiPoints(pts),
-      });
+      try {
+        await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
+          points: ptsToApiPoints(pts),
+        });
+      } catch (e) {
+        if (String(e.message || "").includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
+          const fresh = await bleApiFetch(`/api/v1/ble_zone/${zoneId}`);
+          await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
+            name: fresh?.name || `Зона ${zoneId}`,
+            description: fresh?.description ?? null,
+            points: ptsToApiPoints(pts),
+          });
+        } else {
+          throw e;
+        }
+      }
       const z = bleZoneData.find((x) => x.id === zoneId);
       if (z) z.pts = pts.map((p) => [...p]);
       const entry = bleZoneLayers.get(zoneId);
@@ -971,7 +999,7 @@
       redrawMapLayers();
       updateEditBarState();
     } catch (e) {
-      showMapMsg("Ошибка сохранения: " + (e.message || e), "error");
+      showMapMsg("Ошибка сохранения: " + formatZoneSaveError(e), "error");
       throw e;
     } finally {
       if (btn) {
