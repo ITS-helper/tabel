@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260517t" />
+  <link rel="stylesheet" href="ble-map.css?v=20260517u" />
 </head>
 <body>
   <header class="ble-map-page-header" id="bleMapPageHeader">
@@ -61,14 +61,14 @@
               <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
             </div>
             <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
-            <label class="map-route-field map-route-field--toolbar map-layer-field--toolbar" id="mapLayerField">
-              <span class="map-route-field__label">Карта</span>
-              <select class="map-route-select map-layer-select" id="mapLayerSelect" aria-label="Подложка карты">
-                <option value="street">Схема</option>
-                <option value="satellite">Спутник</option>
-                <option value="hybrid">Гибрид</option>
-              </select>
-            </label>
+            <div class="map-layer-picker" id="mapLayerPicker" data-layer-picker>
+              <button type="button" class="map-layer-mode-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Подложка карты">Карта</button>
+              <div class="map-layer-menu" role="listbox" hidden>
+                <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
+                <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
+                <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
+              </div>
+            </div>
             </div>
           </div>
           <p id="mapZoneEditHint" class="map-zone-edit-hint" hidden></p>
@@ -95,14 +95,14 @@
       <button type="button" class="map-filter-btn filter-inspection" data-fsfilter="inspection">Не пройденные <span class="filter-count" id="fcFsInsp">0</span></button>
     </div>
     <div class="map-fullscreen-layer">
-      <label class="map-route-field map-route-field--compact map-layer-field--fs">
-        <span class="map-route-field__label">Карта</span>
-        <select class="map-route-select map-layer-select" id="mapLayerSelectFs" aria-label="Подложка карты">
-          <option value="street">Схема</option>
-          <option value="satellite">Спутник</option>
-          <option value="hybrid">Гибрид</option>
-        </select>
-      </label>
+      <div class="map-layer-picker map-layer-picker--fs" data-layer-picker>
+        <button type="button" class="map-layer-mode-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Подложка карты">Карта</button>
+        <div class="map-layer-menu" role="listbox" hidden>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
+        </div>
+      </div>
       <div class="map-fullscreen-search">
         <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
         <button type="button" class="map-fullscreen-search-clear" id="mapFsSearchClear" title="Очистить">✕</button>
@@ -125,7 +125,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="ble-map.js?v=20260517t"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260517t"></script>
+  <script src="ble-map.js?v=20260517u"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260517u"></script>
 </body>
 </html>

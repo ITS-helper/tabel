@@ -301,15 +301,13 @@
         </label>
       </div>
       <div class="fs-sep fs-route-sep" id="mapRouteSepCompact" hidden></div>
-      <div class="fs-layer">
-        <label class="map-route-field map-route-field--compact">
-          <span class="map-route-field__label">Карта</span>
-          <select class="map-route-select map-layer-select" id="mapLayerSelectCompact" aria-label="Подложка карты">
-            <option value="street">Схема</option>
-            <option value="satellite">Спутник</option>
-            <option value="hybrid">Гибрид</option>
-          </select>
-        </label>
+      <div class="fs-layer map-layer-picker" data-layer-picker>
+        <button type="button" class="map-layer-mode-btn map-layer-mode-btn--compact" aria-haspopup="listbox" aria-expanded="false" aria-label="Подложка карты">Карта</button>
+        <div class="map-layer-menu" role="listbox" hidden>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
+        </div>
       </div>
       <div class="fs-sep"></div>
       <div class="fs-search">
@@ -343,7 +341,7 @@
       });
     });
 
-    const routeSel = bar.querySelector('.map-route-select');
+    const routeSel = bar.querySelector('#mapRouteSelectCompact');
     if (routeSel) {
       routeSel.addEventListener('change', () => {
         if (typeof window.setBleMapRouteFilter === 'function') {
@@ -352,18 +350,14 @@
       });
     }
 
-    const layerSel = bar.querySelector('.map-layer-select');
-    if (layerSel) {
-      if (typeof window.setBleBaseLayer === 'function') {
-        layerSel.value = document.getElementById('mapLayerSelect')?.value
-          || document.getElementById('mapLayerSelectFs')?.value
-          || layerSel.value;
-      }
-      layerSel.addEventListener('change', () => {
-        if (typeof window.setBleBaseLayer === 'function') {
-          window.setBleBaseLayer(layerSel.value);
-        }
-      });
+    const layerPicker = bar.querySelector('.map-layer-picker');
+    if (layerPicker && typeof window.wireMapLayerPicker === 'function') {
+      window.wireMapLayerPicker(layerPicker);
+    }
+    if (typeof window.syncBaseLayerPickers === 'function') {
+      const activeItem = document.querySelector('.map-layer-menu__item.active');
+      const layerId = activeItem?.dataset.layer || 'street';
+      window.syncBaseLayerPickers(layerId);
     }
 
     // Поиск

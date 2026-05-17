@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517t";
+  const BLE_MAP_BUILD = "20260517u";
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
   const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
 
@@ -1146,11 +1146,60 @@
     return "street";
   }
 
-  function syncBaseLayerSelects(layerId) {
-    document.querySelectorAll(".map-layer-select").forEach((sel) => {
-      if (sel.value !== layerId) sel.value = layerId;
+  function closeAllLayerMenus() {
+    document.querySelectorAll(".map-layer-picker").forEach((picker) => {
+      const btn = picker.querySelector(".map-layer-mode-btn");
+      const menu = picker.querySelector(".map-layer-menu");
+      if (menu) menu.hidden = true;
+      if (btn) btn.setAttribute("aria-expanded", "false");
     });
   }
+
+  function syncBaseLayerPickers(layerId) {
+    document.querySelectorAll(".map-layer-picker").forEach((picker) => {
+      picker.querySelectorAll(".map-layer-menu__item").forEach((item) => {
+        const active = item.dataset.layer === layerId;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    });
+  }
+
+  function wireMapLayerPicker(picker) {
+    if (!picker || picker.dataset.layerPickerWired === "1") return;
+    picker.dataset.layerPickerWired = "1";
+    const btn = picker.querySelector(".map-layer-mode-btn");
+    const menu = picker.querySelector(".map-layer-menu");
+    if (!btn || !menu) return;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = btn.getAttribute("aria-expanded") === "true";
+      closeAllLayerMenus();
+      if (!open) {
+        menu.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+    menu.querySelectorAll(".map-layer-menu__item").forEach((item) => {
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (BLE_BASE_LAYERS.includes(item.dataset.layer)) {
+          setBleBaseLayer(item.dataset.layer);
+        }
+        closeAllLayerMenus();
+      });
+    });
+  }
+
+  function wireBaseLayerPickers() {
+    if (!document.body.dataset.layerMenuCloseWired) {
+      document.body.dataset.layerMenuCloseWired = "1";
+      document.addEventListener("click", closeAllLayerMenus);
+    }
+    document.querySelectorAll(".map-layer-picker").forEach(wireMapLayerPicker);
+  }
+  window.wireMapLayerPicker = wireMapLayerPicker;
+  window.syncBaseLayerPickers = syncBaseLayerPickers;
 
   function syncBaseLayerBodyClass(layerId) {
     document.body.classList.toggle("ble-map--layer-hybrid", layerId === "hybrid");
@@ -1180,7 +1229,7 @@
       fsTileLayerCurrent = applyBleBaseLayerToMap(bleMapFS, fsTileLayers, layerId, prevFs);
     }
 
-    if (opts.syncUi !== false) syncBaseLayerSelects(layerId);
+    if (opts.syncUi !== false) syncBaseLayerPickers(layerId);
     syncBaseLayerBodyClass(layerId);
     try {
       localStorage.setItem(BLE_BASE_LAYER_KEY, layerId);
@@ -1193,13 +1242,6 @@
   }
   window.setBleBaseLayer = setBleBaseLayer;
 
-  function wireBaseLayerSelects() {
-    document.querySelectorAll(".map-layer-select").forEach((sel) => {
-      if (sel.dataset.layerWired === "1") return;
-      sel.dataset.layerWired = "1";
-      sel.addEventListener("change", () => setBleBaseLayer(sel.value));
-    });
-  }
 
   function mountBleBaseLayer(map, tileLayers, layerId) {
     if (!map || !tileLayers?.[layerId]) return layerId;
@@ -1230,8 +1272,8 @@
     bleTileLayers = buildBleTileLayers(mobile);
     bleBaseLayerCurrent = readStoredBaseLayer();
     mountBleBaseLayer(bleMap, bleTileLayers, bleBaseLayerCurrent);
-    wireBaseLayerSelects();
-    syncBaseLayerSelects(bleBaseLayerCurrent);
+    wireBaseLayerPickers();
+    syncBaseLayerPickers(bleBaseLayerCurrent);
     syncBaseLayerBodyClass(bleBaseLayerCurrent);
     setTimeout(() => bleMap.invalidateSize(), 200);
   }
@@ -1850,7 +1892,7 @@
   }
 
   function populateRouteSelect() {
-    document.querySelectorAll(".map-route-select").forEach((sel) => {
+    document.querySelectorAll("select.map-route-select").forEach((sel) => {
       const cur = sel.value;
       sel.innerHTML = '<option value="">Все маршруты</option>';
       bleRoutes.forEach((r) => {
@@ -1891,7 +1933,7 @@
     if (next === bleMapRouteFilter) return;
     bleMapRouteFilter = next;
     bleRouteFilterApplying = true;
-    document.querySelectorAll(".map-route-select").forEach((sel) => {
+    document.querySelectorAll("select.map-route-select").forEach((sel) => {
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
     });
     bleRouteFilterApplying = false;
@@ -2336,8 +2378,8 @@
       } else {
         bleMapFS.setView([53.038, 39.011], 15);
       }
-      wireBaseLayerSelects();
-      syncBaseLayerSelects(fsTileLayerCurrent);
+      wireBaseLayerPickers();
+      syncBaseLayerPickers(fsTileLayerCurrent);
       document.querySelectorAll("[data-fsfilter]").forEach((btn) => {
         btn.addEventListener("click", () => setBleMapFilter(btn.dataset.fsfilter));
       });
@@ -2397,6 +2439,8 @@
   };
 
   function bindUi() {
+    wireBaseLayerPickers();
+    syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
       if (!btn) return;
@@ -2410,7 +2454,7 @@
 
     document.addEventListener("change", (e) => {
       if (bleRouteFilterApplying) return;
-      const sel = e.target.closest?.(".map-route-select");
+      const sel = e.target.closest?.("select.map-route-select");
       if (!sel) return;
       setBleMapRouteFilter(sel.value);
     });
