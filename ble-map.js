@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517f";
+  const BLE_MAP_BUILD = "20260517g";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -57,6 +57,8 @@
   const bleZoneVertexByMap = new WeakMap();
   let bleZoneLayers = new Map();
   let bleEditMapMsg = "";
+  let bleListSnapshot = null;
+  const BLE_LIST_SNAPSHOT_MS = 4 * 60 * 1000;
 
   function esc(str) {
     return String(str).replace(/[&<>"']/g, (m) =>
@@ -1022,20 +1024,78 @@
     document.body.style.overflow = "";
   }
 
+  function isPhotoUrlExpired(url) {
+    if (!url) return true;
+    const dateM = String(url).match(/[?&]X-Amz-Date=([^&]+)/);
+    const expM = String(url).match(/[?&]X-Amz-Expires=(\d+)/);
+    if (!dateM || !expM) return false;
+    const d = dateM[1];
+    const t0 = Date.UTC(
+      +d.slice(0, 4),
+      +d.slice(4, 6) - 1,
+      +d.slice(6, 8),
+      +d.slice(9, 11),
+      +d.slice(11, 13),
+      +d.slice(13, 15)
+    );
+    return Date.now() > t0 + parseInt(expM[1], 10) * 1000;
+  }
+
+  function needsPhotoRefresh(pt) {
+    const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
+    if (!urls.length) return true;
+    return urls.some(isPhotoUrlExpired);
+  }
+
+  async function refreshBleListSnapshot(companyId) {
+    const cid = companyId ?? bleCompanyId;
+    if (!cid) return null;
+    const rawBle = await bleApiFetch(`/api/v1/map/ble/${cid}`);
+    if (!Array.isArray(rawBle)) return null;
+    bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: cid };
+    return rawBle;
+  }
+
   function makePopup(pt) {
-    const photos = [pt.photoTag, pt.photoPlace].filter(Boolean);
-    const photoHtml = photos.length
-      ? `<div class="ble-popup-photos">${photos
-          .map(
-            (url) =>
-              `<a href="${attrEsc(url)}" class="ble-popup-photo-link" data-ble-photo="${attrEsc(url)}" target="_blank" rel="noopener noreferrer"><img class="ble-popup-photo" src="${attrEsc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></a>`
-          )
-          .join("")}</div>`
-      : "";
     const routeLine = pt.routeTitle
       ? `<div style="color:#1565C0;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.routeTitle)}</div>`
       : "";
-    return `<div style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${photoHtml}</div>`;
+    return `<div class="ble-popup-body" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}<div class="ble-popup-photos-slot"></div></div>`;
+  }
+
+  function renderPhotosInto(container, pt) {
+    if (!container) return;
+    container.innerHTML = "";
+    const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
+    if (!urls.length) {
+      container.innerHTML =
+        '<p class="ble-popup-loading">Фото недоступно. Включите VPN или обновите карту (↺).</p>';
+      return;
+    }
+    if (urls.every(isPhotoUrlExpired)) {
+      container.innerHTML =
+        '<p class="ble-popup-loading">Ссылки на фото устарели. Включите VPN и нажмите ↺ на карте.</p>';
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "ble-popup-photos";
+    urls.forEach((url) => {
+      const a = document.createElement("a");
+      a.className = "ble-popup-photo-link";
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.dataset.blePhoto = url;
+      const img = document.createElement("img");
+      img.className = "ble-popup-photo";
+      img.src = url;
+      img.alt = "";
+      img.loading = "lazy";
+      img.referrerPolicy = "no-referrer-when-downgrade";
+      a.appendChild(img);
+      wrap.appendChild(a);
+    });
+    container.appendChild(wrap);
   }
 
   function popupFooterHtml(extra) {
@@ -1055,15 +1115,26 @@
       /* ignore */
     }
     if (offline) return pt;
-    try {
-      const raw = await bleApiFetch(`/api/v1/ble/${pt.id}`);
-      const enriched = classifyBle(raw, pt);
-      const idx = bleMapData.findIndex((p) => p.id === enriched.id);
-      if (idx >= 0) bleMapData[idx] = enriched;
-      return enriched;
-    } catch {
-      return pt;
+
+    let raw = bleListSnapshot?.raw;
+    const snapStale =
+      !bleListSnapshot ||
+      bleListSnapshot.companyId !== bleCompanyId ||
+      Date.now() - bleListSnapshot.at > BLE_LIST_SNAPSHOT_MS;
+    if (!raw || snapStale) {
+      try {
+        raw = await refreshBleListSnapshot();
+      } catch {
+        return pt;
+      }
     }
+    if (!raw) return pt;
+    const found = raw.find((p) => Number(p.id) === Number(pt.id));
+    if (!found) return pt;
+    const enriched = classifyBle(found, pt);
+    const idx = bleMapData.findIndex((p) => p.id === enriched.id);
+    if (idx >= 0) bleMapData[idx] = enriched;
+    return enriched;
   }
 
   function attachMarkerPopup(marker, pt, extraFooter) {
@@ -1073,11 +1144,13 @@
     marker.bindPopup(renderContent(getPointForPopup(pt)), { maxWidth: popupMaxWidth() });
     marker.on("popupopen", async () => {
       let current = getPointForPopup(pt);
-      if (!current.photoTag && !current.photoPlace) {
-        marker.setPopupContent(renderContent(current) + '<p class="ble-popup-loading">Загрузка фото…</p>');
+      const popupEl = marker.getPopup()?.getElement();
+      const slot = popupEl?.querySelector(".ble-popup-photos-slot");
+      if (needsPhotoRefresh(current)) {
+        if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
+        current = await enrichPointPhotos(current);
       }
-      current = await enrichPointPhotos(current);
-      marker.setPopupContent(renderContent(current));
+      renderPhotosInto(slot, current);
     });
   }
 
@@ -1085,10 +1158,10 @@
     if (initBlePopupPhotoClicks.done) return;
     initBlePopupPhotoClicks.done = true;
     document.body.addEventListener("click", (e) => {
-      const link = e.target.closest("[data-ble-photo]");
+      const link = e.target.closest(".ble-popup-photo-link, [data-ble-photo]");
       if (!link) return;
       e.preventDefault();
-      const url = link.getAttribute("data-ble-photo");
+      const url = link.dataset.blePhoto || link.getAttribute("data-ble-photo");
       if (url) openPhotoViewer(url);
     });
   }
@@ -1609,6 +1682,7 @@
     try {
       const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
       if (!Array.isArray(rawBle) || !rawBle.length) return;
+      bleListSnapshot = { at: Date.now(), raw: rawBle, companyId };
       bleMapData = mergeBleMapDataFromRaw(rawBle);
       updateMapStats();
       renderBleMarkers();
