@@ -770,30 +770,28 @@ body.ble-map--edit .ble-dot--hold-armed {
   }
 }
 
-/* Вершины зоны (свои маркеры, без Geoman bbox) */
-body.ble-map--edit .leaflet-pm-toolbar,
-body.ble-map--zone-focus .leaflet-pm-dragging-box {
-  display: none !important;
-}
-
+/* Вершины зоны — оранжевые точки по контуру */
 .ble-zone-vertex-icon {
   background: transparent !important;
   border: none !important;
+  pointer-events: auto !important;
 }
 
 .ble-zone-vertex {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #ff6f00;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
   cursor: grab;
+  pointer-events: auto;
 }
 
-.ble-zone-vertex-icon.leaflet-marker-draggable:active .ble-zone-vertex {
+body.ble-map--zone-focus .ble-zone-vertex:active {
   cursor: grabbing;
-  transform: scale(1.15);
+  transform: scale(1.2);
+  background: #e65100;
 }
 
 .map-fullscreen-btn__text {

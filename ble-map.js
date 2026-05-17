@@ -407,7 +407,7 @@
   }
 
   function isZoneEditAllowed() {
-    return bleEditMode && !isCoarseMobile();
+    return bleEditMode && !window.matchMedia("(max-width: 768px)").matches;
   }
 
   function getMarkerZoneFilterId() {
@@ -420,37 +420,6 @@
       "ble-map--zone-focus",
       isZoneEditAllowed() && bleSelectedZoneId != null
     );
-  }
-
-  function ensureMapGeoman(map) {
-    if (!map?.pm || map._blePmReady) return;
-    try {
-      map.pm.addControls({
-        position: "topleft",
-        drawControls: false,
-        editControls: false,
-        optionsControls: false,
-        customControls: false,
-        oneBlock: true,
-      });
-    } catch {
-      /* controls already on map */
-    }
-    try {
-      if (typeof map.pm.removeControls === "function") map.pm.removeControls();
-      else if (typeof map.pm.toggleControls === "function") map.pm.toggleControls(false);
-    } catch {
-      /* ignore */
-    }
-    map.pm.setGlobalOptions({
-      allowRotation: false,
-      allowScaling: false,
-      allowSelfIntersection: false,
-      snappable: false,
-    });
-    if (typeof map.pm.disableGlobalEditMode === "function") map.pm.disableGlobalEditMode();
-    if (typeof map.pm.disableGlobalDragMode === "function") map.pm.disableGlobalDragMode();
-    map._blePmReady = true;
   }
 
   function pointInPolygon(lat, lng, ring) {
@@ -521,11 +490,91 @@
   }
 
   function disableAllZonePm() {
-    bleZoneLayers.forEach((entry) => {
-      if (entry.layer.pm) entry.layer.pm.disable();
-    });
     clearZoneVertexHandles(bleMap);
     clearZoneVertexHandles(bleMapFS);
+  }
+
+  function ensureZoneVertexPane(map) {
+    const paneName = "ble-zone-vertex-pane";
+    if (!map.getPane(paneName)) {
+      const pane = map.createPane(paneName);
+      pane.style.zIndex = "640";
+    }
+    return paneName;
+  }
+
+  function attachZoneVertexPointerDrag(handle, layer, vertexIndex, zoneData, map) {
+    let dragging = false;
+    let bound = false;
+
+    const applyClient = (clientX, clientY) => {
+      const latlng = map.containerPointToLatLng(
+        map.mouseEventToContainerPoint({ clientX, clientY })
+      );
+      handle.setLatLng(latlng);
+      const ring = polygonLatLngs(layer);
+      ring[vertexIndex] = latlng;
+      layer.setLatLngs(ring.map((p) => L.latLng(p.lat, p.lng)));
+    };
+
+    const stopDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("mouseup", onEnd, true);
+      document.removeEventListener("touchmove", onMove, { capture: true });
+      document.removeEventListener("touchend", onEnd, true);
+      document.removeEventListener("touchcancel", onEnd, true);
+      if (map.dragging) map.dragging.enable();
+      const entry = bleZoneLayers.get(zoneData.id);
+      if (entry) entry.data.pts = latLngsToPts(polygonLatLngs(layer));
+      onZoneGeometryChanged({ layer });
+    };
+
+    const onMove = (e) => {
+      if (!dragging) return;
+      const { x, y } = clientXYFromEvent(e);
+      if (e.cancelable) e.preventDefault();
+      L.DomEvent.stopPropagation(e);
+      applyClient(x, y);
+    };
+
+    const onEnd = () => stopDrag();
+
+    const onStart = (e) => {
+      if (!isZoneEditAllowed()) return;
+      L.DomEvent.stopPropagation(e);
+      if (e.cancelable) e.preventDefault();
+      dragging = true;
+      if (map.dragging) map.dragging.disable();
+      layer.closeTooltip?.();
+      const { x, y } = clientXYFromEvent(e);
+      applyClient(x, y);
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("mouseup", onEnd, true);
+      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
+      document.addEventListener("touchend", onEnd, true);
+      document.addEventListener("touchcancel", onEnd, true);
+    };
+
+    const bind = () => {
+      const el = handle.getElement();
+      if (!el || bound) return;
+      bound = true;
+      L.DomEvent.on(el, "mousedown", onStart, handle);
+      el.addEventListener("touchstart", onStart, { passive: false, capture: true });
+    };
+
+    handle.on("add", bind);
+    handle.on("remove", () => {
+      bound = false;
+      stopDrag();
+      const el = handle.getElement();
+      if (el) {
+        L.DomEvent.off(el, "mousedown", onStart, handle);
+        el.removeEventListener("touchstart", onStart, { capture: true });
+      }
+    });
   }
 
   function syncZoneVertexHandles(layer, zoneData) {
@@ -536,7 +585,8 @@
     const ring = polygonLatLngs(layer);
     if (ring.length < 3) return;
 
-    const group = L.layerGroup().addTo(map);
+    const pane = ensureZoneVertexPane(map);
+    const group = L.layerGroup({ pane }).addTo(map);
     const handles = [];
 
     ring.forEach((ll, index) => {
@@ -544,35 +594,24 @@
         icon: L.divIcon({
           className: "ble-zone-vertex-icon",
           html: '<div class="ble-zone-vertex" aria-hidden="true"></div>',
-          iconSize: [18, 18],
-          iconAnchor: [9, 9],
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
         }),
-        draggable: true,
-        zIndexOffset: 2500,
-        pmIgnore: true,
+        draggable: false,
+        interactive: true,
+        keyboard: false,
+        zIndexOffset: 10000,
       });
-
-      handle.on("drag", () => {
-        const pts = polygonLatLngs(layer);
-        pts[index] = handle.getLatLng();
-        layer.setLatLngs(pts.map((p) => L.latLng(p.lat, p.lng)));
-      });
-
-      handle.on("dragstart", () => {
-        if (map.dragging) map.dragging.disable();
-      });
-
-      handle.on("dragend", () => {
-        if (map.dragging) map.dragging.enable();
-        const entry = bleZoneLayers.get(zoneData.id);
-        if (entry) entry.data.pts = latLngsToPts(polygonLatLngs(layer));
-        onZoneGeometryChanged({ layer });
-      });
-
+      attachZoneVertexPointerDrag(handle, layer, index, zoneData, map);
       handle.addTo(group);
       handles.push(handle);
     });
 
+    try {
+      layer.bringToBack?.();
+    } catch {
+      /* ignore */
+    }
     bleZoneVertexByMap.set(map, { group, layer, zoneId: zoneData.id, handles });
   }
 
@@ -810,7 +849,6 @@
         weight: isSelected ? 3 : dimmed ? 1 : 1.5,
         dashArray: isSelected ? "6 4" : null,
         interactive: forEdit,
-        pmIgnore: true,
       });
       layer.zoneMeta = z;
       layer.bindTooltip(z.name || `Зона ${z.id}`, {
@@ -873,7 +911,6 @@
         );
       });
     });
-    ensureMapGeoman(bleMap);
     setTimeout(() => bleMap.invalidateSize(), 200);
   }
 
@@ -1708,7 +1745,6 @@
         }),
       };
       fsTileLayers.street.addTo(bleMapFS);
-      ensureMapGeoman(bleMapFS);
       if (bleMap) {
         bleMapFS.setView(bleMap.getCenter(), bleMap.getZoom());
       } else if (bleMapData.length) {
