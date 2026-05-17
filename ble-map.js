@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517z";
+  const BLE_MAP_BUILD = "20260518a";
   const BLE_ZONE_NEON = "#00e5ff";
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
@@ -710,6 +710,29 @@
     });
   }
 
+  function polygonCentroidLatLng(ring) {
+    let lat = 0;
+    let lng = 0;
+    const n = ring.length || 1;
+    ring.forEach((p) => {
+      lat += p.lat;
+      lng += p.lng;
+    });
+    return L.latLng(lat / n, lng / n);
+  }
+
+  function refreshZoneHandles(handles, layer, bulkZone) {
+    if (bulkZone && handles.length === 1) {
+      handles[0].setLatLng(polygonCentroidLatLng(polygonLatLngs(layer)));
+      return;
+    }
+    refreshVertexHandlePositions(handles, layer);
+  }
+
+  function isBulkZoneRing(ring) {
+    return ring.length > BLE_ZONE_SMALL_MAX_PTS;
+  }
+
   function syncZoneVertexHandles(layer, zoneData) {
     const map = layer?._map;
     if (!map || !isZoneEditAllowed() || !zoneData) return;
@@ -718,23 +741,40 @@
     const ring = polygonLatLngs(layer);
     if (ring.length < 3) return;
 
+    const bulkZone = isBulkZoneRing(ring);
     const group = L.layerGroup().addTo(map);
     const handles = [];
 
-    ring.forEach((ll) => {
-      const handle = L.circleMarker([ll.lat, ll.lng], {
-        radius: 12,
+    if (bulkZone) {
+      const center = polygonCentroidLatLng(ring);
+      const handle = L.circleMarker(center, {
+        radius: 14,
         color: "#ffffff",
         weight: 3,
         opacity: 1,
-        fillColor: "#ff6f00",
+        fillColor: "#00e5ff",
         fillOpacity: 1,
         interactive: false,
-        className: "ble-zone-vertex-handle",
+        className: "ble-zone-centroid-handle",
       });
       handle.addTo(group);
       handles.push(handle);
-    });
+    } else {
+      ring.forEach((ll) => {
+        const handle = L.circleMarker([ll.lat, ll.lng], {
+          radius: 12,
+          color: "#ffffff",
+          weight: 3,
+          opacity: 1,
+          fillColor: "#ff6f00",
+          fillOpacity: 1,
+          interactive: false,
+          className: "ble-zone-vertex-handle",
+        });
+        handle.addTo(group);
+        handles.push(handle);
+      });
+    }
 
     let drag = null;
     const container = map.getContainer();
@@ -744,7 +784,7 @@
       drag = null;
       container.style.cursor = "";
       if (map.dragging) map.dragging.enable();
-      refreshVertexHandlePositions(handles, layer);
+      refreshZoneHandles(handles, layer, bulkZone);
       const entry = bleZoneLayers.get(zoneData.id);
       const pts = latLngsToPts(polygonLatLngs(layer));
       if (entry) entry.data.pts = pts;
@@ -755,8 +795,17 @@
       if (!drag || e.pointerId !== drag.pointerId) return;
       if (e.cancelable) e.preventDefault();
       const ll = clientPointToLatLng(map, e.clientX, e.clientY);
+      if (drag.kind === "zone") {
+        const dLat = ll.lat - drag.anchor.lat;
+        const dLng = ll.lng - drag.anchor.lng;
+        layer.setLatLngs(
+          drag.startRing.map((p) => L.latLng(p.lat + dLat, p.lng + dLng))
+        );
+        refreshZoneHandles(handles, layer, bulkZone);
+        return;
+      }
       setPolygonVertex(layer, drag.index, ll);
-      refreshVertexHandlePositions(handles, layer);
+      refreshZoneHandles(handles, layer, bulkZone);
     };
 
     const onPointerUp = (e) => {
@@ -767,11 +816,36 @@
     const onPointerDown = (e) => {
       if (!isZoneEditAllowed() || bleSelectedZoneId !== zoneData.id) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
+
+      const clickLl = clientPointToLatLng(map, e.clientX, e.clientY);
+      const currentRing = polygonLatLngs(layer);
+      const ringPts = latLngsToPts(currentRing);
+      const insideZone = pointInPolygon(clickLl.lat, clickLl.lng, ringPts);
+      const moveWhole = (e.shiftKey || bulkZone) && insideZone;
+
+      if (moveWhole) {
+        e.preventDefault();
+        e.stopPropagation();
+        drag = {
+          kind: "zone",
+          pointerId: e.pointerId,
+          anchor: clickLl,
+          startRing: currentRing.map((p) => ({ lat: p.lat, lng: p.lng })),
+        };
+        container.style.cursor = "grabbing";
+        if (map.dragging) map.dragging.disable();
+        layer.closeTooltip?.();
+        map.closeTooltip?.();
+        return;
+      }
+
+      if (bulkZone) return;
+
       const idx = findVertexIndexNearPoint(map, layer, e.clientX, e.clientY, BLE_VERTEX_HIT_PX);
       if (idx < 0) return;
       e.preventDefault();
       e.stopPropagation();
-      drag = { index: idx, pointerId: e.pointerId };
+      drag = { kind: "vertex", index: idx, pointerId: e.pointerId };
       container.style.cursor = "grabbing";
       if (map.dragging) map.dragging.disable();
       layer.closeTooltip?.();
@@ -801,9 +875,15 @@
       onPointerMove,
       onPointerUp,
     });
-    updateZoneEditHint(
-      `Вершин: ${ring.length} — тяните оранжевые точки. Повторный клик по зоне скрывает вершины.`
-    );
+    if (bulkZone) {
+      updateZoneEditHint(
+        `Зона из ${ring.length} точек — тяните голубой центр или клик внутри зоны (перемещение целиком).`
+      );
+    } else {
+      updateZoneEditHint(
+        `Вершин: ${ring.length} — тяните оранжевые точки; Shift + перетаскивание внутри зоны — целиком.`
+      );
+    }
   }
 
   function scheduleZoneVertexHandles(layer, zoneData) {
@@ -1039,7 +1119,7 @@
       const mobile = isCoarseMobile();
       const confirmText = mobile
         ? "Режим редактирования меняет данные на сервере VSM.\n\n• Удержите метку 1 сек., затем перетащите\n\nПродолжить?"
-        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: клик по зоне — вершины; снова клик — скрыть; «Сохранить» — записать все зоны\n\nПродолжить?";
+        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: клик — вершины; Shift — перетащить зону целиком; у крупных зон — за центр\n• «Сохранить» — записать все зоны\n\nПродолжить?";
       if (!opts.skipConfirm && !window.confirm(confirmText)) {
         return;
       }
@@ -1055,7 +1135,7 @@
       syncZoneEditUiClasses();
       bleEditMapMsg = isCoarseMobile()
         ? "Редактирование: удержите метку 1 сек., затем перетащите."
-        : "Метки: удержите 1 сек. Зоны: клик — вершины, снова клик — скрыть; можно править несколько зон, затем «Сохранить».";
+        : "Метки: удержите 1 сек. Зоны: вершины или Shift — целиком; крупные зоны — за голубой центр. «Сохранить» — записать.";
       hideMapMsg();
     } else {
       disableAllZonePm();

@@ -1107,6 +1107,15 @@ body.ble-map--edit .ble-dot--hold-armed {
   cursor: grabbing;
 }
 
+.ble-zone-centroid-handle {
+  cursor: grab;
+  pointer-events: auto !important;
+}
+
+body.ble-map--edit.ble-map--zone-focus {
+  cursor: default;
+}
+
 .map-zone-edit-hint {
   font-size: 11px;
   line-height: 1.35;
