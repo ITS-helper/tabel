@@ -24,7 +24,8 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260519a";
+  const BLE_MAP_BUILD = "20260519b";
+  const BLE_FIELD_PACK_FETCH_TIMEOUT_MS = 25 * 60 * 1000;
   const BLE_DOT_PX = 20;
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
@@ -234,6 +235,21 @@
     }
   }
 
+  function fieldPackNeedsProxy(packUrl) {
+    try {
+      const u = new URL(packUrl, window.location.href);
+      if (u.origin === window.location.origin) return false;
+      return /github\.com\/ITS-helper\/tabel\/releases\/download\//i.test(u.href);
+    } catch {
+      return false;
+    }
+  }
+
+  function fieldPackFetchUrl(packUrl) {
+    if (!fieldPackNeedsProxy(packUrl)) return packUrl;
+    return `${BLE_SUPABASE_BASE}?path=${encodeURIComponent("/field-pack")}&url=${encodeURIComponent(packUrl)}`;
+  }
+
   async function downloadHostedFieldPack() {
     const hosted = await fetchHostedFieldPackMeta();
     if (!hosted?.packUrl) {
@@ -263,10 +279,20 @@
     setFieldPackCancelVisible(true);
     try {
       setFieldPackStatus("Скачивание пакета…", "busy");
-      const res = await fetch(hosted.packUrl, {
+      const fetchUrl = fieldPackFetchUrl(hosted.packUrl);
+      const fetchCtrl = new AbortController();
+      const fetchTimer = setTimeout(() => fetchCtrl.abort(), BLE_FIELD_PACK_FETCH_TIMEOUT_MS);
+      if (fieldPackAbort?.signal) {
+        fieldPackAbort.signal.addEventListener("abort", () => fetchCtrl.abort(), { once: true });
+      }
+      const res = await fetch(fetchUrl, {
         cache: "no-store",
-        signal: fieldPackAbort?.signal,
+        signal: fetchCtrl.signal,
+        headers: fetchUrl.includes("ble-map-proxy")
+          ? mergeSupabaseHeaders({ Accept: "application/zip,*/*" })
+          : undefined,
       });
+      clearTimeout(fetchTimer);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const total = Number(res.headers.get("Content-Length")) || 0;
       const reader = res.body?.getReader();
@@ -302,7 +328,11 @@
       if (String(e?.message || e) === "aborted") {
         setFieldPackStatus("Скачивание отменено", "busy");
       } else {
-        alert(`Не удалось скачать пакет: ${String(e?.message || e).slice(0, 160)}`);
+        const msg = String(e?.message || e);
+        const hint = fieldPackNeedsProxy(hosted?.packUrl)
+          ? "\n\nЕсли ошибка повторяется — обновите Edge Function ble-map-proxy в Supabase или загрузите .zip вручную (Офлайн-пакет → выбрать файл)."
+          : "\n\nПопробуйте «Загрузить .zip» с телефона (файл с Release).";
+        alert(`Не удалось скачать пакет: ${msg.slice(0, 120)}${hint}`);
         setFieldPackStatus("");
       }
       fieldPackDownloadActive = false;

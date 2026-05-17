@@ -63,6 +63,24 @@ function isAllowedPhotoHost(hostname: string): boolean {
   return h.includes("storage.yandexcloud.net") || h.endsWith(".yandexcloud.net");
 }
 
+/** Офлайн-пакет .zip с GitHub Releases (обход CORS для its-helper.github.io). */
+function isAllowedFieldPackUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname.toLowerCase();
+    if (h === "github.com") {
+      return /\/ITS-helper\/tabel\/releases\/download\//i.test(u.pathname);
+    }
+    if (h === "objects.githubusercontent.com") {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: cors });
@@ -71,6 +89,27 @@ Deno.serve(async (req) => {
   try {
     const path = apiPathFromRequest(req);
     const url = new URL(req.url);
+
+    if (path === "/field-pack") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        return jsonError(405, { error: "method_not_allowed" });
+      }
+      const packUrl = url.searchParams.get("url");
+      if (!packUrl) return jsonError(400, { error: "missing_url" });
+      if (!isAllowedFieldPackUrl(packUrl)) {
+        return jsonError(403, { error: "pack_url_not_allowed" });
+      }
+      const packRes = await fetch(packUrl, { redirect: "follow" });
+      const out = new Headers(cors);
+      out.set("Content-Type", packRes.headers.get("content-type") || "application/zip");
+      const cl = packRes.headers.get("content-length");
+      if (cl) out.set("Content-Length", cl);
+      out.set("Cache-Control", "public, max-age=3600");
+      return new Response(req.method === "HEAD" ? null : packRes.body, {
+        status: packRes.status,
+        headers: out,
+      });
+    }
 
     if (path === "/ble-image" || path.startsWith("/ble-image/")) {
       if (req.method !== "GET" && req.method !== "HEAD") {

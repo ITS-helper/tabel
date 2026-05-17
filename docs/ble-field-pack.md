@@ -130,6 +130,12 @@ npm run ble-field-pack:tag-only
    ```
 4. Закоммитьте и запушьте **только** `data/ble-field-pack-meta.json`.
 
+> **CORS:** ссылка `github.com/.../releases/download/...` **не качается напрямую** из браузера на `its-helper.github.io` (ошибка `Failed to fetch`). Сайт проксирует zip через Supabase Edge Function **`ble-map-proxy`** (путь `/field-pack`). После изменения прокси выполните деплой:
+> ```bash
+> npm run supabase:deploy-ble-map
+> ```
+> Пока прокси не обновлён — на телефоне: скачайте zip из Release вручную → **Офлайн-пакет** → выбрать файл.
+
 ### Способ 2 — Supabase Storage (рекомендуется для больших архивов)
 
 1. Supabase Dashboard → **Storage** → создайте bucket, например `public-assets` (public).
