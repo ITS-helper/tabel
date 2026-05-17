@@ -24,9 +24,9 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517y";
-  const BLE_ZONE_TIFFANY = "#0abab5";
-  const BLE_ZONE_TIFFANY_LIGHT = "#4dd0c8";
+  const BLE_MAP_BUILD = "20260517z";
+  const BLE_ZONE_NEON = "#00e5ff";
+  const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
   const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
@@ -1144,73 +1144,61 @@
   }
 
   function getZonePolygonStyle(z, ctx) {
-    const onPhoto = ctx.layerMode === "hybrid" || ctx.layerMode === "satellite";
-    const strokeTiffany = onPhoto ? BLE_ZONE_TIFFANY : z.color || BLE_ZONE_TIFFANY;
-    const fillTiffany = onPhoto ? BLE_ZONE_TIFFANY_LIGHT : z.color || BLE_ZONE_TIFFANY_LIGHT;
-    const strokeSelected = "#ffffff";
+    const isSatellite = ctx.layerMode === "satellite";
+    const isHybrid = ctx.layerMode === "hybrid";
+    const onPhoto = isSatellite || isHybrid;
+    const stroke = ctx.isSelected ? "#ffffff" : onPhoto ? BLE_ZONE_NEON : z.color || BLE_ZONE_NEON;
+    const fillColor = isHybrid ? BLE_ZONE_NEON_FILL : z.color || BLE_ZONE_NEON_FILL;
+    const weight = ctx.isSelected ? 2 : onPhoto ? 1.15 : 1.75;
+    const strokeOpacity = ctx.dimmed ? 0.32 : onPhoto ? 0.94 : 0.72;
+
+    if (isSatellite) {
+      return {
+        color: stroke,
+        fillColor,
+        opacity: strokeOpacity,
+        fillOpacity: 0,
+        weight,
+      };
+    }
 
     if (isMainSitePolygonZone(z) || isMarkerClusterZone(z, ctx.ptCount)) {
       return {
-        color: ctx.isSelected ? strokeSelected : strokeTiffany,
-        fillColor: fillTiffany,
-        opacity: ctx.dimmed ? 0.25 : 0.9,
+        color: stroke,
+        fillColor,
+        opacity: strokeOpacity,
         fillOpacity: 0,
-        weight: ctx.isSelected ? 3.5 : 2.25,
+        weight,
       };
     }
 
-    if (isSmallZonePolygon(z, ctx.ptCount)) {
-      const fill =
-        ctx.layerMode === "hybrid"
-          ? ctx.dimmed
-            ? 0.08
-            : ctx.forEdit
-              ? 0.34
-              : 0.28
-          : ctx.layerMode === "satellite"
-            ? ctx.dimmed
-              ? 0.06
-              : ctx.forEdit
-                ? 0.26
-                : 0.22
-            : ctx.dimmed
-              ? 0.06
-              : ctx.forEdit
-                ? 0.24
-                : 0.18;
+    if (isSmallZonePolygon(z, ctx.ptCount) && isHybrid) {
+      const fill = ctx.dimmed ? 0.08 : ctx.forEdit ? 0.34 : 0.28;
       return {
-        color: ctx.isSelected ? strokeSelected : strokeTiffany,
-        fillColor: fillTiffany,
-        opacity: ctx.dimmed ? 0.35 : 0.92,
+        color: stroke,
+        fillColor,
+        opacity: strokeOpacity,
         fillOpacity: fill,
-        weight: ctx.isSelected ? 3.5 : 2.5,
+        weight: ctx.isSelected ? 2 : 1.35,
       };
     }
 
-    if (ctx.layerMode === "hybrid") {
+    if (isHybrid) {
       return {
-        color: ctx.isSelected ? strokeSelected : strokeTiffany,
-        fillColor: fillTiffany,
-        opacity: ctx.dimmed ? 0.3 : 0.88,
+        color: stroke,
+        fillColor,
+        opacity: strokeOpacity,
         fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.12 : 0.08,
-        weight: ctx.isSelected ? 3.5 : 2.25,
+        weight,
       };
     }
-    if (ctx.layerMode === "satellite") {
-      return {
-        color: ctx.isSelected ? strokeSelected : strokeTiffany,
-        fillColor: fillTiffany,
-        opacity: ctx.dimmed ? 0.25 : 0.85,
-        fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.16 : 0.1,
-        weight: ctx.isSelected ? 3 : 2,
-      };
-    }
+
     return {
-      color: ctx.isSelected ? strokeSelected : strokeTiffany,
-      fillColor: z.color || BLE_ZONE_TIFFANY_LIGHT,
+      color: ctx.isSelected ? "#ffffff" : z.color || BLE_ZONE_NEON,
+      fillColor: z.color || BLE_ZONE_NEON_FILL,
       opacity: ctx.dimmed ? 0.2 : 0.75,
       fillOpacity: ctx.dimmed ? 0.05 : ctx.forEdit ? 0.2 : 0.14,
-      weight: ctx.isSelected ? 3 : 1.75,
+      weight: ctx.isSelected ? 2.5 : 1.75,
     };
   }
 

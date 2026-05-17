@@ -598,8 +598,9 @@ body.ble-map-layer-menu-open .fs-compact-bar {
   flex-shrink: 0;
 }
 
-body.ble-map--layer-hybrid .leaflet-overlay-pane svg path.leaflet-interactive {
-  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.85));
+body.ble-map--layer-hybrid .leaflet-overlay-pane svg path.leaflet-interactive,
+body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive {
+  filter: drop-shadow(0 0 2px rgba(0, 229, 255, 0.75));
 }
 
 .map-fullscreen-search {
