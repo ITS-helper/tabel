@@ -2026,17 +2026,16 @@
         );
         return;
       }
-      const tagOnly = isCoarseMobile();
-      const photoUrls = collectPhotoUrlsFromRaw(raw, { tagOnly });
+      const photoUrls = collectPhotoUrlsFromRaw(raw, { tagOnly: false });
       if (!photoUrls.length) {
         alert(
           "В ответе API нет актуальных ссылок на фото. Повторите позже или проверьте VPN. Пакет не сохранён — иначе в поле фото не откроются."
         );
         return;
       }
-      if (tagOnly) {
+      if (isCoarseMobile()) {
         const go = confirm(
-          `Скачать пакет для телефона:\n\n• ${raw.length} меток\n• ${photoUrls.length} фото (по 1 на метку, сжатие)\n\nЭто может занять 10–25 минут. Не сворачивайте вкладку.\n\nПродолжить?`
+          `Скачать пакет для телефона:\n\n• ${raw.length} меток\n• ${photoUrls.length} фото (метка + место, сжатие)\n\nЭто может занять 20–40 минут. Не сворачивайте вкладку.\n\nПродолжить?`
         );
         if (!go) return;
       }
@@ -2110,7 +2109,7 @@
         photosOk,
         photosFail,
         bytesTotal,
-        tagOnly,
+        tagOnly: false,
         raw,
       };
       if (photosOk < 1) {
