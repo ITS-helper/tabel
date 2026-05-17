@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517j";
+  const BLE_MAP_BUILD = "20260517k";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -59,6 +59,15 @@
   let bleEditMapMsg = "";
   let bleListSnapshot = null;
   const BLE_LIST_SNAPSHOT_MS = 4 * 60 * 1000;
+
+  const bleMarkerRegistry = new Map();
+  const bleByBleNumber = new Map();
+  let bleInspectionCount = 0;
+  let lastRenderKey = "";
+  let lastRenderKeyFS = "";
+  let pendingRenderRaf = 0;
+  let pendingInvalidateRaf = 0;
+  const BLE_RENDER_DEBOUNCE_MS = 110;
 
   function esc(str) {
     return String(str).replace(/[&<>"']/g, (m) =>
@@ -108,6 +117,63 @@
     return rawBle.map((point) => {
       const prev = point.id != null ? prevById.get(point.id) : null;
       return classifyBle(point, prev);
+    });
+  }
+
+  function invalidateMarkerRegistry() {
+    bleMarkerRegistry.forEach(({ marker }) => {
+      try {
+        marker.off();
+        marker.unbindPopup?.();
+      } catch {
+        /* ignore */
+      }
+    });
+    bleMarkerRegistry.clear();
+  }
+
+  function rebuildBleIndex() {
+    bleByBleNumber.clear();
+    let insp = 0;
+    bleMapData.forEach((pt) => {
+      if (pt.ble) bleByBleNumber.set(pt.ble.toLowerCase(), pt);
+      if (pt.status === "inspection") insp++;
+    });
+    bleInspectionCount = insp;
+  }
+
+  function setBleMapData(next) {
+    bleMapData = next;
+    invalidateMarkerRegistry();
+    rebuildBleIndex();
+    lastRenderKey = "";
+    lastRenderKeyFS = "";
+    if (bleClusterGroup) {
+      try {
+        bleClusterGroup.clearLayers();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (bleClusterGroupFS) {
+      try {
+        bleClusterGroupFS.clearLayers();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function scheduleInvalidateSize(map) {
+    if (!map) return;
+    if (pendingInvalidateRaf) cancelAnimationFrame(pendingInvalidateRaf);
+    pendingInvalidateRaf = requestAnimationFrame(() => {
+      pendingInvalidateRaf = 0;
+      try {
+        map.invalidateSize();
+      } catch {
+        /* ignore */
+      }
     });
   }
 
@@ -843,9 +909,9 @@
 
   function redrawMapLayers() {
     renderBleMarkers();
-    renderFsMarkers();
+    if (isMapFullscreenOpen()) renderFsMarkers();
     if (bleMap) drawZones(bleMap);
-    if (bleMapFS) drawZones(bleMapFS);
+    if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
   }
 
   function setEditMode(on, opts = {}) {
@@ -947,7 +1013,10 @@
       zoomControl: false,
       tapTolerance: 18,
       bounceAtZoomLimits: false,
-      preferCanvas: false,
+      preferCanvas: true,
+      fadeAnimation: false,
+      markerZoomAnimation: !mobile,
+      wheelPxPerZoomLevel: 80,
     }).setView(center, zoom);
     L.control
       .zoom({
@@ -1154,17 +1223,21 @@
     const footer = popupFooterHtml(extraFooter);
     const renderContent = (p) => makePopup(p) + footer;
 
-    marker.bindPopup(renderContent(getPointForPopup(pt)), { maxWidth: popupMaxWidth() });
+    marker.bindPopup(() => renderContent(getPointForPopup(pt)), {
+      maxWidth: popupMaxWidth(),
+    });
     marker.on("popupopen", async () => {
       let current = getPointForPopup(pt);
-      const popupEl = marker.getPopup()?.getElement();
-      const slot = popupEl?.querySelector(".ble-popup-photos-slot");
-      if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
-      const mustRefresh = needsPhotoRefresh(current);
-      current = await enrichPointPhotos(current, { forceFresh: mustRefresh });
-      if (!current.photoTag && !current.photoPlace) {
-        current = await enrichPointPhotos(current, { forceFresh: true });
+      const slot = marker
+        .getPopup()
+        ?.getElement()
+        ?.querySelector(".ble-popup-photos-slot");
+      if (!needsPhotoRefresh(current)) {
+        renderPhotosInto(slot, current);
+        return;
       }
+      if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
+      current = await enrichPointPhotos(current);
       renderPhotosInto(slot, current);
     });
   }
@@ -1191,8 +1264,12 @@
       disableClusteringAtZoom: 18,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
-      animate: true,
+      animate: false,
       animateAddingMarkers: false,
+      chunkedLoading: true,
+      chunkInterval: 80,
+      chunkDelay: 16,
+      removeOutsideVisibleBounds: true,
       iconCreateFunction(cluster) {
         const count = cluster.getChildCount();
         const size = count < 10 ? "small" : count < 50 ? "medium" : "large";
@@ -1205,6 +1282,26 @@
     });
   }
 
+  function getOrCreateMarkerForPt(pt) {
+    if (!pt.lat || !pt.lng) return null;
+    let entry = bleMarkerRegistry.get(pt.id);
+    if (entry) return entry.marker;
+    const marker = L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) });
+    attachMarkerPopup(marker, pt);
+    bleMarkerRegistry.set(pt.id, { marker, pt });
+    return marker;
+  }
+
+  function collectVisibleMarkers(filter, query) {
+    const visible = [];
+    bleMapData.forEach((pt) => {
+      if (!pointVisibleOnMap(pt, { statusFilter: filter, query })) return;
+      const m = getOrCreateMarkerForPt(pt);
+      if (m) visible.push(m);
+    });
+    return visible;
+  }
+
   function onMarkerDragEnd(pt, marker) {
     const ll = marker.getLatLng();
     if (!bleDirtyMarkers.has(pt.id)) {
@@ -1215,6 +1312,14 @@
     rec.lng = ll.lng;
     pt.lat = ll.lat;
     pt.lng = ll.lng;
+    const cached = bleMarkerRegistry.get(pt.id);
+    if (cached) {
+      try {
+        cached.marker.setLatLng(ll);
+      } catch {
+        /* ignore */
+      }
+    }
     updateEditBarState();
   }
 
@@ -1547,61 +1652,83 @@
 
   function renderBleMarkers() {
     if (!bleMap) return;
-    if (bleClusterGroup) {
-      bleMap.removeLayer(bleClusterGroup);
-      bleClusterGroup = null;
+    const q =
+      document.getElementById("mapBleSearch")?.value?.trim().toLowerCase().replace(/^ble/i, "") || "";
+
+    if (shouldUseEditMarkersOnMap(bleMap)) {
+      if (bleClusterGroup) {
+        bleMap.removeLayer(bleClusterGroup);
+        bleClusterGroup = null;
+      }
+      if (bleMarkerLayer) {
+        bleMap.removeLayer(bleMarkerLayer);
+      }
+      bleMarkerLayer = L.layerGroup();
+      addEditableMarkersToGroup(bleMarkerLayer, { statusFilter: bleMapFilter, query: q });
+      bleMap.addLayer(bleMarkerLayer);
+      lastRenderKey = "edit";
+      return;
     }
+
     if (bleMarkerLayer) {
       bleMap.removeLayer(bleMarkerLayer);
       bleMarkerLayer = null;
     }
-    const q = document.getElementById("mapBleSearch")?.value?.trim().toLowerCase().replace(/^ble/i, "") || "";
 
-    if (shouldUseEditMarkersOnMap(bleMap)) {
-      bleMarkerLayer = L.layerGroup();
-      addEditableMarkersToGroup(bleMarkerLayer, { statusFilter: bleMapFilter, query: q });
-      bleMap.addLayer(bleMarkerLayer);
-      bleMap.invalidateSize();
-      return;
+    const key = `view:${bleMapFilter}:${bleMapRouteFilter}:${q}:${bleMapData.length}`;
+    if (key === lastRenderKey && bleClusterGroup) return;
+    lastRenderKey = key;
+
+    const visible = collectVisibleMarkers(bleMapFilter, q);
+
+    if (!bleClusterGroup) {
+      bleClusterGroup = makeClusterGroup();
+      bleMap.addLayer(bleClusterGroup);
+    } else {
+      bleClusterGroup.clearLayers();
     }
-
-    bleClusterGroup = makeClusterGroup();
-    bleMapData.forEach((pt) => {
-      if (!pointVisibleOnMap(pt, { statusFilter: bleMapFilter, query: q })) return;
-      const marker = L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) });
-      attachMarkerPopup(marker, pt);
-      marker.addTo(bleClusterGroup);
-    });
-    bleMap.addLayer(bleClusterGroup);
+    bleClusterGroup.addLayers(visible);
   }
 
   function renderFsMarkers() {
-    if (!bleMapFS) return;
-    clearFsMarkerLayers();
+    if (!bleMapFS || !isMapFullscreenOpen()) return;
     const q = getFsSearchQuery();
+
     if (shouldUseEditMarkersOnMap(bleMapFS)) {
+      clearFsMarkerLayers();
       bleMarkerLayerFS = L.layerGroup();
       addEditableMarkersToGroup(bleMarkerLayerFS, { statusFilter: bleMapFSFilter, query: q });
       bleMapFS.addLayer(bleMarkerLayerFS);
-      bleMapFS.invalidateSize();
+      lastRenderKeyFS = "edit";
       return;
     }
-    bleClusterGroupFS = makeClusterGroup();
-    bleMapData.forEach((pt) => {
-      if (!pointVisibleOnMap(pt, { statusFilter: bleMapFSFilter, query: q })) return;
-      const marker = L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) });
-      attachMarkerPopup(marker, pt);
-      marker.addTo(bleClusterGroupFS);
-    });
-    bleMapFS.addLayer(bleClusterGroupFS);
+
+    if (bleMarkerLayerFS) {
+      bleMapFS.removeLayer(bleMarkerLayerFS);
+      bleMarkerLayerFS = null;
+    }
+
+    const key = `view:${bleMapFSFilter}:${bleMapRouteFilter}:${q}:${bleMapData.length}`;
+    if (key === lastRenderKeyFS && bleClusterGroupFS) return;
+    lastRenderKeyFS = key;
+
+    const visible = collectVisibleMarkers(bleMapFSFilter, q);
+
+    if (!bleClusterGroupFS) {
+      bleClusterGroupFS = makeClusterGroup();
+      bleMapFS.addLayer(bleClusterGroupFS);
+    } else {
+      bleClusterGroupFS.clearLayers();
+    }
+    bleClusterGroupFS.addLayers(visible);
   }
 
   function updateMapStats() {
     const all = bleMapData.length;
-    const insp = bleMapData.filter((p) => p.status === "inspection").length;
+    const insp = bleInspectionCount;
     const set = (id, v) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = v;
+      if (el && el.textContent !== String(v)) el.textContent = v;
     };
     set("fcAll", all);
     set("fcInsp", insp);
@@ -1639,9 +1766,7 @@
 
   function scheduleMapResize() {
     if (!bleMap) return;
-    bleMap.invalidateSize();
-    setTimeout(() => bleMap?.invalidateSize(), 200);
-    setTimeout(() => bleMap?.invalidateSize(), 600);
+    scheduleInvalidateSize(bleMap);
   }
 
   function applyMapLayoutClasses() {
@@ -1698,7 +1823,7 @@
       const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
       if (!Array.isArray(rawBle) || !rawBle.length) return;
       bleListSnapshot = { at: Date.now(), raw: rawBle, companyId };
-      bleMapData = mergeBleMapDataFromRaw(rawBle);
+      setBleMapData(mergeBleMapDataFromRaw(rawBle));
       updateMapStats();
       renderBleMarkers();
       try {
@@ -1736,7 +1861,10 @@
   }
 
   async function applyBleListToMap(rawBle, cacheNotice) {
-    bleMapData = mergeBleMapDataFromRaw(rawBle);
+    setBleMapData(mergeBleMapDataFromRaw(rawBle));
+    if (Array.isArray(rawBle) && rawBle.length && bleCompanyId) {
+      bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: bleCompanyId };
+    }
     updateMapStats();
     renderBleMarkers();
     if (bleCompanyId) {
@@ -1919,7 +2047,10 @@
         zoomControl: false,
         tapTolerance: 18,
         bounceAtZoomLimits: false,
-        preferCanvas: false,
+        preferCanvas: true,
+        fadeAnimation: false,
+        markerZoomAnimation: !fsMobile,
+        wheelPxPerZoomLevel: 80,
       });
       L.control
         .zoom({
@@ -1966,29 +2097,26 @@
       const fsSearchEl = document.getElementById("mapFsSearch");
       const fsSearchClear = document.getElementById("mapFsSearchClear");
       if (fsSearchEl && fsSearchClear) {
-        fsSearchEl.addEventListener("input", () => {
-          fsSearchClear.style.display = fsSearchEl.value ? "block" : "none";
+        let fsSearchTimer = 0;
+        const runFsSearch = () => {
+          fsSearchTimer = 0;
           renderFsMarkers();
           const q = fsSearchEl.value.trim().toLowerCase().replace(/^ble/i, "");
           if (!q) return;
-          const found = bleMapData.find((p) => p.ble.toLowerCase() === q);
-          if (found?.lat && found?.lng) {
-            const layerGroup = bleMarkerLayerFS || bleClusterGroupFS;
-            if (layerGroup) {
-              let hit = null;
-              layerGroup.eachLayer((m) => {
-                if (m.getLatLng().lat === found.lat && m.getLatLng().lng === found.lng) hit = m;
-              });
-              if (hit) {
-                if (bleClusterGroupFS?.zoomToShowLayer) {
-                  bleClusterGroupFS.zoomToShowLayer(hit, () => hit.openPopup());
-                } else {
-                  bleMapFS.setView(hit.getLatLng(), Math.max(bleMapFS.getZoom(), 17));
-                  hit.openPopup();
-                }
-              }
-            }
+          const found = bleByBleNumber.get(q);
+          if (!found?.lat || !found.lng) return;
+          const target = bleMarkerRegistry.get(found.id)?.marker;
+          if (target && bleClusterGroupFS?.zoomToShowLayer) {
+            bleClusterGroupFS.zoomToShowLayer(target, () => target.openPopup());
+          } else if (target) {
+            bleMapFS.setView(target.getLatLng(), Math.max(bleMapFS.getZoom(), 17));
+            target.openPopup();
           }
+        };
+        fsSearchEl.addEventListener("input", () => {
+          fsSearchClear.style.display = fsSearchEl.value ? "block" : "none";
+          if (fsSearchTimer) clearTimeout(fsSearchTimer);
+          fsSearchTimer = setTimeout(runFsSearch, BLE_RENDER_DEBOUNCE_MS);
         });
         fsSearchClear.addEventListener("click", () => {
           fsSearchEl.value = "";
@@ -2043,23 +2171,29 @@
     const mapBleSearchEl = document.getElementById("mapBleSearch");
     const mapSearchClearEl = document.getElementById("mapSearchClear");
     if (mapBleSearchEl && mapSearchClearEl) {
-      mapBleSearchEl.addEventListener("input", () => {
-        mapSearchClearEl.style.display = mapBleSearchEl.value ? "block" : "none";
+      let searchTimer = 0;
+      const runSearch = () => {
+        searchTimer = 0;
         renderBleMarkers();
         const q = mapBleSearchEl.value.trim().toLowerCase().replace(/^ble/i, "");
         if (!q) return;
-        const found = bleMapData.find((p) => p.ble.toLowerCase() === q);
-        if (found?.lat && found?.lng && bleClusterGroup) {
-          bleClusterGroup.eachLayer((m) => {
-            if (m.getLatLng().lat === found.lat && m.getLatLng().lng === found.lng) {
-              bleClusterGroup.zoomToShowLayer(m, () => m.openPopup());
-            }
-          });
+        const found = bleByBleNumber.get(q);
+        if (found?.lat && found.lng) {
+          const target = bleMarkerRegistry.get(found.id)?.marker;
+          if (target && bleClusterGroup?.zoomToShowLayer) {
+            bleClusterGroup.zoomToShowLayer(target, () => target.openPopup());
+          }
         }
+      };
+      mapBleSearchEl.addEventListener("input", () => {
+        mapSearchClearEl.style.display = mapBleSearchEl.value ? "block" : "none";
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(runSearch, BLE_RENDER_DEBOUNCE_MS);
       });
       mapSearchClearEl.addEventListener("click", () => {
         mapBleSearchEl.value = "";
         mapSearchClearEl.style.display = "none";
+        if (searchTimer) clearTimeout(searchTimer);
         renderBleMarkers();
         mapBleSearchEl.focus();
       });
