@@ -100,7 +100,13 @@
         gap: 6px;
         flex-wrap: nowrap;
         overflow-x: auto;
+        overflow-y: visible;
         -webkit-overflow-scrolling: touch;
+      }
+
+      .fs-compact-bar .map-layer-mode-btn {
+        min-height: 40px;
+        touch-action: manipulation;
       }
       .fs-compact-bar .fs-chip {
         min-height: 40px;
@@ -137,6 +143,12 @@
       flex: 0 1 118px;
       min-width: 96px;
       max-width: 140px;
+      overflow: visible;
+      z-index: 2;
+    }
+
+    .fs-compact-bar .map-layer-picker--open {
+      z-index: 12001;
     }
 
     .fs-compact-bar .fs-route {
@@ -355,8 +367,13 @@
       window.wireMapLayerPicker(layerPicker);
     }
     if (typeof window.syncBaseLayerPickers === 'function') {
-      const activeItem = document.querySelector('.map-layer-menu__item.active');
-      const layerId = activeItem?.dataset.layer || 'street';
+      let layerId = 'street';
+      try {
+        const stored = localStorage.getItem('ww-ble-base-layer');
+        if (stored === 'satellite' || stored === 'hybrid' || stored === 'street') layerId = stored;
+      } catch {
+        /* ignore */
+      }
       window.syncBaseLayerPickers(layerId);
     }
 

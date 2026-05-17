@@ -507,6 +507,16 @@ body {
 .map-layer-picker {
   position: relative;
   flex: 0 0 auto;
+  z-index: 2;
+}
+
+.map-layer-picker--open {
+  z-index: 12001;
+}
+
+body.ble-map-layer-menu-open .map-float-dock,
+body.ble-map-layer-menu-open .fs-compact-bar {
+  z-index: 1200;
 }
 
 .map-layer-mode-btn {
@@ -524,6 +534,8 @@ body {
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(10, 186, 181, 0.35);
   transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .map-layer-mode-btn:hover {
@@ -568,6 +580,8 @@ body {
   background: transparent;
   color: #37474f;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .map-layer-menu__item:hover {
@@ -938,9 +952,19 @@ body.ble-map--layer-hybrid .leaflet-overlay-pane svg path.leaflet-interactive {
   }
 
   .map-layer-mode-btn {
-    min-height: 34px;
-    padding: 5px 10px;
+    min-height: 40px;
+    padding: 8px 12px;
     font-size: 0.65em;
+  }
+
+  .map-layer-menu__item {
+    min-height: 40px;
+    padding: 10px 12px;
+  }
+
+  .map-toolbar-row--actions {
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   .map-search-bar--toolbar {

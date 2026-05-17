@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517u";
+  const BLE_MAP_BUILD = "20260517v";
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
   const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
 
@@ -1146,13 +1146,72 @@
     return "street";
   }
 
+  function usesFixedLayerMenu() {
+    return isCoarseMobile() || window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function resetLayerMenuPosition(menu) {
+    if (!menu) return;
+    menu.style.position = "";
+    menu.style.top = "";
+    menu.style.right = "";
+    menu.style.left = "";
+    menu.style.bottom = "";
+    menu.style.zIndex = "";
+  }
+
+  function positionLayerMenu(picker) {
+    const btn = picker.querySelector(".map-layer-mode-btn");
+    const menu = picker.querySelector(".map-layer-menu");
+    if (!btn || !menu || !usesFixedLayerMenu()) return;
+    const r = btn.getBoundingClientRect();
+    const menuH = menu.offsetHeight || 132;
+    const gap = 4;
+    const below = r.bottom + gap;
+    const above = r.top - menuH - gap;
+    const openUp = below + menuH > window.innerHeight - 8 && above > 8;
+    menu.style.position = "fixed";
+    menu.style.zIndex = "12000";
+    menu.style.top = `${openUp ? above : below}px`;
+    menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+    menu.style.left = "auto";
+    menu.style.bottom = "auto";
+  }
+
   function closeAllLayerMenus() {
+    document.body.classList.remove("ble-map-layer-menu-open");
     document.querySelectorAll(".map-layer-picker").forEach((picker) => {
       const btn = picker.querySelector(".map-layer-mode-btn");
       const menu = picker.querySelector(".map-layer-menu");
-      if (menu) menu.hidden = true;
+      picker.classList.remove("map-layer-picker--open");
+      if (menu) {
+        menu.hidden = true;
+        resetLayerMenuPosition(menu);
+      }
       if (btn) btn.setAttribute("aria-expanded", "false");
     });
+  }
+
+  function openLayerMenu(picker) {
+    const btn = picker.querySelector(".map-layer-mode-btn");
+    const menu = picker.querySelector(".map-layer-menu");
+    if (!btn || !menu) return;
+    closeAllLayerMenus();
+    menu.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    picker.classList.add("map-layer-picker--open");
+    document.body.classList.add("ble-map-layer-menu-open");
+    positionLayerMenu(picker);
+  }
+
+  function toggleLayerMenu(picker) {
+    const btn = picker.querySelector(".map-layer-mode-btn");
+    if (!btn) return;
+    if (btn.getAttribute("aria-expanded") === "true") {
+      closeAllLayerMenus();
+      return;
+    }
+    openLayerMenu(picker);
   }
 
   function syncBaseLayerPickers(layerId) {
@@ -1171,30 +1230,71 @@
     const btn = picker.querySelector(".map-layer-mode-btn");
     const menu = picker.querySelector(".map-layer-menu");
     if (!btn || !menu) return;
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const open = btn.getAttribute("aria-expanded") === "true";
-      closeAllLayerMenus();
-      if (!open) {
-        menu.hidden = false;
-        btn.setAttribute("aria-expanded", "true");
+    let suppressBtnClick = false;
+    const onBtnActivate = (e) => {
+      if (e.type === "click" && suppressBtnClick) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
       }
+      if (e.type === "pointerup" && e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === "pointerup") {
+        suppressBtnClick = true;
+        setTimeout(() => {
+          suppressBtnClick = false;
+        }, 400);
+      }
+      toggleLayerMenu(picker);
+    };
+    btn.addEventListener("pointerup", onBtnActivate);
+    btn.addEventListener("click", onBtnActivate);
+    btn.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      toggleLayerMenu(picker);
     });
     menu.querySelectorAll(".map-layer-menu__item").forEach((item) => {
-      item.addEventListener("click", (e) => {
+      let suppressItemClick = false;
+      const onItemActivate = (e) => {
+        if (e.type === "click" && suppressItemClick) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (e.type === "pointerup" && e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
         e.stopPropagation();
+        if (e.type === "pointerup") {
+          suppressItemClick = true;
+          setTimeout(() => {
+            suppressItemClick = false;
+          }, 400);
+        }
         if (BLE_BASE_LAYERS.includes(item.dataset.layer)) {
           setBleBaseLayer(item.dataset.layer);
         }
         closeAllLayerMenus();
-      });
+      };
+      item.addEventListener("pointerup", onItemActivate);
+      item.addEventListener("click", onItemActivate);
     });
   }
 
   function wireBaseLayerPickers() {
     if (!document.body.dataset.layerMenuCloseWired) {
       document.body.dataset.layerMenuCloseWired = "1";
-      document.addEventListener("click", closeAllLayerMenus);
+      document.addEventListener(
+        "pointerdown",
+        (e) => {
+          if (e.target.closest(".map-layer-picker")) return;
+          closeAllLayerMenus();
+        },
+        true
+      );
+      window.addEventListener("resize", closeAllLayerMenus, { passive: true });
+      window.visualViewport?.addEventListener("resize", closeAllLayerMenus, { passive: true });
     }
     document.querySelectorAll(".map-layer-picker").forEach(wireMapLayerPicker);
   }
