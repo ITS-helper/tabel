@@ -24,11 +24,13 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518h";
+  const BLE_MAP_BUILD = "20260518j";
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
   const BLE_FIELD_PHOTOS_STORE = "photos";
   const BLE_FIELD_PACK_KEY = "pack";
+  const BLE_FIELD_MARKERS_KEY = "markers";
+  const BLE_FIELD_PACK_VERSION = 2;
   const BLE_FIELD_PHOTO_MAX_BYTES = 2.5 * 1024 * 1024;
   const BLE_FIELD_PHOTO_BATCH = 8;
   const BLE_FIELD_YIELD_EVERY = 1;
@@ -61,7 +63,7 @@
   let fieldPackAbort = null;
 
   function fieldPackConcurrency() {
-    return isCoarseMobile() ? 2 : 4;
+    return isCoarseMobile() ? 1 : 4;
   }
 
   function yieldToMain() {
@@ -1804,7 +1806,8 @@
       const tx = db.transaction(BLE_FIELD_META_STORE, "readonly");
       const meta = await idbGet(tx.objectStore(BLE_FIELD_META_STORE), BLE_FIELD_PACK_KEY);
       db.close();
-      fieldPackMetaCache = meta && meta.version === 1 ? meta : null;
+      fieldPackMetaCache =
+        meta && (meta.version === 1 || meta.version === BLE_FIELD_PACK_VERSION) ? meta : null;
       return fieldPackMetaCache;
     } catch (e) {
       console.warn("[ble-map] field pack meta", e?.message || e);
@@ -1827,6 +1830,119 @@
       req.onerror = () => reject(req.error);
     });
     db.close();
+  }
+
+  async function resetFieldPackStorage() {
+    revokeFieldPhotoBlobUrls();
+    fieldPackMetaCache = null;
+    setFieldPackStatus("Очистка старого пакета…", "busy");
+    await yieldToMain();
+    try {
+      const db = await openFieldDb();
+      db.close();
+    } catch {
+      /* ignore */
+    }
+    await new Promise((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        resolve();
+      };
+      const req = indexedDB.deleteDatabase(BLE_FIELD_DB);
+      req.onsuccess = finish;
+      req.onerror = finish;
+      req.onblocked = () => {
+        setFieldPackStatus("Закройте другие вкладки с картой…", "busy");
+      };
+      setTimeout(finish, isCoarseMobile() ? 15000 : 8000);
+    });
+    await yieldToMain();
+  }
+
+  function slimBlePointForFieldPack(p) {
+    if (!p) return null;
+    return {
+      id: p.id,
+      ble_number: p.ble_number ?? p.bleNumber,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      name_extended: p.name_extended,
+      charge_value: p.charge_value,
+      record_dt: p.record_dt,
+      location_desc: p.location_desc,
+      ble_type_desc: p.ble_type_desc,
+      mac_address: p.mac_address,
+      ble_image_url: p.ble_image_url,
+      bleImageUrl: p.bleImageUrl,
+      ble_image: p.ble_image,
+      location_image_url: p.location_image_url,
+      locationImageUrl: p.locationImageUrl,
+      location_image: p.location_image,
+      bleRoute: p.bleRoute,
+      ble_zone_id: p.ble_zone_id ?? p.ble_zoneId,
+    };
+  }
+
+  function slimBleRawForFieldPack(raw) {
+    return raw.map(slimBlePointForFieldPack).filter(Boolean);
+  }
+
+  async function loadFieldPackMarkers() {
+    try {
+      const db = await openFieldDb();
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readonly");
+      const markers = await idbGet(tx.objectStore(BLE_FIELD_META_STORE), BLE_FIELD_MARKERS_KEY);
+      db.close();
+      if (Array.isArray(markers) && markers.length) return markers;
+    } catch (e) {
+      console.warn("[ble-map] field markers load", e?.message || e);
+    }
+    const meta = fieldPackMetaCache || (await loadFieldPackMeta());
+    return meta?.raw?.length ? meta.raw : null;
+  }
+
+  async function commitFieldPackMarkers(slimRaw) {
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readwrite");
+      tx.objectStore(BLE_FIELD_META_STORE).put(slimRaw, BLE_FIELD_MARKERS_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  async function resolveRawForFieldPackDownload(cid) {
+    await yieldToMain();
+    const snap = bleListSnapshot;
+    if (snap?.raw?.length && Number(snap.companyId) === Number(cid)) {
+      const urls = collectPhotoUrlsFromRaw(snap.raw, { tagOnly: false });
+      const liveRecent = snap.live && Date.now() - snap.at < 25 * 60 * 1000;
+      if (urls.length >= 80 && (liveRecent || urls.length >= snap.raw.length * 0.15)) {
+        setFieldPackStatus(`Метки уже на карте (${snap.raw.length})…`, "busy");
+        await yieldToMain();
+        return snap.raw;
+      }
+    }
+
+    setFieldPackStatus("Авторизация…", "busy");
+    await yieldToMain();
+    if (!(await ensureBleTokenForField())) return null;
+
+    setFieldPackStatus("Загрузка списка API…", "busy");
+    await yieldToMain();
+    const live = await fetchBleListLive(cid);
+    if (live?.length) {
+      await yieldToMain();
+      return live;
+    }
+
+    setFieldPackStatus("Резервный кэш меток…", "busy");
+    await yieldToMain();
+    const off = await fetchBleListOffline(cid);
+    return off?.data?.length ? off.data : null;
   }
 
   async function appendFieldPackPhotosBatch(entries) {
@@ -1855,7 +1971,7 @@
   }
 
   function collectPhotoUrlsFromRaw(raw, opts = {}) {
-    const tagOnly = opts.tagOnly ?? isCoarseMobile();
+    const tagOnly = opts.tagOnly ?? false;
     const urls = new Set();
     if (!Array.isArray(raw)) return [];
     for (const p of raw) {
@@ -1943,9 +2059,19 @@
         : token
           ? { Authorization: `Bearer ${token}` }
           : {};
-    const res = await fetch(fetchUrl, { headers });
-    if (!res.ok) throw new Error(`photo_http_${res.status}`);
-    return res.blob();
+    const ctrl = new AbortController();
+    const timeoutMs = isCoarseMobile() ? 45000 : 70000;
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    if (fieldPackAbort?.signal) {
+      fieldPackAbort.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+    }
+    try {
+      const res = await fetch(fetchUrl, { headers, signal: ctrl.signal });
+      if (!res.ok) throw new Error(`photo_http_${res.status}`);
+      return res.blob();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function setFieldPackStatus(text, kind = "") {
@@ -1965,7 +2091,7 @@
   async function refreshFieldPackChrome() {
     const meta = await loadFieldPackMeta();
     const btn = document.getElementById("mapFieldPackBtn");
-    if (!meta?.raw?.length) {
+    if (!meta?.markerCount && !meta?.raw?.length) {
       setFieldPackStatus("");
       if (btn) {
         btn.title =
@@ -1989,7 +2115,7 @@
         : `${meta.photoCount || 0} фото`;
     const modeHint = meta.tagOnly ? " · 1 фото/метка" : "";
     setFieldPackStatus(
-      `Пакет для поля: ${meta.markerCount || meta.raw.length} меток, ${photos}${modeHint}${mb}${when ? ` · ${when}` : ""}`,
+      `Пакет для поля: ${meta.markerCount || meta.raw?.length || 0} меток, ${photos}${modeHint}${mb}${when ? ` · ${when}` : ""}`,
       "ready"
     );
     if (btn) {
@@ -2004,28 +2130,22 @@
     fieldPackAbort = new AbortController();
     if (btn) btn.disabled = true;
     setFieldPackCancelVisible(true);
-    setFieldPackStatus("Подготовка списка меток…", "busy");
+    setFieldPackStatus("Подготовка…", "busy");
     try {
       if (!navigator.onLine) {
         alert("Нужен интернет, чтобы скачать пакет. Подключитесь к Wi‑Fi или VPN и повторите.");
         return;
       }
-      const hasToken = await ensureBleTokenForField();
-      if (!hasToken) {
-        alert(
-          "Не удалось авторизоваться в API меток. Проверьте VPN или сеть и повторите."
-        );
-        return;
-      }
       const cid = bleCompanyId || (await resolveCompanyId());
-      bleListSnapshot = null;
-      const raw = await fetchBleListLive(cid);
+      await yieldToMain();
+      const raw = await resolveRawForFieldPackDownload(cid);
       if (!raw?.length) {
         alert(
-          "Не удалось загрузить метки с API (нужен интернет и доступ к API, часто VPN). Пакет не сохранён."
+          "Не удалось получить список меток. Откройте карту по Wi‑Fi/VPN, дождитесь загрузки меток и повторите."
         );
         return;
       }
+      await yieldToMain();
       const photoUrls = collectPhotoUrlsFromRaw(raw, { tagOnly: false });
       if (!photoUrls.length) {
         alert(
@@ -2053,8 +2173,9 @@
         return flushChain;
       };
       revokeFieldPhotoBlobUrls();
-      await clearFieldPackPhotosDb();
+      await resetFieldPackStorage();
       setFieldPackStatus(`Скачивание: 0 / ${total} · 0 МБ`, "busy");
+      await yieldToMain();
       const queue = [...photoUrls];
       const workers = Array.from({ length: fieldPackConcurrency() }, async () => {
         while (queue.length) {
@@ -2094,32 +2215,34 @@
       });
       await Promise.all(workers);
       if (fieldPackAbort?.signal.aborted) {
-        await clearFieldPackPhotosDb();
+        await resetFieldPackStorage();
         setFieldPackStatus("Скачивание отменено", "busy");
         return;
       }
       await flushPendingBatch();
       await flushChain;
+      const slimRaw = slimBleRawForFieldPack(raw);
       const meta = {
-        version: 1,
+        version: BLE_FIELD_PACK_VERSION,
         companyId: cid,
         savedAt: new Date().toISOString(),
-        markerCount: raw.length,
+        markerCount: slimRaw.length,
         photoCount: photoUrls.length,
         photosOk,
         photosFail,
         bytesTotal,
         tagOnly: false,
-        raw,
       };
       if (photosOk < 1) {
-        await clearFieldPackPhotosDb();
+        await resetFieldPackStorage();
         alert(
           `Не удалось скачать ни одного фото (${photosFail} ошибок). Пакет не сохранён — проверьте VPN и повторите.`
         );
         return;
       }
       setFieldPackStatus("Запись пакета…", "busy");
+      await yieldToMain();
+      await commitFieldPackMarkers(slimRaw);
       await yieldToMain();
       await commitFieldPackMeta(meta);
       setBleMapData(mergeBleMapDataFromRaw(raw));
@@ -2151,15 +2274,17 @@
 
   async function tryLoadFieldPack(companyId) {
     const meta = await loadFieldPackMeta();
-    if (!meta?.raw?.length) return false;
+    if (!meta?.markerCount && !meta?.raw?.length) return false;
     if (companyId && meta.companyId && Number(meta.companyId) !== Number(companyId)) {
       return false;
     }
     setFieldPackStatus("Загрузка пакета для поля…", "busy");
     await yieldToMain();
+    const raw = await loadFieldPackMarkers();
+    if (!raw?.length) return false;
     if (!bleMap) initBleMap([53.038, 39.011], 15);
     bleCompanyId = meta.companyId || companyId;
-    await applyBleListToMap(meta.raw, "");
+    await applyBleListToMap(raw, "");
     try {
       sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
     } catch {
