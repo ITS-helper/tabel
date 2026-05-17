@@ -24,14 +24,15 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518m";
+  const BLE_MAP_BUILD = "20260519a";
   const BLE_DOT_PX = 20;
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
   const BLE_FIELD_PHOTOS_STORE = "photos";
   const BLE_FIELD_PACK_KEY = "pack";
   const BLE_FIELD_MARKERS_KEY = "markers";
-  const BLE_FIELD_PACK_VERSION = 2;
+  const BLE_FIELD_PACK_VERSION = 3;
+  const BLE_FIELD_PACK_META_URL = "data/ble-field-pack-meta.json";
   const BLE_FIELD_PHOTO_MAX_BYTES = 2.5 * 1024 * 1024;
   const BLE_FIELD_PHOTO_BATCH = 8;
   const BLE_FIELD_YIELD_EVERY = 1;
@@ -83,6 +84,277 @@
 
   function abortFieldPackDownload() {
     if (fieldPackAbort) fieldPackAbort.abort();
+  }
+
+  function getFflate() {
+    return typeof globalThis.fflate !== "undefined" ? globalThis.fflate : null;
+  }
+
+  function unzipFieldPackAsync(buf) {
+    const ff = getFflate();
+    if (!ff?.unzip) return Promise.reject(new Error("fflate_missing"));
+    return new Promise((resolve, reject) => {
+      ff.unzip(buf, (err, data) => (err ? reject(err) : resolve(data)));
+    });
+  }
+
+  let hostedFieldPackMetaCache = null;
+
+  async function fetchHostedFieldPackMeta() {
+    if (hostedFieldPackMetaCache) return hostedFieldPackMetaCache;
+    try {
+      const res = await fetch(BLE_FIELD_PACK_META_URL, { cache: "no-store" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data?.packUrl || !data?.photosOk) return null;
+      hostedFieldPackMetaCache = data;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function openFieldPackFilePicker() {
+    const input = document.getElementById("mapFieldPackFile");
+    if (!input) {
+      alert("Выбор файла недоступен в этой версии страницы.");
+      return;
+    }
+    input.value = "";
+    input.click();
+  }
+
+  async function importFieldPackZipBlob(blob, opts = {}) {
+    if (fieldPackDownloadActive) return;
+    const ff = getFflate();
+    if (!ff) {
+      alert("Не загружена библиотека распаковки. Обновите страницу (Ctrl+F5).");
+      return;
+    }
+    fieldPackDownloadActive = true;
+    fieldPackAbort = new AbortController();
+    const btn = document.getElementById("mapFieldPackBtn");
+    if (btn) btn.disabled = true;
+    setFieldPackCancelVisible(true);
+    setFieldPackStatus("Чтение архива…", "busy");
+    try {
+      await yieldToMain();
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      if (fieldPackAbort?.signal.aborted) return;
+      setFieldPackStatus("Распаковка…", "busy");
+      await yieldToMain();
+      const files = await unzipFieldPackAsync(buf);
+      const metaU8 = files["meta.json"];
+      const markersU8 = files["markers.json"];
+      if (!metaU8 || !markersU8) throw new Error("invalid_zip");
+      const packMeta = JSON.parse(ff.strFromU8(metaU8));
+      if (packMeta.format !== "ww-ble-field-zip" || !packMeta.photoIndex) {
+        throw new Error("unsupported_pack");
+      }
+      const slimRaw = JSON.parse(ff.strFromU8(markersU8));
+      if (!Array.isArray(slimRaw) || !slimRaw.length) throw new Error("empty_markers");
+
+      const photoEntries = Object.entries(packMeta.photoIndex);
+      const total = photoEntries.length;
+      let written = 0;
+      let bytesTotal = 0;
+
+      revokeFieldPhotoBlobUrls();
+      await resetFieldPackStorage();
+      setFieldPackStatus(`Запись фото: 0 / ${total}`, "busy");
+      await yieldToMain();
+
+      const batch = [];
+      for (const [url, zipPath] of photoEntries) {
+        if (fieldPackAbort?.signal.aborted) break;
+        const u8 = files[zipPath];
+        if (!u8?.length) continue;
+        const ab = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+        batch.push([url, new Blob([ab], { type: "image/jpeg" })]);
+        bytesTotal += u8.length;
+        if (batch.length >= BLE_FIELD_PHOTO_BATCH) {
+          const chunk = batch.splice(0, batch.length);
+          await appendFieldPackPhotosBatch(chunk);
+          written += chunk.length;
+          setFieldPackStatus(`Запись фото: ${Math.min(written, total)} / ${total}`, "busy");
+          await yieldToMain();
+        }
+      }
+      if (batch.length) await appendFieldPackPhotosBatch(batch);
+      if (fieldPackAbort?.signal.aborted) {
+        await resetFieldPackStorage();
+        setFieldPackStatus("Импорт отменён", "busy");
+        return;
+      }
+
+      const idbMeta = {
+        version: BLE_FIELD_PACK_VERSION,
+        companyId: packMeta.companyId,
+        savedAt: packMeta.savedAt || new Date().toISOString(),
+        markerCount: slimRaw.length,
+        photoCount: total,
+        photosOk: packMeta.photosOk ?? total,
+        photosFail: packMeta.photosFail ?? 0,
+        bytesTotal: packMeta.bytesTotal ?? bytesTotal,
+        tagOnly: !!packMeta.tagOnly,
+        packSource: opts.source || "zip",
+      };
+      setFieldPackStatus("Запись меток…", "busy");
+      await yieldToMain();
+      await commitFieldPackMarkers(slimRaw);
+      await commitFieldPackMeta(idbMeta);
+      if (!bleMap) initBleMap([53.038, 39.011], 15);
+      bleCompanyId = packMeta.companyId || bleCompanyId;
+      await applyBleListToMap(slimRaw, "");
+      try {
+        sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      setRetryVisible(!navigator.onLine);
+      await refreshFieldPackChrome();
+      alert(
+        `Пакет загружен.\n\nМеток: ${slimRaw.length}\nФото: ${idbMeta.photosOk}` +
+          (idbMeta.photosFail ? ` (${idbMeta.photosFail} не попали в архив)` : "") +
+          `\n\nВ поле откройте карту без связи — метки и фото будут из пакета.`
+      );
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (msg.includes("QuotaExceeded") || msg.includes("quota")) {
+        alert("Недостаточно места в браузере. Удалите старые данные сайта или используйте пакет только с фото меток (npm run ble-field-pack).");
+      } else {
+        alert(`Не удалось загрузить пакет: ${msg.slice(0, 180)}`);
+      }
+      setFieldPackStatus("");
+    } finally {
+      fieldPackDownloadActive = false;
+      fieldPackAbort = null;
+      setFieldPackCancelVisible(false);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function downloadHostedFieldPack() {
+    const hosted = await fetchHostedFieldPackMeta();
+    if (!hosted?.packUrl) {
+      alert(
+        "Готовый пакет на сайте ещё не выложен.\n\nНа компьютере с VPN: npm run ble-field-pack\nЗатем перекиньте data/ble-field-pack.zip на телефон → «Загрузить файл»."
+      );
+      return;
+    }
+    if (!navigator.onLine) {
+      alert("Нужен интернет, чтобы скачать пакет с сайта.");
+      return;
+    }
+    const mb = hosted.bytesTotal
+      ? (hosted.bytesTotal / (1024 * 1024)).toFixed(0)
+      : "?";
+    if (
+      !confirm(
+        `Скачать готовый пакет (~${mb} МБ)?\n\nОдин файл — надёжнее для телефона, чем сотни загрузок в браузере.\n\nНе сворачивайте вкладку до конца.`
+      )
+    ) {
+      return;
+    }
+    fieldPackDownloadActive = true;
+    fieldPackAbort = new AbortController();
+    const btn = document.getElementById("mapFieldPackBtn");
+    if (btn) btn.disabled = true;
+    setFieldPackCancelVisible(true);
+    try {
+      setFieldPackStatus("Скачивание пакета…", "busy");
+      const res = await fetch(hosted.packUrl, {
+        cache: "no-store",
+        signal: fieldPackAbort?.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const total = Number(res.headers.get("Content-Length")) || 0;
+      const reader = res.body?.getReader();
+      if (!reader) {
+        await importFieldPackZipBlob(await res.blob(), { source: "hosted" });
+        return;
+      }
+      const chunks = [];
+      let got = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (fieldPackAbort?.signal.aborted) throw new Error("aborted");
+        chunks.push(value);
+        got += value.length;
+        if (total > 0) {
+          setFieldPackStatus(
+            `Скачивание: ${((got / total) * 100).toFixed(0)}% · ${formatFieldPackMb(got)}`,
+            "busy"
+          );
+        } else if (got % (512 * 1024) < value.length) {
+          setFieldPackStatus(`Скачивание: ${formatFieldPackMb(got)}`, "busy");
+        }
+        await yieldToMain();
+      }
+      const blob = new Blob(chunks, { type: "application/zip" });
+      fieldPackDownloadActive = false;
+      fieldPackAbort = null;
+      setFieldPackCancelVisible(false);
+      if (btn) btn.disabled = false;
+      await importFieldPackZipBlob(blob, { source: "hosted" });
+    } catch (e) {
+      if (String(e?.message || e) === "aborted") {
+        setFieldPackStatus("Скачивание отменено", "busy");
+      } else {
+        alert(`Не удалось скачать пакет: ${String(e?.message || e).slice(0, 160)}`);
+        setFieldPackStatus("");
+      }
+      fieldPackDownloadActive = false;
+      fieldPackAbort = null;
+      setFieldPackCancelVisible(false);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function onFieldPackPrimaryClick() {
+    if (fieldPackDownloadActive) return;
+    const hosted = await fetchHostedFieldPackMeta();
+
+    if (isCoarseMobile()) {
+      if (hosted && navigator.onLine) {
+        const mb = (hosted.bytesTotal / (1024 * 1024)).toFixed(0);
+        const ok = confirm(
+          `Скачать готовый пакет с сайта (~${mb} МБ)?\n\nРекомендуется для телефона: один файл вместо сотен загрузок.\n\nОК — скачать\nОтмена — другие способы`
+        );
+        if (ok) {
+          void downloadHostedFieldPack();
+          return;
+        }
+      }
+      const pickFile = confirm(
+        "Загрузить .zip с телефона?\n\nСоберите пакет на ПК (npm run ble-field-pack), перекиньте файл (AirDrop, USB, Telegram).\n\nОК — выбрать файл\nОтмена — медленная загрузка в браузере"
+      );
+      if (pickFile) {
+        openFieldPackFilePicker();
+        return;
+      }
+      if (
+        confirm(
+          "Скачивание в браузере на телефоне часто обрывается.\n\nВсё равно попробовать?"
+        )
+      ) {
+        void downloadFieldPack();
+      }
+      return;
+    }
+
+    if (hosted && navigator.onLine) {
+      const mb = (hosted.bytesTotal / (1024 * 1024)).toFixed(0);
+      const ok = confirm(
+        `Скачать готовый пакет с сайта (~${mb} МБ)?\n\nОК — один файл с сайта\nОтмена — собрать пакет в браузере (как раньше)`
+      );
+      if (ok) {
+        void downloadHostedFieldPack();
+        return;
+      }
+    }
+    void downloadFieldPack();
   }
   let bleClusterGroup = null;
 
@@ -1810,7 +2082,7 @@
       const meta = await idbGet(tx.objectStore(BLE_FIELD_META_STORE), BLE_FIELD_PACK_KEY);
       db.close();
       fieldPackMetaCache =
-        meta && (meta.version === 1 || meta.version === BLE_FIELD_PACK_VERSION) ? meta : null;
+        meta && meta.version >= 1 && meta.version <= BLE_FIELD_PACK_VERSION ? meta : null;
       return fieldPackMetaCache;
     } catch (e) {
       console.warn("[ble-map] field pack meta", e?.message || e);
@@ -3452,7 +3724,11 @@
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
-    document.getElementById("mapFieldPackBtn")?.addEventListener("click", () => void downloadFieldPack());
+    document.getElementById("mapFieldPackBtn")?.addEventListener("click", () => void onFieldPackPrimaryClick());
+    document.getElementById("mapFieldPackFile")?.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (file) void importFieldPackZipBlob(file, { source: "file" });
+    });
     document.getElementById("mapFieldPackCancel")?.addEventListener("click", () => {
       abortFieldPackDownload();
     });

@@ -8,6 +8,7 @@ google_sheet_raw.csv
 _workarounds_src/
 
 node_modules/
+data/ble-field-pack.zip
 scripts/auth-credentials.txt
 scripts/auth-users-seed.sql
 

@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260518m" />
+  <link rel="stylesheet" href="ble-map.css?v=20260519a" />
 </head>
 <body>
   <header class="ble-map-page-header" id="bleMapPageHeader">
@@ -78,14 +78,21 @@
                 <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
               </div>
             </div>
+            <input
+              type="file"
+              id="mapFieldPackFile"
+              accept=".zip,application/zip"
+              hidden
+              aria-hidden="true"
+            />
             <button
               type="button"
               class="map-field-pack-btn"
               id="mapFieldPackBtn"
-              title="Скачать фото меток для работы без интернета"
+              title="Офлайн-пакет: скачать с сайта, загрузить .zip или собрать в браузере"
             >
-              <span class="map-toolbar-text map-toolbar-text--long">Скачать фото</span>
-              <span class="map-toolbar-text map-toolbar-text--short">Фото</span>
+              <span class="map-toolbar-text map-toolbar-text--long">Офлайн-пакет</span>
+              <span class="map-toolbar-text map-toolbar-text--short">Пакет</span>
             </button>
             </div>
           </div>
@@ -147,7 +154,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="ble-map.js?v=20260518m"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260518m"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
+  <script src="ble-map.js?v=20260519a"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260519a"></script>
 </body>
 </html>

@@ -5,6 +5,8 @@
   "scripts": {
     "ingest-xlsx": "node scripts/ingest-xlsx.mjs",
     "ble-cache": "node scripts/push-ble-cache.mjs",
+    "ble-field-pack": "node scripts/build-ble-field-pack.mjs",
+    "ble-field-pack:full": "node scripts/build-ble-field-pack.mjs --full",
     "seed-auth": "node scripts/seed-auth-users.mjs",
     "supabase": "supabase",
     "supabase:login": "supabase login",
@@ -17,6 +19,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "fflate": "^0.8.2",
     "supabase": "^2.98.2"
   }
 }

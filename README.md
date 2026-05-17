@@ -137,7 +137,14 @@
 
 **Без VPN карта берёт метки из файла** [`data/ble-map-cache.json`](data/ble-map-cache.json) на GitHub Pages (публикуется вместе с сайтом). Сначала грузится он (~1,4 МБ), затем в фоне — попытка обновить с API.
 
-**Обновить кэш** (нужен VPN на машине администратора): двойной щелчок [`ble-cache-push.bat`](ble-cache-push.bat) или `npm run ble-cache`. Чтобы дублировать кэш в Supabase (таблица `ble_map_cache`, сейчас может быть пустой):
+**Офлайн-пакет с фото для телефона** (рекомендуется вместо «Скачать в браузере» на телефоне):
+
+1. На ПК с VPN: `npm install` → `npm run ble-field-pack` (только фото метки, меньше размер) или `npm run ble-field-pack:full` (метка + место).
+2. Появятся `data/ble-field-pack.zip` (в git не коммитится, >100 МБ) и `data/ble-field-pack-meta.json` (укажите `packUrl`, закоммитьте meta).
+3. Выложите zip на GitHub Pages рядом с сайтом или в Supabase Storage и пропишите URL в meta.
+4. На телефоне в карте: **«Офлайн-пакет»** → скачать с сайта **или** «Загрузить .zip» (AirDrop/USB с ПК).
+
+**Обновить кэш меток** (нужен VPN на машине администратора): двойной щелчок [`ble-cache-push.bat`](ble-cache-push.bat) или `npm run ble-cache`. Чтобы дублировать кэш в Supabase (таблица `ble_map_cache`, сейчас может быть пустой):
 
 ```bat
 set SUPABASE_SERVICE_ROLE_KEY=ваш_service_role
