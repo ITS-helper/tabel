@@ -24,7 +24,10 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517x";
+  const BLE_MAP_BUILD = "20260517y";
+  const BLE_ZONE_TIFFANY = "#0abab5";
+  const BLE_ZONE_TIFFANY_LIGHT = "#4dd0c8";
+  const BLE_ZONE_SMALL_MAX_PTS = 12;
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
   const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
 
@@ -1099,6 +1102,7 @@
       });
       const layer = L.polygon(pts, {
         color: zoneStyle.color,
+        fillColor: zoneStyle.fillColor,
         opacity: zoneStyle.opacity,
         fillOpacity: zoneStyle.fillOpacity,
         weight: zoneStyle.weight,
@@ -1132,41 +1136,81 @@
   }
 
   function isMarkerClusterZone(z, ptCount) {
-    return ptCount > 12;
+    return ptCount > BLE_ZONE_SMALL_MAX_PTS;
+  }
+
+  function isSmallZonePolygon(z, ptCount) {
+    return ptCount >= 3 && ptCount <= BLE_ZONE_SMALL_MAX_PTS && !isMainSitePolygonZone(z);
   }
 
   function getZonePolygonStyle(z, ctx) {
-    const strokeColor = z.color || "#0088cc";
-    const outlineOnly = isMainSitePolygonZone(z) || isMarkerClusterZone(z, ctx.ptCount);
-    if (outlineOnly) {
+    const onPhoto = ctx.layerMode === "hybrid" || ctx.layerMode === "satellite";
+    const strokeTiffany = onPhoto ? BLE_ZONE_TIFFANY : z.color || BLE_ZONE_TIFFANY;
+    const fillTiffany = onPhoto ? BLE_ZONE_TIFFANY_LIGHT : z.color || BLE_ZONE_TIFFANY_LIGHT;
+    const strokeSelected = "#ffffff";
+
+    if (isMainSitePolygonZone(z) || isMarkerClusterZone(z, ctx.ptCount)) {
       return {
-        color: ctx.isSelected && ctx.layerMode === "hybrid" ? "#ffffff" : strokeColor,
-        opacity: ctx.dimmed ? 0.2 : ctx.layerMode === "hybrid" ? 0.95 : 0.55,
+        color: ctx.isSelected ? strokeSelected : strokeTiffany,
+        fillColor: fillTiffany,
+        opacity: ctx.dimmed ? 0.25 : 0.9,
         fillOpacity: 0,
-        weight: ctx.isSelected ? 3.5 : ctx.layerMode === "hybrid" ? 2.5 : 1.75,
+        weight: ctx.isSelected ? 3.5 : 2.25,
       };
     }
+
+    if (isSmallZonePolygon(z, ctx.ptCount)) {
+      const fill =
+        ctx.layerMode === "hybrid"
+          ? ctx.dimmed
+            ? 0.08
+            : ctx.forEdit
+              ? 0.34
+              : 0.28
+          : ctx.layerMode === "satellite"
+            ? ctx.dimmed
+              ? 0.06
+              : ctx.forEdit
+                ? 0.26
+                : 0.22
+            : ctx.dimmed
+              ? 0.06
+              : ctx.forEdit
+                ? 0.24
+                : 0.18;
+      return {
+        color: ctx.isSelected ? strokeSelected : strokeTiffany,
+        fillColor: fillTiffany,
+        opacity: ctx.dimmed ? 0.35 : 0.92,
+        fillOpacity: fill,
+        weight: ctx.isSelected ? 3.5 : 2.5,
+      };
+    }
+
     if (ctx.layerMode === "hybrid") {
       return {
-        color: ctx.isSelected ? "#ffffff" : strokeColor,
-        opacity: ctx.dimmed ? 0.25 : 0.92,
-        fillOpacity: ctx.dimmed ? 0 : ctx.forEdit ? 0.05 : 0.02,
-        weight: ctx.isSelected ? 4 : ctx.dimmed ? 1 : 2.75,
+        color: ctx.isSelected ? strokeSelected : strokeTiffany,
+        fillColor: fillTiffany,
+        opacity: ctx.dimmed ? 0.3 : 0.88,
+        fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.12 : 0.08,
+        weight: ctx.isSelected ? 3.5 : 2.25,
       };
     }
     if (ctx.layerMode === "satellite") {
       return {
-        color: strokeColor,
-        opacity: ctx.dimmed ? 0.12 : 0.4,
-        fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.18 : 0.12,
-        weight: ctx.isSelected ? 3 : ctx.dimmed ? 1 : 1.5,
+        color: ctx.isSelected ? strokeSelected : strokeTiffany,
+        fillColor: fillTiffany,
+        opacity: ctx.dimmed ? 0.25 : 0.85,
+        fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.16 : 0.1,
+        weight: ctx.isSelected ? 3 : 2,
       };
     }
     return {
-      color: strokeColor,
-      opacity: ctx.dimmed ? 0.12 : 0.35,
-      fillOpacity: ctx.dimmed ? 0.04 : ctx.forEdit ? 0.22 : 0.15,
-      weight: ctx.isSelected ? 3 : ctx.dimmed ? 1 : 1.5,
+      color: ctx.isSelected ? strokeSelected : strokeTiffany,
+      fillColor: z.color || BLE_ZONE_TIFFANY_LIGHT,
+      opacity: ctx.dimmed ? 0.2 : 0.75,
+      fillOpacity: ctx.dimmed ? 0.05 : ctx.forEdit ? 0.2 : 0.14,
+      weight: ctx.isSelected ? 3 : 1.75,
     };
   }
 
