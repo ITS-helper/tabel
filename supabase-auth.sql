@@ -141,7 +141,7 @@ begin
     set
       failed_attempts = failed_attempts + 1,
       locked_until = case
-        when failed_attempts + 1 >= 8 then now() + interval '30 minutes'
+        when failed_attempts + 1 >= 20 then now() + interval '30 minutes'
         else locked_until
       end
     where login = v_login;
