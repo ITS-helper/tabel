@@ -24,9 +24,11 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518c";
+  const BLE_MAP_BUILD = "20260518d";
   const BLE_DEFAULT_CENTER_BLE = "20";
-  const BLE_DEFAULT_CENTER_ZOOM = 17;
+  const BLE_DEFAULT_CENTER_ZOOM = 18;
+  const BLE_DEFAULT_CENTER_RETRY_MS = 220;
+  const BLE_DEFAULT_CENTER_MAX_ATTEMPTS = 18;
   const BLE_ZONE_NEON = "#00e5ff";
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
@@ -43,6 +45,8 @@
   let bleMapRouteFilter = "";
   let bleRoutes = [];
   let bleMapInitialized = false;
+  let bleDefaultCenterSeq = 0;
+  let bleDefaultCenterLocked = false;
   let bleZoneData = [];
   let bleClusterGroup = null;
 
@@ -169,8 +173,78 @@
     const pt = findBlePointByNumber(BLE_DEFAULT_CENTER_BLE);
     if (!pt?.lat || !pt.lng) return false;
     const zoom = opts.zoom ?? BLE_DEFAULT_CENTER_ZOOM;
-    targetMap.setView([pt.lat, pt.lng], zoom, { animate: opts.animate === true });
+    const latlng = L.latLng(pt.lat, pt.lng);
+    try {
+      targetMap.invalidateSize(true);
+    } catch {
+      /* ignore */
+    }
+    targetMap.setView(latlng, zoom, { animate: opts.animate === true });
+    try {
+      targetMap.panTo(latlng, { animate: false, noMoveStart: true });
+    } catch {
+      /* ignore */
+    }
     return true;
+  }
+
+  function focusDefaultBleOnMap(targetMap = bleMap) {
+    const pt = findBlePointByNumber(BLE_DEFAULT_CENTER_BLE);
+    if (!pt?.lat || !pt.lng) return false;
+    const cluster = targetMap === bleMapFS ? bleClusterGroupFS : bleClusterGroup;
+    const marker = bleMarkerRegistry.get(pt.id)?.marker;
+    if (marker && cluster?.zoomToShowLayer) {
+      cluster.zoomToShowLayer(marker, () => {
+        centerMapOnDefaultBle(targetMap, { animate: false });
+      });
+      return true;
+    }
+    return centerMapOnDefaultBle(targetMap, { animate: false });
+  }
+
+  function scheduleDefaultMapCenter(opts = {}) {
+    const force = !!opts.force;
+    const fromLive = !!opts.fromLive;
+    if (bleDefaultCenterLocked && !force) return;
+    const seq = ++bleDefaultCenterSeq;
+    let attempt = 0;
+
+    const run = () => {
+      if (seq !== bleDefaultCenterSeq) return;
+      if (!bleMap) {
+        if (attempt++ < BLE_DEFAULT_CENTER_MAX_ATTEMPTS) {
+          setTimeout(run, BLE_DEFAULT_CENTER_RETRY_MS);
+        }
+        return;
+      }
+      if (!findBlePointByNumber(BLE_DEFAULT_CENTER_BLE)) {
+        if (attempt++ < BLE_DEFAULT_CENTER_MAX_ATTEMPTS) {
+          setTimeout(run, BLE_DEFAULT_CENTER_RETRY_MS);
+        }
+        return;
+      }
+      const ok = focusDefaultBleOnMap(bleMap);
+      if (!ok) {
+        if (attempt++ < BLE_DEFAULT_CENTER_MAX_ATTEMPTS) {
+          setTimeout(run, BLE_DEFAULT_CENTER_RETRY_MS);
+        }
+        return;
+      }
+      if (fromLive || force) bleDefaultCenterLocked = true;
+      setTimeout(() => {
+        if (!bleMap || seq !== bleDefaultCenterSeq) return;
+        try {
+          bleMap.invalidateSize(true);
+        } catch {
+          /* ignore */
+        }
+        centerMapOnDefaultBle(bleMap, { animate: false });
+      }, 320);
+    };
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
   }
 
   function setBleMapData(next) {
@@ -2391,6 +2465,7 @@
       }
       setRetryVisible(false);
       hideMapMsg();
+      scheduleDefaultMapCenter({ force: true, fromLive: true });
     } catch (e) {
       console.warn("[ble-map] API refresh failed", e?.message || e);
     }
@@ -2428,7 +2503,8 @@
       }
     }
     const validPts = bleMapData.filter((p) => p.lat && p.lng);
-    if (!centerMapOnDefaultBle(bleMap, { animate: false }) && validPts.length > 1) {
+    scheduleDefaultMapCenter({ force: !!opts.liveApi, fromLive: !!opts.liveApi });
+    if (!findBlePointByNumber(BLE_DEFAULT_CENTER_BLE) && validPts.length > 1) {
       bleMap.fitBounds(L.latLngBounds(validPts.map((p) => [p.lat, p.lng])), {
         padding: [30, 30],
       });
@@ -2456,6 +2532,8 @@
   }
 
   async function loadBleMap() {
+    bleDefaultCenterLocked = false;
+    bleDefaultCenterSeq++;
     const placeholder = document.getElementById("mapPlaceholder");
     if (placeholder) placeholder.textContent = "Загрузка карты…";
     try {
@@ -2493,7 +2571,6 @@
         const cfg = await bleApiFetch("/api/v1/map/config");
         if (cfg.defaultView?.latitude) center = [cfg.defaultView.latitude, cfg.defaultView.longitude];
         if (cfg.defaultZoom) zoom = cfg.defaultZoom;
-        if (bleMap) bleMap.setView(center, zoom);
       } catch {
         /* default center */
       }
@@ -2748,7 +2825,10 @@
     applyMapLayoutClasses();
     bindMapResizeHandlers();
     window.addEventListener("message", (e) => {
-      if (e.data?.type === "ww-ble-map-resize") scheduleMapResize();
+      if (e.data?.type === "ww-ble-map-resize") {
+        scheduleMapResize();
+        scheduleDefaultMapCenter({ force: true });
+      }
     });
     try {
       if (window.self !== window.top && window.parent) {
