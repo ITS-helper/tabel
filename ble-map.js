@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517k";
+  const BLE_MAP_BUILD = "20260517l";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -107,7 +107,7 @@
 
   function resolvePhotoUrl(rawPoint, keys, prevUrl) {
     const fromApi = pickFirstUrl(rawPoint, keys);
-    if (fromApi) return fromApi;
+    if (fromApi && !isPhotoUrlExpired(fromApi)) return fromApi;
     if (prevUrl && !isPhotoUrlExpired(prevUrl)) return prevUrl;
     return "";
   }
@@ -1123,12 +1123,76 @@
     return urls.some(isPhotoUrlExpired);
   }
 
+  function isYandexPhotoUrl(url) {
+    try {
+      return new URL(String(url)).hostname.toLowerCase().includes("storage.yandexcloud.net");
+    } catch {
+      return false;
+    }
+  }
+
+  function toBlePhotoProxyUrl(url) {
+    if (!url || !isYandexPhotoUrl(url)) return url;
+    return (
+      BLE_SUPABASE_BASE +
+      "?path=" +
+      encodeURIComponent("/ble-image") +
+      "&url=" +
+      encodeURIComponent(url)
+    );
+  }
+
+  function isOfflineFirstMode() {
+    try {
+      return sessionStorage.getItem(BLE_OFFLINE_FIRST_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function photoSrcForDisplay(url) {
+    if (!url) return "";
+    if (isOfflineFirstMode() && isYandexPhotoUrl(url)) return toBlePhotoProxyUrl(url);
+    return url;
+  }
+
+  async function fetchBleListForPhotos(companyId) {
+    const cid = companyId ?? bleCompanyId;
+    if (!cid) return null;
+    try {
+      const rawBle = await bleApiFetch(`/api/v1/map/ble/${cid}`);
+      if (Array.isArray(rawBle) && rawBle.length) {
+        bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: cid, live: true };
+        return rawBle;
+      }
+    } catch (e) {
+      console.warn("[ble-map] photo list API", e?.message || e);
+    }
+    try {
+      const cached = await fetchBleListCached(cid);
+      if (cached?.data?.length) {
+        bleListSnapshot = {
+          at: Date.now(),
+          raw: cached.data,
+          companyId: cid,
+          live: false,
+        };
+        return cached.data;
+      }
+    } catch (e) {
+      console.warn("[ble-map] photo list Supabase cache", e?.message || e);
+    }
+    const offline = await fetchBleListOffline(cid);
+    return offline?.data?.length ? offline.data : null;
+  }
+
   async function refreshBleListSnapshot(companyId, opts = {}) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return null;
     if (!opts.forceFresh) {
       const snap = bleListSnapshot;
       if (
+        snap?.live &&
         snap?.raw?.length &&
         snap.companyId === cid &&
         Date.now() - snap.at < BLE_LIST_SNAPSHOT_MS
@@ -1136,15 +1200,7 @@
         return snap.raw;
       }
     }
-    try {
-      rememberTransport("worker");
-    } catch {
-      /* ignore */
-    }
-    const rawBle = await bleApiFetch(`/api/v1/map/ble/${cid}`);
-    if (!Array.isArray(rawBle)) return null;
-    bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: cid };
-    return rawBle;
+    return fetchBleListForPhotos(cid);
   }
 
   function findRawBlePoint(raw, pt) {
@@ -1168,7 +1224,7 @@
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) {
       container.innerHTML =
-        '<p class="ble-popup-loading">Фото недоступно. Нажмите ↺ на карте или включите VPN.</p>';
+        '<p class="ble-popup-loading">Фото недоступно. Нажмите ↺ на карте — подтянутся свежие ссылки.</p>';
       return;
     }
     const wrap = document.createElement("div");
@@ -1182,10 +1238,26 @@
       a.dataset.blePhoto = url;
       const img = document.createElement("img");
       img.className = "ble-popup-photo";
-      img.src = url;
       img.alt = "";
       img.loading = "lazy";
-      img.referrerPolicy = "no-referrer-when-downgrade";
+      img.referrerPolicy = "no-referrer";
+      const direct = url;
+      const proxied = toBlePhotoProxyUrl(url);
+      img.src = photoSrcForDisplay(url);
+      img.addEventListener("error", function onImgErr() {
+        if (this.dataset.blePhotoTried === "both") return;
+        if (this.src === proxied || this.dataset.blePhotoTried === "proxy") {
+          this.dataset.blePhotoTried = "both";
+          if (this.src !== direct) this.src = direct;
+          return;
+        }
+        if (proxied && this.src !== proxied) {
+          this.dataset.blePhotoTried = "proxy";
+          this.src = proxied;
+          return;
+        }
+        this.dataset.blePhotoTried = "both";
+      });
       a.appendChild(img);
       wrap.appendChild(a);
     });
@@ -1232,12 +1304,16 @@
         .getPopup()
         ?.getElement()
         ?.querySelector(".ble-popup-photos-slot");
-      if (!needsPhotoRefresh(current)) {
+      const mustRefresh = needsPhotoRefresh(current);
+      if (!mustRefresh && (current.photoTag || current.photoPlace)) {
         renderPhotosInto(slot, current);
         return;
       }
       if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
-      current = await enrichPointPhotos(current);
+      current = await enrichPointPhotos(current, { forceFresh: mustRefresh });
+      if (!current.photoTag && !current.photoPlace) {
+        current = await enrichPointPhotos(current, { forceFresh: true });
+      }
       renderPhotosInto(slot, current);
     });
   }
@@ -1822,7 +1898,7 @@
     try {
       const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
       if (!Array.isArray(rawBle) || !rawBle.length) return;
-      bleListSnapshot = { at: Date.now(), raw: rawBle, companyId };
+      bleListSnapshot = { at: Date.now(), raw: rawBle, companyId, live: true };
       setBleMapData(mergeBleMapDataFromRaw(rawBle));
       updateMapStats();
       renderBleMarkers();
@@ -1860,10 +1936,10 @@
     }
   }
 
-  async function applyBleListToMap(rawBle, cacheNotice) {
+  async function applyBleListToMap(rawBle, cacheNotice, opts = {}) {
     setBleMapData(mergeBleMapDataFromRaw(rawBle));
-    if (Array.isArray(rawBle) && rawBle.length && bleCompanyId) {
-      bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: bleCompanyId };
+    if (opts.liveApi && Array.isArray(rawBle) && rawBle.length && bleCompanyId) {
+      bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: bleCompanyId, live: true };
     }
     updateMapStats();
     renderBleMarkers();
@@ -1973,7 +2049,7 @@
       } catch {
         /* ignore */
       }
-      await applyBleListToMap(rawBle, "");
+      await applyBleListToMap(rawBle, "", { liveApi: true });
     } catch (e) {
       const companyId = (await fetchBleCacheMeta())?.companyId || BLE_DEFAULT_COMPANY_ID;
       if (await tryLoadOfflineBleList(companyId)) {
@@ -2010,6 +2086,7 @@
       btn.dataset.busy = "1";
     }
     localStorage.removeItem(BLE_TOKEN_KEY);
+    bleListSnapshot = null;
     try {
       sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
     } catch {

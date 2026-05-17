@@ -39,6 +39,15 @@ function buildUpstreamRequestHeaders(req: Request): Headers {
   }
   const ct = req.headers.get("content-type");
   if (ct) h.set("Content-Type", ct);
+  h.set("Accept", req.headers.get("accept") || "application/json,*/*");
+  h.set("Accept-Encoding", "gzip, br");
+  h.set(
+    "User-Agent",
+    req.headers.get("user-agent") ||
+      "Mozilla/5.0 (compatible; WorkWatchBleProxy/1.0; +supabase.edge)"
+  );
+  h.set("Origin", "https://its-helper.github.io");
+  h.set("Referer", "https://its-helper.github.io/");
   return h;
 }
 
@@ -49,6 +58,11 @@ function jsonError(status: number, payload: Record<string, unknown>) {
   });
 }
 
+function isAllowedPhotoHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h.includes("storage.yandexcloud.net") || h.endsWith(".yandexcloud.net");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: cors });
@@ -57,6 +71,33 @@ Deno.serve(async (req) => {
   try {
     const path = apiPathFromRequest(req);
     const url = new URL(req.url);
+
+    if (path === "/ble-image" || path.startsWith("/ble-image/")) {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        return jsonError(405, { error: "method_not_allowed" });
+      }
+      const imgUrl = url.searchParams.get("url");
+      if (!imgUrl) return jsonError(400, { error: "missing_url" });
+      let parsed: URL;
+      try {
+        parsed = new URL(imgUrl);
+      } catch {
+        return jsonError(400, { error: "bad_url" });
+      }
+      if (parsed.protocol !== "https:" || !isAllowedPhotoHost(parsed.hostname)) {
+        return jsonError(403, { error: "host_not_allowed" });
+      }
+      const imgRes = await fetch(imgUrl, { redirect: "follow" });
+      const out = new Headers(cors);
+      const ct = imgRes.headers.get("content-type");
+      out.set("Content-Type", ct && ct.startsWith("image/") ? ct : "image/jpeg");
+      out.set("Cache-Control", "public, max-age=600");
+      return new Response(req.method === "HEAD" ? null : imgRes.body, {
+        status: imgRes.status,
+        headers: out,
+      });
+    }
+
     const target = `${UPSTREAM}${path}${url.search}`;
 
     const body =
@@ -66,14 +107,19 @@ Deno.serve(async (req) => {
       method: req.method,
       headers: buildUpstreamRequestHeaders(req),
       body,
+      redirect: "follow",
     });
 
-    const buf = await upstreamRes.arrayBuffer();
     const out = new Headers(cors);
     const ct = upstreamRes.headers.get("content-type");
     out.set("Content-Type", ct || "application/json");
+    const cc = upstreamRes.headers.get("cache-control");
+    if (cc) out.set("Cache-Control", cc);
 
-    return new Response(buf, { status: upstreamRes.status, headers: out });
+    return new Response(upstreamRes.body, {
+      status: upstreamRes.status,
+      headers: out,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("ble-map-proxy error:", msg, "path:", apiPathFromRequest(req));
