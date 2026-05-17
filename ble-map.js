@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517i";
+  const BLE_MAP_BUILD = "20260517j";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -76,6 +76,30 @@
       const v = obj[k];
       if (v != null && String(v).trim()) return String(v).trim();
     }
+    return "";
+  }
+
+  function isPhotoUrlExpired(url) {
+    if (!url) return true;
+    const dateM = String(url).match(/[?&]X-Amz-Date=([^&]+)/);
+    const expM = String(url).match(/[?&]X-Amz-Expires=(\d+)/);
+    if (!dateM || !expM) return false;
+    const d = dateM[1];
+    const t0 = Date.UTC(
+      +d.slice(0, 4),
+      +d.slice(4, 6) - 1,
+      +d.slice(6, 8),
+      +d.slice(9, 11),
+      +d.slice(11, 13),
+      +d.slice(13, 15)
+    );
+    return Date.now() > t0 + parseInt(expM[1], 10) * 1000;
+  }
+
+  function resolvePhotoUrl(rawPoint, keys, prevUrl) {
+    const fromApi = pickFirstUrl(rawPoint, keys);
+    if (fromApi) return fromApi;
+    if (prevUrl && !isPhotoUrlExpired(prevUrl)) return prevUrl;
     return "";
   }
 
@@ -989,12 +1013,12 @@
       isLowBattery,
       recordDt,
       status,
-      photoTag:
-        pickFirstUrl(point, ["ble_image_url", "bleImageUrl", "ble_image"]) || prev?.photoTag || "",
-      photoPlace:
-        pickFirstUrl(point, ["location_image_url", "locationImageUrl", "location_image"]) ||
-        prev?.photoPlace ||
-        "",
+      photoTag: resolvePhotoUrl(point, ["ble_image_url", "bleImageUrl", "ble_image"], prev?.photoTag),
+      photoPlace: resolvePhotoUrl(
+        point,
+        ["location_image_url", "locationImageUrl", "location_image"],
+        prev?.photoPlace
+      ),
       routeId: point.bleRoute?.id ?? null,
       routeTitle: point.bleRoute?.title || "",
       zoneId: point.ble_zone_id ?? point.ble_zoneId ?? null,
@@ -1024,36 +1048,42 @@
     document.body.style.overflow = "";
   }
 
-  function isPhotoUrlExpired(url) {
-    if (!url) return true;
-    const dateM = String(url).match(/[?&]X-Amz-Date=([^&]+)/);
-    const expM = String(url).match(/[?&]X-Amz-Expires=(\d+)/);
-    if (!dateM || !expM) return false;
-    const d = dateM[1];
-    const t0 = Date.UTC(
-      +d.slice(0, 4),
-      +d.slice(4, 6) - 1,
-      +d.slice(6, 8),
-      +d.slice(9, 11),
-      +d.slice(11, 13),
-      +d.slice(13, 15)
-    );
-    return Date.now() > t0 + parseInt(expM[1], 10) * 1000;
-  }
-
   function needsPhotoRefresh(pt) {
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) return true;
     return urls.some(isPhotoUrlExpired);
   }
 
-  async function refreshBleListSnapshot(companyId) {
+  async function refreshBleListSnapshot(companyId, opts = {}) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return null;
+    if (!opts.forceFresh) {
+      const snap = bleListSnapshot;
+      if (
+        snap?.raw?.length &&
+        snap.companyId === cid &&
+        Date.now() - snap.at < BLE_LIST_SNAPSHOT_MS
+      ) {
+        return snap.raw;
+      }
+    }
+    try {
+      rememberTransport("worker");
+    } catch {
+      /* ignore */
+    }
     const rawBle = await bleApiFetch(`/api/v1/map/ble/${cid}`);
     if (!Array.isArray(rawBle)) return null;
     bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: cid };
     return rawBle;
+  }
+
+  function findRawBlePoint(raw, pt) {
+    if (!raw?.length || !pt) return null;
+    return (
+      raw.find((p) => Number(p.id) === Number(pt.id)) ||
+      raw.find((p) => String(p.ble_number ?? p.bleNumber ?? "") === String(pt.ble))
+    );
   }
 
   function makePopup(pt) {
@@ -1069,12 +1099,7 @@
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) {
       container.innerHTML =
-        '<p class="ble-popup-loading">Фото недоступно. Включите VPN или обновите карту (↺).</p>';
-      return;
-    }
-    if (urls.every(isPhotoUrlExpired)) {
-      container.innerHTML =
-        '<p class="ble-popup-loading">Ссылки на фото устарели. Включите VPN и нажмите ↺ на карте.</p>';
+        '<p class="ble-popup-loading">Фото недоступно. Нажмите ↺ на карте или включите VPN.</p>';
       return;
     }
     const wrap = document.createElement("div");
@@ -1106,35 +1131,23 @@
     return bleMapData.find((p) => p.id === pt.id) || pt;
   }
 
-  async function enrichPointPhotos(pt) {
-    if (!pt?.id) return pt;
-    let offline = false;
+  async function enrichPointPhotos(pt, opts = {}) {
+    if (!pt?.id || !bleCompanyId) return pt;
     try {
-      offline = sessionStorage.getItem(BLE_OFFLINE_FIRST_KEY) === "1";
-    } catch {
-      /* ignore */
+      const raw = await refreshBleListSnapshot(bleCompanyId, {
+        forceFresh: !!opts.forceFresh,
+      });
+      if (!raw) return pt;
+      const found = findRawBlePoint(raw, pt);
+      if (!found) return pt;
+      const enriched = classifyBle(found, pt);
+      const idx = bleMapData.findIndex((p) => p.id === enriched.id);
+      if (idx >= 0) bleMapData[idx] = enriched;
+      return enriched;
+    } catch (e) {
+      console.warn("[ble-map] enrichPointPhotos", e?.message || e);
+      return pt;
     }
-    if (offline) return pt;
-
-    let raw = bleListSnapshot?.raw;
-    const snapStale =
-      !bleListSnapshot ||
-      bleListSnapshot.companyId !== bleCompanyId ||
-      Date.now() - bleListSnapshot.at > BLE_LIST_SNAPSHOT_MS;
-    if (!raw || snapStale) {
-      try {
-        raw = await refreshBleListSnapshot();
-      } catch {
-        return pt;
-      }
-    }
-    if (!raw) return pt;
-    const found = raw.find((p) => Number(p.id) === Number(pt.id));
-    if (!found) return pt;
-    const enriched = classifyBle(found, pt);
-    const idx = bleMapData.findIndex((p) => p.id === enriched.id);
-    if (idx >= 0) bleMapData[idx] = enriched;
-    return enriched;
   }
 
   function attachMarkerPopup(marker, pt, extraFooter) {
@@ -1146,9 +1159,11 @@
       let current = getPointForPopup(pt);
       const popupEl = marker.getPopup()?.getElement();
       const slot = popupEl?.querySelector(".ble-popup-photos-slot");
-      if (needsPhotoRefresh(current)) {
-        if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
-        current = await enrichPointPhotos(current);
+      if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
+      const mustRefresh = needsPhotoRefresh(current);
+      current = await enrichPointPhotos(current, { forceFresh: mustRefresh });
+      if (!current.photoTag && !current.photoPlace) {
+        current = await enrichPointPhotos(current, { forceFresh: true });
       }
       renderPhotosInto(slot, current);
     });
@@ -1795,18 +1810,21 @@
       const cached = await fetchBleListOffline(companyId);
       if (cached?.data?.length) {
         await applyBleListToMap(cached.data, "");
-        try {
-          sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
-        } catch {
-          /* ignore */
-        }
         void (async () => {
-          const apiCid = await resolveCompanyIdFromApi();
-          if (apiCid && apiCid !== companyId) {
-            bleCompanyId = apiCid;
-            await refreshBleMapFromApi(apiCid);
-          } else {
-            await refreshBleMapFromApi(companyId);
+          try {
+            const apiCid = await resolveCompanyIdFromApi();
+            if (apiCid && apiCid !== companyId) {
+              bleCompanyId = apiCid;
+              await refreshBleMapFromApi(apiCid);
+            } else {
+              await refreshBleMapFromApi(companyId);
+            }
+          } catch {
+            try {
+              sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
+            } catch {
+              /* ignore */
+            }
           }
         })();
         return;
