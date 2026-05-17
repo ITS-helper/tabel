@@ -151,6 +151,28 @@
     bleInspectionCount = insp;
   }
 
+  function normalizeBleNumber(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^ble/i, "");
+  }
+
+  function findBlePointByNumber(num) {
+    const key = normalizeBleNumber(num);
+    if (!key) return null;
+    return bleByBleNumber.get(key) || bleMapData.find((p) => normalizeBleNumber(p.ble) === key) || null;
+  }
+
+  function centerMapOnDefaultBle(targetMap = bleMap, opts = {}) {
+    if (!targetMap) return false;
+    const pt = findBlePointByNumber(BLE_DEFAULT_CENTER_BLE);
+    if (!pt?.lat || !pt.lng) return false;
+    const zoom = opts.zoom ?? BLE_DEFAULT_CENTER_ZOOM;
+    targetMap.setView([pt.lat, pt.lng], zoom, { animate: opts.animate === true });
+    return true;
+  }
+
   function setBleMapData(next) {
     bleMapData = next;
     invalidateMarkerRegistry();
@@ -2406,12 +2428,7 @@
       }
     }
     const validPts = bleMapData.filter((p) => p.lat && p.lng);
-    const pt313 = bleMapData.find(
-      (p) => p.ble === "313" || p.ble === "BLE313" || String(p.ble).replace(/^ble/i, "") === "313"
-    );
-    if (pt313?.lat && pt313.lng) {
-      bleMap.setView([pt313.lat, pt313.lng], 18);
-    } else if (validPts.length > 1) {
+    if (!centerMapOnDefaultBle(bleMap, { animate: false }) && validPts.length > 1) {
       bleMap.fitBounds(L.latLngBounds(validPts.map((p) => [p.lat, p.lng])), {
         padding: [30, 30],
       });
@@ -2579,9 +2596,9 @@
         bleMapFS.setView(bleMap.getCenter(), bleMap.getZoom());
       } else if (bleMapData.length) {
         const validPts = bleMapData.filter((p) => p.lat && p.lng);
-        if (validPts.length > 1) {
+        if (!centerMapOnDefaultBle(bleMapFS, { animate: false }) && validPts.length > 1) {
           bleMapFS.fitBounds(L.latLngBounds(validPts.map((p) => [p.lat, p.lng])), { padding: [30, 30] });
-        } else {
+        } else if (!centerMapOnDefaultBle(bleMapFS, { animate: false })) {
           bleMapFS.setView([53.038, 39.011], 15);
         }
       } else {
