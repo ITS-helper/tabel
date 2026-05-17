@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260516z" />
+  <link rel="stylesheet" href="ble-map.css?v=20260517b" />
 </head>
 <body>
   <header class="ble-map-page-header" id="bleMapPageHeader">
@@ -50,6 +50,7 @@
               <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
               <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
             </div>
+            <span id="mapZoneEditHint" class="map-zone-edit-hint" hidden></span>
             <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
             <button type="button" class="map-layer-btn" id="btnSatellite" data-layer="satellite" title="Спутник">Спут</button>
             <button type="button" class="map-layer-btn active" id="btnStreet" data-layer="street" title="Схема">Схема</button>
@@ -105,7 +106,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="ble-map.js?v=20260516z"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260516z"></script>
+  <script src="ble-map.js?v=20260517b"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260517b"></script>
 </body>
 </html>

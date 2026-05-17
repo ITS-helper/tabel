@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260516z";
+  const BLE_MAP_BUILD = "20260517b";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -456,10 +456,22 @@
 
   function polygonLatLngs(layer) {
     let latlngs = layer.getLatLngs();
-    if (Array.isArray(latlngs[0]) && Array.isArray(latlngs[0][0])) {
+    while (Array.isArray(latlngs?.[0]) && !("lat" in latlngs[0])) {
       latlngs = latlngs[0];
     }
-    return latlngs;
+    return Array.isArray(latlngs) ? latlngs : [];
+  }
+
+  function updateZoneEditHint(text) {
+    const el = document.getElementById("mapZoneEditHint");
+    if (!el) return;
+    if (text) {
+      el.textContent = text;
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+      el.textContent = "";
+    }
   }
 
   function latLngsToPts(latlngs) {
@@ -486,8 +498,11 @@
     const state = bleZoneVertexByMap.get(targetMap);
     if (!state) return;
     try {
-      state.handles?.forEach((h) => h.off());
-      targetMap.removeLayer(state.group);
+      state.handles?.forEach((h) => {
+        h.off();
+        if (h._map) h._map.removeLayer(h);
+      });
+      if (state.group?._map) targetMap.removeLayer(state.group);
     } catch {
       /* ignore */
     }
@@ -509,8 +524,9 @@
   }
 
   function attachZoneVertexPointerDrag(handle, layer, vertexIndex, zoneData, map) {
-    let dragging = false;
+    let dragActive = false;
     let bound = false;
+    let activePointer = null;
 
     const applyClient = (clientX, clientY) => {
       const latlng = map.containerPointToLatLng(
@@ -522,44 +538,71 @@
       layer.setLatLngs(ring.map((p) => L.latLng(p.lat, p.lng)));
     };
 
-    const stopDrag = () => {
-      if (!dragging) return;
-      dragging = false;
-      document.removeEventListener("mousemove", onMove, true);
-      document.removeEventListener("mouseup", onEnd, true);
-      document.removeEventListener("touchmove", onMove, { capture: true });
-      document.removeEventListener("touchend", onEnd, true);
-      document.removeEventListener("touchcancel", onEnd, true);
+    const detachDocumentDrag = () => {
+      document.removeEventListener("touchmove", onDocMove, { capture: true });
+      document.removeEventListener("mousemove", onDocMove, true);
+      document.removeEventListener("touchend", onDocEnd, true);
+      document.removeEventListener("touchcancel", onDocEnd, true);
+      document.removeEventListener("mouseup", onDocEnd, true);
+    };
+
+    const finishDrag = () => {
+      if (!dragActive) return;
+      dragActive = false;
+      detachDocumentDrag();
       if (map.dragging) map.dragging.enable();
       const entry = bleZoneLayers.get(zoneData.id);
       if (entry) entry.data.pts = latLngsToPts(polygonLatLngs(layer));
       onZoneGeometryChanged({ layer });
     };
 
-    const onMove = (e) => {
-      if (!dragging) return;
-      const { x, y } = clientXYFromEvent(e);
+    const onDocMove = (e) => {
+      if (!dragActive) return;
+      let x;
+      let y;
+      if (e.type === "touchmove") {
+        const t = findTouch(e.touches, activePointer);
+        if (!t) return;
+        x = t.clientX;
+        y = t.clientY;
+      } else if (activePointer === "mouse") {
+        if (e.buttons === 0) return;
+        x = e.clientX;
+        y = e.clientY;
+      } else {
+        return;
+      }
       if (e.cancelable) e.preventDefault();
       L.DomEvent.stopPropagation(e);
       applyClient(x, y);
     };
 
-    const onEnd = () => stopDrag();
+    const onDocEnd = (e) => {
+      if (e?.type === "touchend" || e?.type === "touchcancel") {
+        if (activePointer !== "mouse" && !touchEnded(e, activePointer)) return;
+      } else if (activePointer !== "mouse") {
+        return;
+      }
+      finishDrag();
+    };
 
     const onStart = (e) => {
       if (!isZoneEditAllowed()) return;
+      if (e.type === "mousedown" && e.button !== 0) return;
       L.DomEvent.stopPropagation(e);
       if (e.cancelable) e.preventDefault();
-      dragging = true;
+      dragActive = true;
+      activePointer = e.type === "touchstart" ? e.touches[0]?.identifier ?? 0 : "mouse";
       if (map.dragging) map.dragging.disable();
       layer.closeTooltip?.();
+      map.closeTooltip?.();
       const { x, y } = clientXYFromEvent(e);
       applyClient(x, y);
-      document.addEventListener("mousemove", onMove, true);
-      document.addEventListener("mouseup", onEnd, true);
-      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
-      document.addEventListener("touchend", onEnd, true);
-      document.addEventListener("touchcancel", onEnd, true);
+      document.addEventListener("touchmove", onDocMove, { capture: true, passive: false });
+      document.addEventListener("mousemove", onDocMove, true);
+      document.addEventListener("touchend", onDocEnd, true);
+      document.addEventListener("touchcancel", onDocEnd, true);
+      document.addEventListener("mouseup", onDocEnd, true);
     };
 
     const bind = () => {
@@ -570,10 +613,13 @@
       el.addEventListener("touchstart", onStart, { passive: false, capture: true });
     };
 
-    handle.on("add", bind);
+    handle.on("add", () => {
+      bind();
+      setTimeout(bind, 0);
+    });
     handle.on("remove", () => {
       bound = false;
-      stopDrag();
+      finishDrag();
       const el = handle.getElement();
       if (el) {
         L.DomEvent.off(el, "mousedown", onStart, handle);
@@ -590,24 +636,24 @@
     const ring = polygonLatLngs(layer);
     if (ring.length < 3) return;
 
-    const pane = ensureZoneVertexPane(map);
-    const group = L.layerGroup({ pane }).addTo(map);
+    const paneName = ensureZoneVertexPane(map);
     const handles = [];
 
     ring.forEach((ll, index) => {
-      const handle = L.circleMarker([ll.lat, ll.lng], {
-        radius: 10,
-        color: "#ffffff",
-        weight: 3,
-        fillColor: "#ff6f00",
-        fillOpacity: 1,
-        pane,
+      const handle = L.marker([ll.lat, ll.lng], {
+        icon: L.divIcon({
+          className: "ble-zone-vertex-icon",
+          html: '<div class="ble-zone-vertex-pin" aria-hidden="true"></div>',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        }),
+        pane: paneName,
         interactive: true,
-        bubblingMouseEvents: false,
-        className: "ble-zone-vertex-handle",
+        keyboard: false,
+        zIndexOffset: 20000,
       });
       attachZoneVertexPointerDrag(handle, layer, index, zoneData, map);
-      handle.addTo(group);
+      handle.addTo(map);
       handles.push(handle);
     });
 
@@ -615,11 +661,13 @@
       layer.closeTooltip?.();
       map.closeTooltip?.();
       layer.bringToBack?.();
-      group.bringToFront?.();
     } catch {
       /* ignore */
     }
-    bleZoneVertexByMap.set(map, { group, layer, zoneId: zoneData.id, handles });
+    bleZoneVertexByMap.set(map, { group: null, layer, zoneId: zoneData.id, handles });
+    updateZoneEditHint(
+      `Вершин: ${ring.length} — тяните оранжевые точки на контуре зоны (не квадрат вокруг).`
+    );
   }
 
   function scheduleZoneVertexHandles(layer, zoneData) {
@@ -662,6 +710,7 @@
       disableAllZonePm();
       resetZoneStyles();
       syncZoneEditUiClasses();
+      updateZoneEditHint("");
       redrawMapLayers();
       updateEditBarState();
       return;
@@ -693,7 +742,9 @@
     } catch {
       /* ignore */
     }
-    bleEditMapMsg = `Зона «${entry.data.name || entry.data.id}»: ${nVerts} вершин — тяните оранжевые точки по контуру.`;
+    updateZoneEditHint(
+      `Вершин: ${nVerts} — тяните оранжевые точки на контуре (v${BLE_MAP_BUILD})`
+    );
     updateEditBarState();
   }
 
@@ -723,6 +774,7 @@
     bleSelectedZoneId = null;
     resetZoneStyles();
     syncZoneEditUiClasses();
+    updateZoneEditHint("");
     redrawMapLayers();
     updateEditBarState();
   }
@@ -833,6 +885,7 @@
       disableAllZonePm();
       bleSelectedZoneId = null;
       syncZoneEditUiClasses();
+      updateZoneEditHint("");
       document.body.classList.remove("ble-map--zone-edit");
       bleEditMapMsg = "";
       if (isEmbeddedEditLayout()) exitEmbeddedEditLayout();
