@@ -1987,8 +1987,9 @@
       meta.photosOk != null
         ? `${meta.photosOk}${meta.photosFail ? `/${meta.photosOk + meta.photosFail}` : ""} фото`
         : `${meta.photoCount || 0} фото`;
+    const modeHint = meta.tagOnly ? " · 1 фото/метка" : "";
     setFieldPackStatus(
-      `Пакет для поля: ${meta.markerCount || meta.raw.length} меток, ${photos}${mb}${when ? ` · ${when}` : ""}`,
+      `Пакет для поля: ${meta.markerCount || meta.raw.length} меток, ${photos}${modeHint}${mb}${when ? ` · ${when}` : ""}`,
       "ready"
     );
     if (btn) {
