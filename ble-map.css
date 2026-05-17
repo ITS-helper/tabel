@@ -662,9 +662,9 @@ body {
   max-width: none;
 }
 
-.map-toolbar-row--actions .map-route-field--toolbar {
+.map-toolbar-row--fields .map-route-field--toolbar {
   flex: 0 0 auto;
-  margin-left: auto;
+  min-width: 0;
 }
 
 .map-toolbar-row--actions {
@@ -701,6 +701,7 @@ body {
   }
 
   .map-toolbar .map-route-field--toolbar {
+    order: 99;
     margin-left: auto;
   }
 
