@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518l";
+  const BLE_MAP_BUILD = "20260518m";
   const BLE_DOT_PX = 20;
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
@@ -2098,7 +2098,7 @@
       setFieldPackStatus("");
       if (btn) {
         btn.title =
-          "Скачать метки и фото для работы без мобильного интернета (нужен Wi‑Fi или VPN)";
+          "Скачать фото меток для работы без интернета (нужен Wi‑Fi или VPN)";
       }
       return;
     }
@@ -2375,8 +2375,8 @@
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) {
       const hint = navigator.onLine
-        ? "Фото недоступно. Нажмите ↺ на карте (нужен доступ к API меток, часто VPN) или «Скачать для поля» по Wi‑Fi."
-        : "Фото не в пакете для поля. Скачайте пакет по Wi‑Fi или откройте метку при наличии сети.";
+        ? "Фото недоступно. Нажмите ↺ на карте (нужен доступ к API меток, часто VPN) или «Скачать фото» по Wi‑Fi."
+        : "Фото не скачаны. Нажмите «Скачать фото» по Wi‑Fi или откройте метку при наличии сети.";
       container.innerHTML = `<p class="ble-popup-loading">${hint}</p>`;
       return;
     }
