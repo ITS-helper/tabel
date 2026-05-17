@@ -684,7 +684,8 @@ body {
 
 @media (min-width: 769px) {
   .map-toolbar {
-    --map-toolbar-side: 152px;
+    --map-toolbar-side: 176px;
+    --map-toolbar-control-h: 34px;
     display: grid;
     grid-template-columns: var(--map-toolbar-side) minmax(0, 1fr) var(--map-toolbar-side);
     align-items: center;
@@ -731,8 +732,45 @@ body {
     margin-left: 0;
   }
 
+  .map-route-field--toolbar {
+    max-width: none;
+    min-width: 0;
+  }
+
   .map-route-field--toolbar .map-route-select {
     width: 100%;
+    box-sizing: border-box;
+    min-height: var(--map-toolbar-control-h);
+    height: var(--map-toolbar-control-h);
+    padding: 0 26px 0 10px;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+
+  .map-route-field--toolbar .map-route-field__label {
+    font-size: 10px;
+    top: -7px;
+    left: 10px;
+  }
+
+  #mapSearchBlock.map-search-bar--toolbar {
+    max-width: none;
+  }
+
+  #mapSearchBlock.map-search-bar--toolbar input {
+    min-height: var(--map-toolbar-control-h);
+    height: var(--map-toolbar-control-h);
+    box-sizing: border-box;
+    padding: 0 28px 0 12px;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+
+  .map-toolbar .map-filter-btn,
+  .map-toolbar .map-edit-mode-btn,
+  .map-toolbar .map-layer-btn {
+    min-height: var(--map-toolbar-control-h);
+    padding: 5px 10px;
     box-sizing: border-box;
   }
 
