@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518a";
+  const BLE_MAP_BUILD = "20260518b";
   const BLE_ZONE_NEON = "#00e5ff";
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
@@ -710,29 +710,6 @@
     });
   }
 
-  function polygonCentroidLatLng(ring) {
-    let lat = 0;
-    let lng = 0;
-    const n = ring.length || 1;
-    ring.forEach((p) => {
-      lat += p.lat;
-      lng += p.lng;
-    });
-    return L.latLng(lat / n, lng / n);
-  }
-
-  function refreshZoneHandles(handles, layer, bulkZone) {
-    if (bulkZone && handles.length === 1) {
-      handles[0].setLatLng(polygonCentroidLatLng(polygonLatLngs(layer)));
-      return;
-    }
-    refreshVertexHandlePositions(handles, layer);
-  }
-
-  function isBulkZoneRing(ring) {
-    return ring.length > BLE_ZONE_SMALL_MAX_PTS;
-  }
-
   function syncZoneVertexHandles(layer, zoneData) {
     const map = layer?._map;
     if (!map || !isZoneEditAllowed() || !zoneData) return;
@@ -741,40 +718,23 @@
     const ring = polygonLatLngs(layer);
     if (ring.length < 3) return;
 
-    const bulkZone = isBulkZoneRing(ring);
     const group = L.layerGroup().addTo(map);
     const handles = [];
 
-    if (bulkZone) {
-      const center = polygonCentroidLatLng(ring);
-      const handle = L.circleMarker(center, {
-        radius: 14,
+    ring.forEach((ll) => {
+      const handle = L.circleMarker([ll.lat, ll.lng], {
+        radius: 12,
         color: "#ffffff",
         weight: 3,
         opacity: 1,
-        fillColor: "#00e5ff",
+        fillColor: "#ff6f00",
         fillOpacity: 1,
         interactive: false,
-        className: "ble-zone-centroid-handle",
+        className: "ble-zone-vertex-handle",
       });
       handle.addTo(group);
       handles.push(handle);
-    } else {
-      ring.forEach((ll) => {
-        const handle = L.circleMarker([ll.lat, ll.lng], {
-          radius: 12,
-          color: "#ffffff",
-          weight: 3,
-          opacity: 1,
-          fillColor: "#ff6f00",
-          fillOpacity: 1,
-          interactive: false,
-          className: "ble-zone-vertex-handle",
-        });
-        handle.addTo(group);
-        handles.push(handle);
-      });
-    }
+    });
 
     let drag = null;
     const container = map.getContainer();
@@ -784,7 +744,7 @@
       drag = null;
       container.style.cursor = "";
       if (map.dragging) map.dragging.enable();
-      refreshZoneHandles(handles, layer, bulkZone);
+      refreshVertexHandlePositions(handles, layer);
       const entry = bleZoneLayers.get(zoneData.id);
       const pts = latLngsToPts(polygonLatLngs(layer));
       if (entry) entry.data.pts = pts;
@@ -801,11 +761,11 @@
         layer.setLatLngs(
           drag.startRing.map((p) => L.latLng(p.lat + dLat, p.lng + dLng))
         );
-        refreshZoneHandles(handles, layer, bulkZone);
+        refreshVertexHandlePositions(handles, layer);
         return;
       }
       setPolygonVertex(layer, drag.index, ll);
-      refreshZoneHandles(handles, layer, bulkZone);
+      refreshVertexHandlePositions(handles, layer);
     };
 
     const onPointerUp = (e) => {
@@ -821,9 +781,7 @@
       const currentRing = polygonLatLngs(layer);
       const ringPts = latLngsToPts(currentRing);
       const insideZone = pointInPolygon(clickLl.lat, clickLl.lng, ringPts);
-      const moveWhole = (e.shiftKey || bulkZone) && insideZone;
-
-      if (moveWhole) {
+      if (e.shiftKey && insideZone) {
         e.preventDefault();
         e.stopPropagation();
         drag = {
