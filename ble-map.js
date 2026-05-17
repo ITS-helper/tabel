@@ -24,7 +24,12 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518e";
+  const BLE_MAP_BUILD = "20260518f";
+  const BLE_FIELD_DB = "ww-ble-field-v1";
+  const BLE_FIELD_META_STORE = "meta";
+  const BLE_FIELD_PHOTOS_STORE = "photos";
+  const BLE_FIELD_PACK_KEY = "pack";
+  const BLE_FIELD_PHOTO_CONCURRENCY = 5;
   const BLE_DEFAULT_CENTER_BLE = "20";
   const BLE_DEFAULT_CENTER_ZOOM = 18;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
@@ -48,6 +53,9 @@
   let bleDefaultCenterSeq = 0;
   let bleDefaultCenterLocked = false;
   let bleZoneData = [];
+  const fieldPhotoBlobUrls = new Map();
+  let fieldPackDownloadActive = false;
+  let fieldPackMetaCache = null;
   let bleClusterGroup = null;
 
   let bleMapFS = null;
@@ -1641,7 +1649,7 @@
     const img = document.getElementById("photoViewerImg");
     const overlay = document.getElementById("photoViewerOverlay");
     if (!img || !overlay) return;
-    img.src = url;
+    img.src = photoSrcForDisplay(url) || url;
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
   };
@@ -1686,8 +1694,356 @@
 
   function photoSrcForDisplay(url) {
     if (!url) return "";
+    const local = fieldPhotoBlobUrls.get(url);
+    if (local) return local;
     if (isOfflineFirstMode() && isYandexPhotoUrl(url)) return toBlePhotoProxyUrl(url);
     return url;
+  }
+
+  function revokeFieldPhotoBlobUrls() {
+    fieldPhotoBlobUrls.forEach((blobUrl) => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        /* ignore */
+      }
+    });
+    fieldPhotoBlobUrls.clear();
+  }
+
+  function openFieldDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error("indexeddb_unavailable"));
+        return;
+      }
+      const req = indexedDB.open(BLE_FIELD_DB, 1);
+      req.onerror = () => reject(req.error || new Error("idb_open"));
+      req.onsuccess = () => resolve(req.result);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(BLE_FIELD_META_STORE)) {
+          db.createObjectStore(BLE_FIELD_META_STORE);
+        }
+        if (!db.objectStoreNames.contains(BLE_FIELD_PHOTOS_STORE)) {
+          db.createObjectStore(BLE_FIELD_PHOTOS_STORE);
+        }
+      };
+    });
+  }
+
+  function idbGet(store, key) {
+    return new Promise((resolve, reject) => {
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function idbGetAll(store) {
+    return new Promise((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function idbGetAllKeys(store) {
+    return new Promise((resolve, reject) => {
+      const req = store.getAllKeys();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function loadFieldPackMeta() {
+    if (fieldPackMetaCache) return fieldPackMetaCache;
+    try {
+      const db = await openFieldDb();
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readonly");
+      const meta = await idbGet(tx.objectStore(BLE_FIELD_META_STORE), BLE_FIELD_PACK_KEY);
+      db.close();
+      fieldPackMetaCache = meta && meta.version === 1 ? meta : null;
+      return fieldPackMetaCache;
+    } catch (e) {
+      console.warn("[ble-map] field pack meta", e?.message || e);
+      return null;
+    }
+  }
+
+  async function hydrateFieldPhotoBlobUrls() {
+    const meta = await loadFieldPackMeta();
+    if (!meta?.photoCount) return 0;
+    revokeFieldPhotoBlobUrls();
+    try {
+      const db = await openFieldDb();
+      const pairs = await new Promise((resolve, reject) => {
+        const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readonly");
+        const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
+        const blobsReq = store.getAll();
+        blobsReq.onerror = () => reject(blobsReq.error);
+        blobsReq.onsuccess = () => {
+          const keysReq = store.getAllKeys();
+          keysReq.onerror = () => reject(keysReq.error);
+          keysReq.onsuccess = () => {
+            const keys = keysReq.result || [];
+            const blobs = blobsReq.result || [];
+            resolve(keys.map((url, i) => [url, blobs[i]]));
+          };
+        };
+      });
+      db.close();
+      let loaded = 0;
+      for (const [url, blob] of pairs) {
+        if (url && blob instanceof Blob) {
+          fieldPhotoBlobUrls.set(url, URL.createObjectURL(blob));
+          loaded++;
+        }
+      }
+      return loaded;
+    } catch (e) {
+      console.warn("[ble-map] field photos hydrate", e?.message || e);
+      return 0;
+    }
+  }
+
+  function collectPhotoUrlsFromRaw(raw) {
+    const urls = new Set();
+    if (!Array.isArray(raw)) return [];
+    for (const p of raw) {
+      const tag = pickFirstUrl(p, ["ble_image_url", "bleImageUrl", "ble_image"]);
+      const place = pickFirstUrl(p, ["location_image_url", "locationImageUrl", "location_image"]);
+      if (tag && !isPhotoUrlExpired(tag)) urls.add(tag);
+      if (place && !isPhotoUrlExpired(place)) urls.add(place);
+    }
+    return [...urls];
+  }
+
+  async function ensureBleTokenForField() {
+    if (getBleToken()) return true;
+    try {
+      await bleAutoLogin();
+      return !!getBleToken();
+    } catch {
+      return false;
+    }
+  }
+
+  async function fetchPhotoBlobForField(url) {
+    const fetchUrl = isYandexPhotoUrl(url) ? toBlePhotoProxyUrl(url) : url;
+    const token = getBleToken();
+    const headers =
+      fetchUrl.includes("ble-map-proxy") || fetchUrl.includes("functions/v1")
+        ? mergeSupabaseHeaders({}, token)
+        : token
+          ? { Authorization: `Bearer ${token}` }
+          : {};
+    const res = await fetch(fetchUrl, { headers });
+    if (!res.ok) throw new Error(`photo_http_${res.status}`);
+    return res.blob();
+  }
+
+  function setFieldPackStatus(text, kind = "") {
+    const el = document.getElementById("mapFieldPackStatus");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      el.className = "map-field-pack-status";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+    el.className = `map-field-pack-status${kind ? ` map-field-pack-status--${kind}` : ""}`;
+  }
+
+  async function refreshFieldPackChrome() {
+    const meta = await loadFieldPackMeta();
+    const btn = document.getElementById("mapFieldPackBtn");
+    if (!meta?.raw?.length) {
+      setFieldPackStatus("");
+      if (btn) {
+        btn.title =
+          "Скачать метки и фото для работы без мобильного интернета (нужен Wi‑Fi или VPN)";
+      }
+      return;
+    }
+    const when = formatCacheAge(meta.savedAt);
+    const mb = meta.bytesTotal ? ` · ~${(meta.bytesTotal / (1024 * 1024)).toFixed(0)} МБ` : "";
+    const photos =
+      meta.photosOk != null
+        ? `${meta.photosOk}${meta.photosFail ? `/${meta.photosOk + meta.photosFail}` : ""} фото`
+        : `${meta.photoCount || 0} фото`;
+    setFieldPackStatus(
+      `Пакет для поля: ${meta.markerCount || meta.raw.length} меток, ${photos}${mb}${when ? ` · ${when}` : ""}`,
+      "ready"
+    );
+    if (btn) {
+      btn.title = `Обновить пакет для поля (сейчас ${meta.markerCount || meta.raw.length} меток, ${photos})`;
+    }
+  }
+
+  async function saveFieldPackToDb(meta, photoMap) {
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([BLE_FIELD_META_STORE, BLE_FIELD_PHOTOS_STORE], "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      const metaStore = tx.objectStore(BLE_FIELD_META_STORE);
+      const photoStore = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
+      metaStore.put(meta, BLE_FIELD_PACK_KEY);
+      const clearReq = photoStore.clear();
+      clearReq.onsuccess = () => {
+        for (const [url, blob] of photoMap.entries()) {
+          photoStore.put(blob, url);
+        }
+      };
+      clearReq.onerror = () => reject(clearReq.error);
+    });
+    db.close();
+    fieldPackMetaCache = meta;
+    revokeFieldPhotoBlobUrls();
+    for (const [url, blob] of photoMap.entries()) {
+      fieldPhotoBlobUrls.set(url, URL.createObjectURL(blob));
+    }
+  }
+
+  async function downloadFieldPack() {
+    if (fieldPackDownloadActive) return;
+    const btn = document.getElementById("mapFieldPackBtn");
+    fieldPackDownloadActive = true;
+    if (btn) btn.disabled = true;
+    setFieldPackStatus("Подготовка списка меток…", "busy");
+    try {
+      if (!navigator.onLine) {
+        alert("Нужен интернет, чтобы скачать пакет. Подключитесь к Wi‑Fi или VPN и повторите.");
+        return;
+      }
+      const hasToken = await ensureBleTokenForField();
+      if (!hasToken) {
+        alert(
+          "Не удалось авторизоваться в API меток. Проверьте VPN или сеть и повторите."
+        );
+        return;
+      }
+      const cid = bleCompanyId || (await resolveCompanyId());
+      let raw = await refreshBleListSnapshot(cid, { forceFresh: true });
+      if (!raw?.length && bleListSnapshot?.raw?.length) raw = bleListSnapshot.raw;
+      if (!raw?.length) {
+        const off = await fetchBleListOffline(cid);
+        raw = off?.data;
+      }
+      if (!raw?.length) {
+        alert("Нет данных меток для скачивания.");
+        return;
+      }
+      const photoUrls = collectPhotoUrlsFromRaw(raw);
+      const photoMap = new Map();
+      let photosOk = 0;
+      let photosFail = 0;
+      let bytesTotal = 0;
+      let done = 0;
+      const total = photoUrls.length;
+      setFieldPackStatus(
+        total
+          ? `Скачивание фото: 0 / ${total}…`
+          : `Сохранение ${raw.length} меток (без фото)…`,
+        "busy"
+      );
+      const queue = [...photoUrls];
+      const workers = Array.from(
+        { length: Math.min(BLE_FIELD_PHOTO_CONCURRENCY, queue.length || 1) },
+        async () => {
+          while (queue.length) {
+            const url = queue.shift();
+            if (!url) break;
+            try {
+              const blob = await fetchPhotoBlobForField(url);
+              photoMap.set(url, blob);
+              photosOk++;
+              bytesTotal += blob.size || 0;
+            } catch (e) {
+              photosFail++;
+              console.warn("[ble-map] field photo", url.slice(0, 60), e?.message || e);
+            }
+            done++;
+            if (done % 8 === 0 || done === total) {
+              setFieldPackStatus(`Скачивание фото: ${done} / ${total}…`, "busy");
+            }
+          }
+        }
+      );
+      await Promise.all(workers);
+      const meta = {
+        version: 1,
+        companyId: cid,
+        savedAt: new Date().toISOString(),
+        markerCount: raw.length,
+        photoCount: photoUrls.length,
+        photosOk,
+        photosFail,
+        bytesTotal,
+        raw,
+      };
+      await saveFieldPackToDb(meta, photoMap);
+      try {
+        sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      await refreshFieldPackChrome();
+      alert(
+        `Пакет для поля сохранён.\n\nМеток: ${raw.length}\nФото: ${photosOk} из ${total}` +
+          (photosFail ? ` (${photosFail} не скачались — при открытии метки попробуйте снова по Wi‑Fi)` : "") +
+          `\n\nВ поле без связи откройте карту — метки и скачанные фото будут доступны. Подложка спутника без интернета может не отображаться.`
+      );
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (msg.includes("QuotaExceeded") || msg.includes("quota")) {
+        alert(
+          "Недостаточно места в браузере для всех фото. Освободите память или скачайте пакет с рабочего Wi‑Fi на другое устройство."
+        );
+      } else {
+        alert(`Не удалось сохранить пакет для поля: ${msg.slice(0, 200)}`);
+      }
+      setFieldPackStatus("");
+    } finally {
+      fieldPackDownloadActive = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function tryLoadFieldPack(companyId) {
+    const meta = await loadFieldPackMeta();
+    if (!meta?.raw?.length) return false;
+    if (companyId && meta.companyId && Number(meta.companyId) !== Number(companyId)) {
+      return false;
+    }
+    setFieldPackStatus("Загрузка пакета для поля…", "busy");
+    await hydrateFieldPhotoBlobUrls();
+    if (!bleMap) initBleMap([53.038, 39.011], 15);
+    bleCompanyId = meta.companyId || companyId;
+    await applyBleListToMap(meta.raw, "");
+    try {
+      sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setRetryVisible(!navigator.onLine);
+    if (!navigator.onLine) {
+      showMapMsg(
+        "Нет сети — карта из пакета для поля. Фото скачанные открываются; спутник без интернета может не грузиться.",
+        "error"
+      );
+    } else {
+      hideMapMsg();
+    }
+    await refreshFieldPackChrome();
+    return true;
+  }
+
+  function shouldPreferFieldPack() {
+    return !navigator.onLine;
   }
 
   async function fetchBleListForPhotos(companyId) {
@@ -2544,6 +2900,13 @@
       const companyId = await resolveCompanyId();
       bleCompanyId = companyId;
 
+      if (shouldPreferFieldPack()) {
+        const fromField = await tryLoadFieldPack(companyId);
+        if (fromField) return;
+      }
+
+      void hydrateFieldPhotoBlobUrls();
+
       const cached = await fetchBleListOffline(companyId);
       if (cached?.data?.length) {
         await applyBleListToMap(cached.data, "");
@@ -2799,6 +3162,7 @@
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
+    document.getElementById("mapFieldPackBtn")?.addEventListener("click", () => void downloadFieldPack());
     document.getElementById("photoViewerOverlay")?.addEventListener("click", closePhotoViewer);
     document.getElementById("photoViewerClose")?.addEventListener("click", closePhotoViewer);
 
@@ -2842,6 +3206,17 @@
     }
     applyMapLayoutClasses();
     bindMapResizeHandlers();
+    window.addEventListener("offline", () => {
+      void (async () => {
+        if (bleMapInitialized) return;
+        const cid = bleCompanyId || (await resolveCompanyId());
+        await tryLoadFieldPack(cid);
+      })();
+    });
+    window.addEventListener("online", () => {
+      hideMapMsg();
+      setRetryVisible(false);
+    });
     window.addEventListener("message", (e) => {
       if (e.data?.type === "ww-ble-map-resize") {
         scheduleMapResize();
@@ -2867,6 +3242,7 @@
     initEmbeddedChrome();
     initBlePopupPhotoClicks();
     bindUi();
+    void refreshFieldPackChrome();
     loadBleMap();
     scheduleMapResize();
   });

@@ -237,6 +237,61 @@ body {
   cursor: wait;
 }
 
+.map-field-pack-btn {
+  font-family: Oswald, sans-serif;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #00897b 45%, var(--accent));
+  background: linear-gradient(145deg, #e0f7fa, #b2ebf2);
+  color: #00695c;
+  cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.map-field-pack-btn:hover {
+  background: linear-gradient(145deg, #b2ebf2, #80deea);
+  border-color: #00897b;
+}
+
+.map-field-pack-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.map-field-pack-status {
+  margin: 0;
+  padding: 2px 10px 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #546e7a;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(21, 101, 192, 0.08);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+
+.map-field-pack-status--ready {
+  color: #2e7d32;
+}
+
+.map-field-pack-status--busy {
+  color: #1565c0;
+}
+
+.map-float-dock:has(.map-field-pack-status:not([hidden])) .map-toolbar {
+  border-radius: 12px 12px 0 0;
+}
+
+.map-float-dock:has(.map-field-pack-status:not([hidden])) .map-zone-edit-hint:not([hidden]) {
+  border-radius: 0;
+}
+
 .map-auth-btn {
   font-family: Oswald, sans-serif;
   font-size: 0.8em;
@@ -893,6 +948,7 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
 
   .map-toolbar .map-filter-btn,
   .map-toolbar .map-edit-mode-btn,
+  .map-field-pack-btn,
   .map-layer-mode-btn {
     min-height: var(--map-toolbar-control-h);
     box-sizing: border-box;
