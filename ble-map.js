@@ -24,7 +24,9 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518b";
+  const BLE_MAP_BUILD = "20260518c";
+  const BLE_DEFAULT_CENTER_BLE = "20";
+  const BLE_DEFAULT_CENTER_ZOOM = 17;
   const BLE_ZONE_NEON = "#00e5ff";
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
@@ -797,8 +799,6 @@
         return;
       }
 
-      if (bulkZone) return;
-
       const idx = findVertexIndexNearPoint(map, layer, e.clientX, e.clientY, BLE_VERTEX_HIT_PX);
       if (idx < 0) return;
       e.preventDefault();
@@ -833,15 +833,9 @@
       onPointerMove,
       onPointerUp,
     });
-    if (bulkZone) {
-      updateZoneEditHint(
-        `Зона из ${ring.length} точек — тяните голубой центр или клик внутри зоны (перемещение целиком).`
-      );
-    } else {
-      updateZoneEditHint(
-        `Вершин: ${ring.length} — тяните оранжевые точки; Shift + перетаскивание внутри зоны — целиком.`
-      );
-    }
+    updateZoneEditHint(
+      `Вершин: ${ring.length} — тяните оранжевые точки; Shift + перетаскивание — зона целиком.`
+    );
   }
 
   function scheduleZoneVertexHandles(layer, zoneData) {
@@ -1077,7 +1071,7 @@
       const mobile = isCoarseMobile();
       const confirmText = mobile
         ? "Режим редактирования меняет данные на сервере VSM.\n\n• Удержите метку 1 сек., затем перетащите\n\nПродолжить?"
-        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: клик — вершины; Shift — перетащить зону целиком; у крупных зон — за центр\n• «Сохранить» — записать все зоны\n\nПродолжить?";
+        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: оранжевые точки — вершины; Shift + перетаскивание — зона целиком\n• «Сохранить» — записать все зоны\n\nПродолжить?";
       if (!opts.skipConfirm && !window.confirm(confirmText)) {
         return;
       }
@@ -1093,7 +1087,7 @@
       syncZoneEditUiClasses();
       bleEditMapMsg = isCoarseMobile()
         ? "Редактирование: удержите метку 1 сек., затем перетащите."
-        : "Метки: удержите 1 сек. Зоны: вершины или Shift — целиком; крупные зоны — за голубой центр. «Сохранить» — записать.";
+        : "Метки: удержите 1 сек. Зоны: вершины; Shift — перетащить целиком. «Сохранить» — записать.";
       hideMapMsg();
     } else {
       disableAllZonePm();
