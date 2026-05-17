@@ -686,6 +686,7 @@ body {
   .map-toolbar {
     --map-toolbar-control-h: 36px;
     display: flex;
+    flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
