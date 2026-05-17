@@ -474,6 +474,32 @@ body[data-archive-view="1"] .segmented__btn[data-mode="edit"] {
   font-size: 1.1rem;
 }
 
+.icon-ble-map::before {
+  content: "";
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.app-blemap-entry-btn .header__btn-text--long {
+  font-family: Oswald, sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .app-blemap-entry-btn .header__btn-text--long {
+    display: none;
+  }
+}
+
 .icon-download::before {
   content: "↓";
   font-weight: 700;
@@ -2752,20 +2778,8 @@ html.app--blemap-tab {
   overflow: hidden;
 }
 
-.app--blemap-view .header__row--top,
-.app--blemap-view .header__row--bottom,
-.app--blemap-view .header__divider {
-  display: none;
-}
-
 .app--blemap-view .header {
-  flex-shrink: 0;
-  margin-bottom: 0;
-  padding: 8px 10px;
-  gap: 6px;
-  border-radius: 0;
-  border-left: none;
-  border-right: none;
+  display: none !important;
 }
 
 .app--blemap-view .app-page--blemap.is-active {
@@ -2974,22 +2988,6 @@ html.app--blemap-tab {
     padding: 0;
   }
 
-  .app--blemap-view .header {
-    padding: max(4px, env(safe-area-inset-top)) 6px 4px;
-    gap: 0;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    box-shadow: 0 1px 0 rgba(21, 101, 192, 0.08);
-  }
-
-  .app--blemap-view .app-nav--top {
-    margin: 0;
-  }
-
-  .app--blemap-view .app-nav--top .app-nav__tab {
-    padding: 7px 4px;
-  }
 }
 
 .app--blemap-fs .header {

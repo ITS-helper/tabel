@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260518d" />
+  <link rel="stylesheet" href="ble-map.css?v=20260518e" />
 </head>
 <body>
   <header class="ble-map-page-header" id="bleMapPageHeader">
@@ -30,6 +30,15 @@
         <div class="map-float-dock" id="mapFloatDock" hidden>
           <div class="map-toolbar" id="mapToolbar">
             <div class="map-toolbar-row map-toolbar-row--fields">
+            <button
+              type="button"
+              class="map-ww-logo-btn"
+              id="bleMapBackLogo"
+              title="График работ"
+              aria-label="Вернуться к графику"
+            >
+              <img src="assets/workwatch-mark.png" width="32" height="22" alt="" decoding="async" />
+            </button>
             <div id="mapSearchBlock" class="map-search-bar map-search-bar--toolbar">
               <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" aria-label="№ метки" />
               <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить" aria-label="Очистить">✕</button>
@@ -125,7 +134,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="ble-map.js?v=20260518d"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260518d"></script>
+  <script src="ble-map.js?v=20260518e"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260518e"></script>
 </body>
 </html>

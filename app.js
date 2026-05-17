@@ -2570,9 +2570,6 @@ function showAppPage(pageId) {
     el.classList.toggle("is-active", on);
     el.hidden = !on;
   });
-  document.querySelectorAll(".app-nav__tab").forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.appPage === valid);
-  });
   document.getElementById("app")?.classList.toggle("app--blemap-view", valid === "blemap");
   document.documentElement.classList.toggle("app--blemap-tab", valid === "blemap");
   document.body.classList.toggle("app--blemap-tab", valid === "blemap");
@@ -2603,10 +2600,12 @@ function bindAppPageNav() {
     }
   })();
   if (saved === "blemap") showAppPage("blemap");
-  document.querySelectorAll(".app-nav__tab").forEach((btn) => {
-    btn.addEventListener("click", () => showAppPage(btn.dataset.appPage || "tabel"));
-  });
+  document.getElementById("appOpenBleMapBtn")?.addEventListener("click", () => showAppPage("blemap"));
   window.addEventListener("message", (e) => {
+    if (e.data?.type === "ww-app-nav") {
+      showAppPage(e.data.page === "blemap" ? "blemap" : "tabel");
+      return;
+    }
     if (e.data?.type === "ww-ble-map-fullscreen") {
       document.getElementById("app")?.classList.toggle("app--blemap-fs", !!e.data.open);
     }

@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518d";
+  const BLE_MAP_BUILD = "20260518e";
   const BLE_DEFAULT_CENTER_BLE = "20";
   const BLE_DEFAULT_CENTER_ZOOM = 18;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
@@ -2816,7 +2816,25 @@
     });
   }
 
+  function bindBleMapBackLogo() {
+    const btn = document.getElementById("bleMapBackLogo");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      if (window.self !== window.top) {
+        try {
+          window.parent.postMessage({ type: "ww-app-nav", page: "tabel" }, "*");
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      window.location.href = "index.html";
+    });
+  }
+
   function initEmbeddedChrome() {
+    bindBleMapBackLogo();
     if (window.self !== window.top) {
       document.getElementById("bleMapPageHeader")?.classList.add("is-embedded");
       const back = document.getElementById("bleMapBackLink");

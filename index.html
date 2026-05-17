@@ -15,10 +15,6 @@
 <body>
   <div class="app" id="app">
     <header class="header header--unified" aria-label="График работ и навигация">
-      <nav class="app-nav app-nav--top" aria-label="Разделы приложения">
-        <button type="button" class="app-nav__tab is-active" data-app-page="tabel">График</button>
-        <button type="button" class="app-nav__tab" data-app-page="blemap">Карта BLE</button>
-      </nav>
       <div class="header__row header__row--top">
         <div class="header__brand">
           <div class="header__logo-wrap">
@@ -45,6 +41,16 @@
           </h1>
         </div>
         <div class="header__actions">
+          <button
+            type="button"
+            class="btn btn--ghost app-blemap-entry-btn"
+            id="appOpenBleMapBtn"
+            title="Карта BLE-меток"
+            aria-label="Карта BLE-меток"
+          >
+            <span class="icon-ble-map" aria-hidden="true"></span>
+            <span class="header__btn-text header__btn-text--long">Карта</span>
+          </button>
           <button type="button" class="btn btn--ghost" id="themeToggle" title="Тёмная тема" aria-pressed="false">
             <span class="icon-moon" aria-hidden="true"></span>
           </button>
@@ -316,7 +322,7 @@
     <div id="page-blemap" class="app-page app-page--blemap" hidden>
       <iframe
         class="app-page__iframe"
-        src="ble-map.html?v=20260518d"
+        src="ble-map.html?v=20260518e"
         title="Карта BLE-меток"
         loading="lazy"
       ></iframe>
