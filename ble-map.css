@@ -893,7 +893,7 @@ html.ble-map-embedded body.ble-map-mobile .map-toolbar__sep--before-layers {
   color: #546e7a;
 }
 
-body.ble-map--edit .leaflet-marker-icon {
+body.ble-map--edit .leaflet-marker-icon:not(.ble-zone-vertex-icon) {
   touch-action: none;
 }
 
@@ -940,8 +940,9 @@ body.ble-map--edit .ble-dot--hold-armed {
   pointer-events: auto !important;
 }
 
-.ble-zone-vertex-icon.leaflet-marker-draggable {
-  cursor: grab;
+.ble-zone-vertex-icon.leaflet-marker-draggable,
+.ble-zone-vertex-icon.ble-zone-vertex--dragging {
+  cursor: grabbing;
 }
 
 .ble-zone-vertex-pin {

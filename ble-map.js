@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517o";
+  const BLE_MAP_BUILD = "20260517p";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -645,9 +645,117 @@
     const paneName = "ble-zone-vertex-pane";
     if (!map.getPane(paneName)) {
       const pane = map.createPane(paneName);
-      pane.style.zIndex = "720";
+      pane.style.zIndex = "850";
     }
     return paneName;
+  }
+
+  function clientPointToLatLng(map, clientX, clientY) {
+    const rect = map.getContainer().getBoundingClientRect();
+    const pt = L.point(clientX - rect.left, clientY - rect.top);
+    return map.containerPointToLatLng(pt);
+  }
+
+  function attachZoneVertexPointerDrag(handle, layer, zoneData, vertexIndex, map) {
+    let dragging = false;
+    let pointerId = null;
+
+    const syncRingFromHandle = () => {
+      const ringNow = polygonLatLngs(layer);
+      if (!ringNow[vertexIndex]) return;
+      ringNow[vertexIndex] = handle.getLatLng();
+      layer.setLatLngs(ringNow.map((p) => L.latLng(p.lat, p.lng)));
+    };
+
+    const finishDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      pointerId = null;
+      handle.getElement()?.classList.remove("ble-zone-vertex--dragging");
+      document.removeEventListener("mousemove", onDocMove, true);
+      document.removeEventListener("mouseup", onDocEnd, true);
+      document.removeEventListener("touchmove", onDocMove, { capture: true });
+      document.removeEventListener("touchend", onDocEnd, true);
+      document.removeEventListener("touchcancel", onDocEnd, true);
+      if (map.dragging) map.dragging.enable();
+      syncRingFromHandle();
+      const entry = bleZoneLayers.get(zoneData.id);
+      const pts = latLngsToPts(polygonLatLngs(layer));
+      if (entry) entry.data.pts = pts;
+      onZoneGeometryChanged(layer);
+    };
+
+    const onDocMove = (e) => {
+      if (!dragging) return;
+      let clientX;
+      let clientY;
+      if (e.type === "touchmove") {
+        const t =
+          [...(e.touches || [])].find((x) => x.identifier === pointerId) ||
+          [...(e.changedTouches || [])][0];
+        if (!t) return;
+        clientX = t.clientX;
+        clientY = t.clientY;
+      } else {
+        if (pointerId !== "mouse") return;
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      if (e.cancelable) e.preventDefault();
+      L.DomEvent.stopPropagation(e);
+      handle.setLatLng(clientPointToLatLng(map, clientX, clientY));
+      syncRingFromHandle();
+    };
+
+    const onDocEnd = (e) => {
+      if (!dragging) return;
+      if (e.type.startsWith("touch")) {
+        const ended = [...(e.changedTouches || [])].some((t) => t.identifier === pointerId);
+        if (!ended && e.type !== "touchcancel") return;
+      }
+      finishDrag();
+    };
+
+    const onPointerDown = (e) => {
+      if (!isZoneEditAllowed()) return;
+      if (e.type === "mousedown" && e.button !== 0) return;
+      L.DomEvent.stopPropagation(e);
+      if (e.cancelable) e.preventDefault();
+      dragging = true;
+      pointerId = e.type === "touchstart" ? e.touches[0]?.identifier ?? 0 : "mouse";
+      handle.getElement()?.classList.add("ble-zone-vertex--dragging");
+      if (map.dragging) map.dragging.disable();
+      layer.closeTooltip?.();
+      map.closeTooltip?.();
+      document.addEventListener("mousemove", onDocMove, true);
+      document.addEventListener("mouseup", onDocEnd, true);
+      document.addEventListener("touchmove", onDocMove, { passive: false, capture: true });
+      document.addEventListener("touchend", onDocEnd, true);
+      document.addEventListener("touchcancel", onDocEnd, true);
+    };
+
+    const bind = () => {
+      const el = handle.getElement();
+      if (!el || el.dataset.bleVertexDrag === "1") return;
+      el.dataset.bleVertexDrag = "1";
+      L.DomEvent.on(el, "mousedown", onPointerDown, handle);
+      el.addEventListener("touchstart", onPointerDown, { passive: false, capture: true });
+      L.DomEvent.on(el, "click", L.DomEvent.stopPropagation);
+    };
+
+    const unbind = () => {
+      const el = handle.getElement();
+      if (!el) return;
+      delete el.dataset.bleVertexDrag;
+      L.DomEvent.off(el, "mousedown", onPointerDown, handle);
+      el.removeEventListener("touchstart", onPointerDown, { capture: true });
+      L.DomEvent.off(el, "click", L.DomEvent.stopPropagation);
+      finishDrag();
+    };
+
+    handle.on("add", bind);
+    handle.on("remove", unbind);
+    if (handle.getElement()) bind();
   }
 
   function syncZoneVertexHandles(layer, zoneData) {
@@ -666,41 +774,19 @@
         icon: L.divIcon({
           className: "ble-zone-vertex-icon",
           html: '<div class="ble-zone-vertex-pin" aria-hidden="true"></div>',
-          iconSize: [26, 26],
-          iconAnchor: [13, 13],
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         }),
         pane: paneName,
         interactive: true,
-        draggable: true,
-        autoPan: true,
+        draggable: false,
         keyboard: false,
-        zIndexOffset: 20000,
+        zIndexOffset: 25000,
       });
 
-      const syncRingFromHandle = () => {
-        const ringNow = polygonLatLngs(layer);
-        ringNow[index] = handle.getLatLng();
-        layer.setLatLngs(ringNow.map((p) => L.latLng(p.lat, p.lng)));
-      };
-
-      handle.on("click", L.DomEvent.stopPropagation);
-      handle.on("mousedown touchstart", L.DomEvent.stopPropagation);
-      handle.on("dragstart", () => {
-        if (map.dragging) map.dragging.disable();
-        layer.closeTooltip?.();
-        map.closeTooltip?.();
-      });
-      handle.on("drag", syncRingFromHandle);
-      handle.on("dragend", () => {
-        if (map.dragging) map.dragging.enable();
-        syncRingFromHandle();
-        const entry = bleZoneLayers.get(zoneData.id);
-        const pts = latLngsToPts(polygonLatLngs(layer));
-        if (entry) entry.data.pts = pts;
-        onZoneGeometryChanged(layer);
-      });
-
+      attachZoneVertexPointerDrag(handle, layer, zoneData, index, map);
       handle.addTo(map);
+      handle.bringToFront?.();
       handles.push(handle);
     });
 
@@ -719,7 +805,9 @@
 
   function scheduleZoneVertexHandles(layer, zoneData) {
     syncZoneVertexHandles(layer, zoneData);
-    requestAnimationFrame(() => syncZoneVertexHandles(layer, zoneData));
+    requestAnimationFrame(() => {
+      if (bleSelectedZoneId === zoneData.id) syncZoneVertexHandles(layer, zoneData);
+    });
   }
 
   function onZoneGeometryChanged(layer) {
