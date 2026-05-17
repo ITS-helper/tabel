@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517v";
+  const BLE_MAP_BUILD = "20260517x";
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
   const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
 
