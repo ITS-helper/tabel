@@ -24,12 +24,14 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518g";
+  const BLE_MAP_BUILD = "20260518h";
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
   const BLE_FIELD_PHOTOS_STORE = "photos";
   const BLE_FIELD_PACK_KEY = "pack";
-  const BLE_FIELD_PHOTO_CONCURRENCY = 5;
+  const BLE_FIELD_PHOTO_MAX_BYTES = 2.5 * 1024 * 1024;
+  const BLE_FIELD_PHOTO_BATCH = 8;
+  const BLE_FIELD_YIELD_EVERY = 1;
   const BLE_DEFAULT_CENTER_BLE = "20";
   const BLE_DEFAULT_CENTER_ZOOM = 18;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
@@ -56,6 +58,29 @@
   const fieldPhotoBlobUrls = new Map();
   let fieldPackDownloadActive = false;
   let fieldPackMetaCache = null;
+  let fieldPackAbort = null;
+
+  function fieldPackConcurrency() {
+    return isCoarseMobile() ? 2 : 4;
+  }
+
+  function yieldToMain() {
+    return new Promise((r) => setTimeout(r, 0));
+  }
+
+  function formatFieldPackMb(bytes) {
+    if (!bytes) return "0 МБ";
+    return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+  }
+
+  function setFieldPackCancelVisible(show) {
+    const el = document.getElementById("mapFieldPackCancel");
+    if (el) el.hidden = !show;
+  }
+
+  function abortFieldPackDownload() {
+    if (fieldPackAbort) fieldPackAbort.abort();
+  }
   let bleClusterGroup = null;
 
   let bleMapFS = null;
@@ -1789,50 +1814,114 @@
 
   async function hydrateFieldPhotoBlobUrls() {
     const meta = await loadFieldPackMeta();
-    if (!meta?.photoCount) return 0;
-    revokeFieldPhotoBlobUrls();
-    try {
-      const db = await openFieldDb();
-      const pairs = await new Promise((resolve, reject) => {
-        const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readonly");
-        const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
-        const blobsReq = store.getAll();
-        blobsReq.onerror = () => reject(blobsReq.error);
-        blobsReq.onsuccess = () => {
-          const keysReq = store.getAllKeys();
-          keysReq.onerror = () => reject(keysReq.error);
-          keysReq.onsuccess = () => {
-            const keys = keysReq.result || [];
-            const blobs = blobsReq.result || [];
-            resolve(keys.map((url, i) => [url, blobs[i]]));
-          };
-        };
-      });
-      db.close();
-      let loaded = 0;
-      for (const [url, blob] of pairs) {
-        if (url && blob instanceof Blob) {
-          fieldPhotoBlobUrls.set(url, URL.createObjectURL(blob));
-          loaded++;
-        }
-      }
-      return loaded;
-    } catch (e) {
-      console.warn("[ble-map] field photos hydrate", e?.message || e);
-      return 0;
-    }
+    if (!meta?.photosOk) return 0;
+    return meta.photosOk;
   }
 
-  function collectPhotoUrlsFromRaw(raw) {
+  async function clearFieldPackPhotosDb() {
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readwrite");
+      const req = tx.objectStore(BLE_FIELD_PHOTOS_STORE).clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+  }
+
+  async function appendFieldPackPhotosBatch(entries) {
+    if (!entries.length) return;
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readwrite");
+      const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
+      for (const [url, blob] of entries) store.put(blob, url);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  async function commitFieldPackMeta(meta) {
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readwrite");
+      const req = tx.objectStore(BLE_FIELD_META_STORE).put(meta, BLE_FIELD_PACK_KEY);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    fieldPackMetaCache = meta;
+  }
+
+  function collectPhotoUrlsFromRaw(raw, opts = {}) {
+    const tagOnly = opts.tagOnly ?? isCoarseMobile();
     const urls = new Set();
     if (!Array.isArray(raw)) return [];
     for (const p of raw) {
       const tag = pickFirstUrl(p, ["ble_image_url", "bleImageUrl", "ble_image"]);
-      const place = pickFirstUrl(p, ["location_image_url", "locationImageUrl", "location_image"]);
       if (tag && !isPhotoUrlExpired(tag)) urls.add(tag);
-      if (place && !isPhotoUrlExpired(place)) urls.add(place);
+      if (!tagOnly) {
+        const place = pickFirstUrl(p, ["location_image_url", "locationImageUrl", "location_image"]);
+        if (place && !isPhotoUrlExpired(place)) urls.add(place);
+      }
     }
     return [...urls];
+  }
+
+  async function compressPhotoBlobForField(blob) {
+    if (!blob?.type?.startsWith("image/") || blob.size < 100 * 1024) return blob;
+    const maxSide = isCoarseMobile() ? 960 : 1280;
+    try {
+      const bmp = await createImageBitmap(blob);
+      const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height, 1));
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bmp.close();
+        return blob;
+      }
+      ctx.drawImage(bmp, 0, 0, w, h);
+      bmp.close();
+      const out = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.76));
+      return out && out.size < blob.size ? out : blob;
+    } catch {
+      return blob;
+    }
+  }
+
+  async function readFieldPhotoBlobFromDb(url) {
+    try {
+      const db = await openFieldDb();
+      const blob = await new Promise((resolve, reject) => {
+        const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readonly");
+        const req = tx.objectStore(BLE_FIELD_PHOTOS_STORE).get(url);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      db.close();
+      return blob instanceof Blob ? blob : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadFieldPhotoIntoImg(img, url) {
+    if (!img || !url) return false;
+    if (fieldPhotoBlobUrls.has(url)) {
+      img.src = fieldPhotoBlobUrls.get(url);
+      return true;
+    }
+    const blob = await readFieldPhotoBlobFromDb(url);
+    if (!blob) return false;
+    const blobUrl = URL.createObjectURL(blob);
+    fieldPhotoBlobUrls.set(url, blobUrl);
+    img.src = blobUrl;
+    return true;
   }
 
   async function ensureBleTokenForField() {
@@ -1907,36 +1996,13 @@
     }
   }
 
-  async function saveFieldPackToDb(meta, photoMap) {
-    const db = await openFieldDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction([BLE_FIELD_META_STORE, BLE_FIELD_PHOTOS_STORE], "readwrite");
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      const metaStore = tx.objectStore(BLE_FIELD_META_STORE);
-      const photoStore = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
-      metaStore.put(meta, BLE_FIELD_PACK_KEY);
-      const clearReq = photoStore.clear();
-      clearReq.onsuccess = () => {
-        for (const [url, blob] of photoMap.entries()) {
-          photoStore.put(blob, url);
-        }
-      };
-      clearReq.onerror = () => reject(clearReq.error);
-    });
-    db.close();
-    fieldPackMetaCache = meta;
-    revokeFieldPhotoBlobUrls();
-    for (const [url, blob] of photoMap.entries()) {
-      fieldPhotoBlobUrls.set(url, URL.createObjectURL(blob));
-    }
-  }
-
   async function downloadFieldPack() {
     if (fieldPackDownloadActive) return;
     const btn = document.getElementById("mapFieldPackBtn");
     fieldPackDownloadActive = true;
+    fieldPackAbort = new AbortController();
     if (btn) btn.disabled = true;
+    setFieldPackCancelVisible(true);
     setFieldPackStatus("Подготовка списка меток…", "busy");
     try {
       if (!navigator.onLine) {
@@ -1959,49 +2025,81 @@
         );
         return;
       }
-      const photoUrls = collectPhotoUrlsFromRaw(raw);
+      const tagOnly = isCoarseMobile();
+      const photoUrls = collectPhotoUrlsFromRaw(raw, { tagOnly });
       if (!photoUrls.length) {
         alert(
           "В ответе API нет актуальных ссылок на фото. Повторите позже или проверьте VPN. Пакет не сохранён — иначе в поле фото не откроются."
         );
         return;
       }
-      const photoMap = new Map();
+      if (tagOnly) {
+        const go = confirm(
+          `Скачать пакет для телефона:\n\n• ${raw.length} меток\n• ${photoUrls.length} фото (по 1 на метку, сжатие)\n\nЭто может занять 10–25 минут. Не сворачивайте вкладку.\n\nПродолжить?`
+        );
+        if (!go) return;
+      }
       let photosOk = 0;
       let photosFail = 0;
       let bytesTotal = 0;
       let done = 0;
       const total = photoUrls.length;
-      setFieldPackStatus(
-        total
-          ? `Скачивание фото: 0 / ${total}…`
-          : `Сохранение ${raw.length} меток (без фото)…`,
-        "busy"
-      );
+      const pendingBatch = [];
+      let flushChain = Promise.resolve();
+      const flushPendingBatch = () => {
+        if (!pendingBatch.length) return flushChain;
+        const chunk = pendingBatch.splice(0, pendingBatch.length);
+        flushChain = flushChain.then(() => appendFieldPackPhotosBatch(chunk));
+        return flushChain;
+      };
+      revokeFieldPhotoBlobUrls();
+      await clearFieldPackPhotosDb();
+      setFieldPackStatus(`Скачивание: 0 / ${total} · 0 МБ`, "busy");
       const queue = [...photoUrls];
-      const workers = Array.from(
-        { length: Math.min(BLE_FIELD_PHOTO_CONCURRENCY, queue.length || 1) },
-        async () => {
-          while (queue.length) {
-            const url = queue.shift();
-            if (!url) break;
-            try {
-              const blob = await fetchPhotoBlobForField(url);
-              photoMap.set(url, blob);
-              photosOk++;
-              bytesTotal += blob.size || 0;
-            } catch (e) {
+      const workers = Array.from({ length: fieldPackConcurrency() }, async () => {
+        while (queue.length) {
+          if (fieldPackAbort?.signal.aborted) break;
+          const url = queue.shift();
+          if (!url) break;
+          try {
+            let blob = await fetchPhotoBlobForField(url);
+            if (fieldPackAbort?.signal.aborted) break;
+            if (blob.size > BLE_FIELD_PHOTO_MAX_BYTES) {
+              console.warn("[ble-map] field photo skipped (too large)", blob.size);
               photosFail++;
-              console.warn("[ble-map] field photo", url.slice(0, 60), e?.message || e);
+              done++;
+              continue;
             }
-            done++;
-            if (done % 8 === 0 || done === total) {
-              setFieldPackStatus(`Скачивание фото: ${done} / ${total}…`, "busy");
+            blob = await compressPhotoBlobForField(blob);
+            if (fieldPackAbort?.signal.aborted) break;
+            pendingBatch.push([url, blob]);
+            if (pendingBatch.length >= BLE_FIELD_PHOTO_BATCH) {
+              await flushPendingBatch();
             }
+            photosOk++;
+            bytesTotal += blob.size || 0;
+          } catch (e) {
+            photosFail++;
+            console.warn("[ble-map] field photo", url.slice(0, 60), e?.message || e);
+          }
+          done++;
+          if (done % BLE_FIELD_YIELD_EVERY === 0 || done === total) {
+            setFieldPackStatus(
+              `Скачивание: ${done} / ${total} · ${formatFieldPackMb(bytesTotal)}`,
+              "busy"
+            );
+            await yieldToMain();
           }
         }
-      );
+      });
       await Promise.all(workers);
+      if (fieldPackAbort?.signal.aborted) {
+        await clearFieldPackPhotosDb();
+        setFieldPackStatus("Скачивание отменено", "busy");
+        return;
+      }
+      await flushPendingBatch();
+      await flushChain;
       const meta = {
         version: 1,
         companyId: cid,
@@ -2011,15 +2109,19 @@
         photosOk,
         photosFail,
         bytesTotal,
+        tagOnly,
         raw,
       };
       if (photosOk < 1) {
+        await clearFieldPackPhotosDb();
         alert(
           `Не удалось скачать ни одного фото (${photosFail} ошибок). Пакет не сохранён — проверьте VPN и повторите.`
         );
         return;
       }
-      await saveFieldPackToDb(meta, photoMap);
+      setFieldPackStatus("Запись пакета…", "busy");
+      await yieldToMain();
+      await commitFieldPackMeta(meta);
       setBleMapData(mergeBleMapDataFromRaw(raw));
       updateMapStats();
       renderBleMarkers();
@@ -2041,6 +2143,8 @@
       setFieldPackStatus("");
     } finally {
       fieldPackDownloadActive = false;
+      fieldPackAbort = null;
+      setFieldPackCancelVisible(false);
       if (btn) btn.disabled = false;
     }
   }
@@ -2052,7 +2156,7 @@
       return false;
     }
     setFieldPackStatus("Загрузка пакета для поля…", "busy");
-    await hydrateFieldPhotoBlobUrls();
+    await yieldToMain();
     if (!bleMap) initBleMap([53.038, 39.011], 15);
     bleCompanyId = meta.companyId || companyId;
     await applyBleListToMap(meta.raw, "");
@@ -2164,7 +2268,15 @@
       img.referrerPolicy = "no-referrer";
       const direct = url;
       const proxied = toBlePhotoProxyUrl(url);
-      img.src = photoSrcForDisplay(url);
+      const cached = fieldPhotoBlobUrls.get(url);
+      if (cached) {
+        img.src = cached;
+      } else {
+        void (async () => {
+          const fromPack = await loadFieldPhotoIntoImg(img, url);
+          if (!fromPack && img.isConnected) img.src = photoSrcForDisplay(url);
+        })();
+      }
       img.addEventListener("error", function onImgErr() {
         if (this.dataset.blePhotoTried === "both") return;
         if (this.src === proxied || this.dataset.blePhotoTried === "proxy") {
@@ -3213,6 +3325,9 @@
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
     document.getElementById("mapFieldPackBtn")?.addEventListener("click", () => void downloadFieldPack());
+    document.getElementById("mapFieldPackCancel")?.addEventListener("click", () => {
+      abortFieldPackDownload();
+    });
     document.getElementById("photoViewerOverlay")?.addEventListener("click", closePhotoViewer);
     document.getElementById("photoViewerClose")?.addEventListener("click", closePhotoViewer);
 

@@ -284,6 +284,27 @@ body {
   color: #1565c0;
 }
 
+.map-field-pack-cancel {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 10px 6px;
+  padding: 8px 12px;
+  font-family: Oswald, sans-serif;
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 8px;
+  border: 1px solid rgba(198, 40, 40, 0.35);
+  background: #ffebee;
+  color: #c62828;
+  cursor: pointer;
+}
+
+.map-field-pack-cancel[hidden] {
+  display: none !important;
+}
+
 .map-float-dock:has(.map-field-pack-status:not([hidden])) .map-toolbar {
   border-radius: 12px 12px 0 0;
 }
