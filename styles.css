@@ -2800,6 +2800,14 @@ html.app--blemap-tab {
 }
 
 @media (max-width: 768px) {
+  .app-nav--top {
+    display: none !important;
+  }
+
+  body.app--blemap-tab .header {
+    display: none !important;
+  }
+
   :root {
     --sched-scroll-offset: 148px;
     --stack-gap: 8px;

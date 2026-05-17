@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517e";
+  const BLE_MAP_BUILD = "20260517f";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -62,6 +62,27 @@
     return String(str).replace(/[&<>"']/g, (m) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]
     );
+  }
+
+  function attrEsc(str) {
+    return String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  }
+
+  function pickFirstUrl(obj, keys) {
+    if (!obj) return "";
+    for (const k of keys) {
+      const v = obj[k];
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  }
+
+  function mergeBleMapDataFromRaw(rawBle) {
+    const prevById = new Map(bleMapData.map((p) => [p.id, p]));
+    return rawBle.map((point) => {
+      const prev = point.id != null ? prevById.get(point.id) : null;
+      return classifyBle(point, prev);
+    });
   }
 
   function getBleToken() {
@@ -933,7 +954,7 @@
     setTimeout(() => bleMap.invalidateSize(), 200);
   }
 
-  function classifyBle(point) {
+  function classifyBle(point, prev) {
     const LOW = 15;
     const inspectionDays = 1;
     const now = new Date();
@@ -966,8 +987,12 @@
       isLowBattery,
       recordDt,
       status,
-      photoTag: point.ble_image_url || "",
-      photoPlace: point.location_image_url || "",
+      photoTag:
+        pickFirstUrl(point, ["ble_image_url", "bleImageUrl", "ble_image"]) || prev?.photoTag || "",
+      photoPlace:
+        pickFirstUrl(point, ["location_image_url", "locationImageUrl", "location_image"]) ||
+        prev?.photoPlace ||
+        "",
       routeId: point.bleRoute?.id ?? null,
       routeTitle: point.bleRoute?.title || "",
       zoneId: point.ble_zone_id ?? point.ble_zoneId ?? null,
@@ -1000,10 +1025,10 @@
   function makePopup(pt) {
     const photos = [pt.photoTag, pt.photoPlace].filter(Boolean);
     const photoHtml = photos.length
-      ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">${photos
+      ? `<div class="ble-popup-photos">${photos
           .map(
             (url) =>
-              `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="event.preventDefault();openPhotoViewer('${esc(url)}')" style="display:block;flex:1;min-width:120px;cursor:zoom-in;"><img src="${esc(url)}" style="width:100%;height:113px;object-fit:cover;border-radius:6px;border:1px solid #E8EDF2;" onerror="this.parentElement.style.display='none'"></a>`
+              `<a href="${attrEsc(url)}" class="ble-popup-photo-link" data-ble-photo="${attrEsc(url)}" target="_blank" rel="noopener noreferrer"><img class="ble-popup-photo" src="${attrEsc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></a>`
           )
           .join("")}</div>`
       : "";
@@ -1011,6 +1036,61 @@
       ? `<div style="color:#1565C0;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.routeTitle)}</div>`
       : "";
     return `<div style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${photoHtml}</div>`;
+  }
+
+  function popupFooterHtml(extra) {
+    return extra ? `<p class="ble-popup-footer">${extra}</p>` : "";
+  }
+
+  function getPointForPopup(pt) {
+    return bleMapData.find((p) => p.id === pt.id) || pt;
+  }
+
+  async function enrichPointPhotos(pt) {
+    if (!pt?.id) return pt;
+    let offline = false;
+    try {
+      offline = sessionStorage.getItem(BLE_OFFLINE_FIRST_KEY) === "1";
+    } catch {
+      /* ignore */
+    }
+    if (offline) return pt;
+    try {
+      const raw = await bleApiFetch(`/api/v1/ble/${pt.id}`);
+      const enriched = classifyBle(raw, pt);
+      const idx = bleMapData.findIndex((p) => p.id === enriched.id);
+      if (idx >= 0) bleMapData[idx] = enriched;
+      return enriched;
+    } catch {
+      return pt;
+    }
+  }
+
+  function attachMarkerPopup(marker, pt, extraFooter) {
+    const footer = popupFooterHtml(extraFooter);
+    const renderContent = (p) => makePopup(p) + footer;
+
+    marker.bindPopup(renderContent(getPointForPopup(pt)), { maxWidth: popupMaxWidth() });
+    marker.on("popupopen", async () => {
+      let current = getPointForPopup(pt);
+      if (!current.photoTag && !current.photoPlace) {
+        marker.setPopupContent(renderContent(current) + '<p class="ble-popup-loading">Загрузка фото…</p>');
+      }
+      current = await enrichPointPhotos(current);
+      marker.setPopupContent(renderContent(current));
+    });
+  }
+
+  function initBlePopupPhotoClicks() {
+    if (initBlePopupPhotoClicks.done) return;
+    initBlePopupPhotoClicks.done = true;
+    document.body.addEventListener("click", (e) => {
+      const link = e.target.closest("[data-ble-photo]");
+      if (!link) return;
+      e.preventDefault();
+      const url = link.getAttribute("data-ble-photo");
+      if (url) openPhotoViewer(url);
+    });
   }
 
   function makeClusterGroup() {
@@ -1254,10 +1334,10 @@
       }
     });
 
-    marker.bindPopup(
-      makePopup(pt) +
-        "<p style='margin:8px 0 0;font-size:12px;color:#546E7A'>Удержите 1 сек., затем перетащите</p>",
-      { maxWidth: popupMaxWidth() }
+    attachMarkerPopup(
+      marker,
+      pt,
+      "<span style='font-size:12px;color:#546E7A'>Удержите 1 сек., затем перетащите</span>"
     );
   }
 
@@ -1400,9 +1480,9 @@
     bleClusterGroup = makeClusterGroup();
     bleMapData.forEach((pt) => {
       if (!pointVisibleOnMap(pt, { statusFilter: bleMapFilter, query: q })) return;
-      L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
-        .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
-        .addTo(bleClusterGroup);
+      const marker = L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) });
+      attachMarkerPopup(marker, pt);
+      marker.addTo(bleClusterGroup);
     });
     bleMap.addLayer(bleClusterGroup);
   }
@@ -1421,9 +1501,9 @@
     bleClusterGroupFS = makeClusterGroup();
     bleMapData.forEach((pt) => {
       if (!pointVisibleOnMap(pt, { statusFilter: bleMapFSFilter, query: q })) return;
-      L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) })
-        .bindPopup(makePopup(pt), { maxWidth: popupMaxWidth() })
-        .addTo(bleClusterGroupFS);
+      const marker = L.marker([pt.lat, pt.lng], { icon: createBleIcon(pt) });
+      attachMarkerPopup(marker, pt);
+      marker.addTo(bleClusterGroupFS);
     });
     bleMapFS.addLayer(bleClusterGroupFS);
   }
@@ -1529,7 +1609,7 @@
     try {
       const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
       if (!Array.isArray(rawBle) || !rawBle.length) return;
-      bleMapData = rawBle.map(classifyBle);
+      bleMapData = mergeBleMapDataFromRaw(rawBle);
       updateMapStats();
       renderBleMarkers();
       try {
@@ -1567,7 +1647,7 @@
   }
 
   async function applyBleListToMap(rawBle, cacheNotice) {
-    bleMapData = rawBle.map(classifyBle);
+    bleMapData = mergeBleMapDataFromRaw(rawBle);
     updateMapStats();
     renderBleMarkers();
     if (bleCompanyId) {
@@ -1944,6 +2024,7 @@
       );
     }
     initEmbeddedChrome();
+    initBlePopupPhotoClicks();
     bindUi();
     loadBleMap();
     scheduleMapResize();
