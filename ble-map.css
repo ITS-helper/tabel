@@ -831,6 +831,11 @@ body.ble-map--edit .ble-dot--hold-armed {
 .ble-zone-vertex-icon {
   background: transparent !important;
   border: none !important;
+  pointer-events: auto !important;
+}
+
+.ble-zone-vertex-icon.leaflet-marker-draggable {
+  cursor: grab;
 }
 
 .ble-zone-vertex-pin {

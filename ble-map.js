@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517c";
+  const BLE_MAP_BUILD = "20260517d";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -50,7 +50,7 @@
   let bleCompanyId = null;
   let bleEditMode = false;
   let bleDirtyMarkers = new Map();
-  let bleDirtyZone = null;
+  const bleDirtyZones = new Map();
   let bleSelectedZoneId = null;
   let bleMarkerLayer = null;
   const bleZoneGroups = new WeakMap();
@@ -404,7 +404,21 @@
   }
 
   function hasUnsavedEdits() {
-    return bleDirtyMarkers.size > 0 || !!bleDirtyZone;
+    return bleDirtyMarkers.size > 0 || bleDirtyZones.size > 0;
+  }
+
+  function getZoneDisplayPts(z) {
+    const dirty = bleDirtyZones.get(Number(z.id));
+    return dirty ? dirty.pts : z.pts;
+  }
+
+  function markZoneDirty(zoneId, pts, name, description) {
+    bleDirtyZones.set(Number(zoneId), {
+      name: name ?? "",
+      description: description ?? null,
+      pts: pts.map((p) => [p[0], p[1]]),
+    });
+    updateEditBarState();
   }
 
   function isNarrowLayout() {
@@ -523,111 +537,6 @@
     return paneName;
   }
 
-  function attachZoneVertexPointerDrag(handle, layer, vertexIndex, zoneData, map) {
-    let dragActive = false;
-    let bound = false;
-    let activePointer = null;
-
-    const applyClient = (clientX, clientY) => {
-      const latlng = map.containerPointToLatLng(
-        map.mouseEventToContainerPoint({ clientX, clientY })
-      );
-      handle.setLatLng(latlng);
-      const ring = polygonLatLngs(layer);
-      ring[vertexIndex] = latlng;
-      layer.setLatLngs(ring.map((p) => L.latLng(p.lat, p.lng)));
-    };
-
-    const detachDocumentDrag = () => {
-      document.removeEventListener("touchmove", onDocMove, { capture: true });
-      document.removeEventListener("mousemove", onDocMove, true);
-      document.removeEventListener("touchend", onDocEnd, true);
-      document.removeEventListener("touchcancel", onDocEnd, true);
-      document.removeEventListener("mouseup", onDocEnd, true);
-    };
-
-    const finishDrag = () => {
-      if (!dragActive) return;
-      dragActive = false;
-      detachDocumentDrag();
-      if (map.dragging) map.dragging.enable();
-      const entry = bleZoneLayers.get(zoneData.id);
-      if (entry) entry.data.pts = latLngsToPts(polygonLatLngs(layer));
-      onZoneGeometryChanged({ layer });
-    };
-
-    const onDocMove = (e) => {
-      if (!dragActive) return;
-      let x;
-      let y;
-      if (e.type === "touchmove") {
-        const t = findTouch(e.touches, activePointer);
-        if (!t) return;
-        x = t.clientX;
-        y = t.clientY;
-      } else if (activePointer === "mouse") {
-        if (e.buttons === 0) return;
-        x = e.clientX;
-        y = e.clientY;
-      } else {
-        return;
-      }
-      if (e.cancelable) e.preventDefault();
-      L.DomEvent.stopPropagation(e);
-      applyClient(x, y);
-    };
-
-    const onDocEnd = (e) => {
-      if (e?.type === "touchend" || e?.type === "touchcancel") {
-        if (activePointer !== "mouse" && !touchEnded(e, activePointer)) return;
-      } else if (activePointer !== "mouse") {
-        return;
-      }
-      finishDrag();
-    };
-
-    const onStart = (e) => {
-      if (!isZoneEditAllowed()) return;
-      if (e.type === "mousedown" && e.button !== 0) return;
-      L.DomEvent.stopPropagation(e);
-      if (e.cancelable) e.preventDefault();
-      dragActive = true;
-      activePointer = e.type === "touchstart" ? e.touches[0]?.identifier ?? 0 : "mouse";
-      if (map.dragging) map.dragging.disable();
-      layer.closeTooltip?.();
-      map.closeTooltip?.();
-      const { x, y } = clientXYFromEvent(e);
-      applyClient(x, y);
-      document.addEventListener("touchmove", onDocMove, { capture: true, passive: false });
-      document.addEventListener("mousemove", onDocMove, true);
-      document.addEventListener("touchend", onDocEnd, true);
-      document.addEventListener("touchcancel", onDocEnd, true);
-      document.addEventListener("mouseup", onDocEnd, true);
-    };
-
-    const bind = () => {
-      const el = handle.getElement();
-      if (!el || bound) return;
-      bound = true;
-      L.DomEvent.on(el, "mousedown", onStart, handle);
-      el.addEventListener("touchstart", onStart, { passive: false, capture: true });
-    };
-
-    handle.on("add", () => {
-      bind();
-      setTimeout(bind, 0);
-    });
-    handle.on("remove", () => {
-      bound = false;
-      finishDrag();
-      const el = handle.getElement();
-      if (el) {
-        L.DomEvent.off(el, "mousedown", onStart, handle);
-        el.removeEventListener("touchstart", onStart, { capture: true });
-      }
-    });
-  }
-
   function syncZoneVertexHandles(layer, zoneData) {
     const map = layer?._map;
     if (!map || !isZoneEditAllowed() || !zoneData) return;
@@ -649,10 +558,35 @@
         }),
         pane: paneName,
         interactive: true,
+        draggable: true,
+        autoPan: true,
         keyboard: false,
         zIndexOffset: 20000,
       });
-      attachZoneVertexPointerDrag(handle, layer, index, zoneData, map);
+
+      const syncRingFromHandle = () => {
+        const ringNow = polygonLatLngs(layer);
+        ringNow[index] = handle.getLatLng();
+        layer.setLatLngs(ringNow.map((p) => L.latLng(p.lat, p.lng)));
+      };
+
+      handle.on("click", L.DomEvent.stopPropagation);
+      handle.on("mousedown touchstart", L.DomEvent.stopPropagation);
+      handle.on("dragstart", () => {
+        if (map.dragging) map.dragging.disable();
+        layer.closeTooltip?.();
+        map.closeTooltip?.();
+      });
+      handle.on("drag", syncRingFromHandle);
+      handle.on("dragend", () => {
+        if (map.dragging) map.dragging.enable();
+        syncRingFromHandle();
+        const entry = bleZoneLayers.get(zoneData.id);
+        const pts = latLngsToPts(polygonLatLngs(layer));
+        if (entry) entry.data.pts = pts;
+        onZoneGeometryChanged(layer);
+      });
+
       handle.addTo(map);
       handles.push(handle);
     });
@@ -666,32 +600,31 @@
     }
     bleZoneVertexByMap.set(map, { group: null, layer, zoneId: zoneData.id, handles });
     updateZoneEditHint(
-      `Вершин: ${ring.length} — тяните оранжевые точки на контуре зоны (не квадрат вокруг).`
+      `Вершин: ${ring.length} — тяните оранжевые точки. Повторный клик по зоне скрывает вершины.`
     );
   }
 
   function scheduleZoneVertexHandles(layer, zoneData) {
-    const run = () => syncZoneVertexHandles(layer, zoneData);
-    run();
-    requestAnimationFrame(run);
-    setTimeout(run, 80);
+    syncZoneVertexHandles(layer, zoneData);
+    requestAnimationFrame(() => syncZoneVertexHandles(layer, zoneData));
   }
 
-  function onZoneGeometryChanged(e) {
-    const layer = e.layer;
-    const meta = layer.zoneMeta;
+  function onZoneGeometryChanged(layer) {
+    const meta = layer?.zoneMeta;
     if (!meta) return;
     const entry = bleZoneLayers.get(meta.id);
-    bleDirtyZone = {
-      zoneId: meta.id,
-      name: entry?.data.name ?? meta.name,
-      description: entry?.data.description ?? meta.description,
-      layer,
-    };
-    updateEditBarState();
+    const pts = latLngsToPts(polygonLatLngs(layer));
+    if (entry) entry.data.pts = pts;
+    markZoneDirty(
+      meta.id,
+      pts,
+      entry?.data.name ?? meta.name,
+      entry?.data.description ?? meta.description
+    );
   }
 
   function revertZoneGeometry(zoneId) {
+    bleDirtyZones.delete(Number(zoneId));
     const orig = bleZoneData.find((z) => z.id === zoneId);
     const entry = bleZoneLayers.get(zoneId);
     if (entry && orig) {
@@ -700,13 +633,27 @@
     }
   }
 
+  function deselectZoneForEdit() {
+    bleSelectedZoneId = null;
+    disableAllZonePm();
+    resetZoneStyles();
+    syncZoneEditUiClasses();
+    updateZoneEditHint(
+      bleDirtyZones.size
+        ? "Вершины скрыты. Есть несохранённые зоны — «Сохранить»."
+        : ""
+    );
+    redrawMapLayers();
+    updateEditBarState();
+  }
+
   function selectZoneForEdit(zoneId) {
     if (!isZoneEditAllowed()) return;
     const id = Number(zoneId);
     if (!id) {
-      if (bleDirtyZone) revertZoneGeometry(bleDirtyZone.zoneId);
+      [...bleDirtyZones.keys()].forEach((zid) => revertZoneGeometry(zid));
+      bleDirtyZones.clear();
       bleSelectedZoneId = null;
-      bleDirtyZone = null;
       disableAllZonePm();
       resetZoneStyles();
       syncZoneEditUiClasses();
@@ -715,9 +662,9 @@
       updateEditBarState();
       return;
     }
-    if (bleDirtyZone && bleDirtyZone.zoneId !== id) {
-      revertZoneGeometry(bleDirtyZone.zoneId);
-      bleDirtyZone = null;
+    if (bleSelectedZoneId === id) {
+      deselectZoneForEdit();
+      return;
     }
     disableAllZonePm();
     bleSelectedZoneId = id;
@@ -730,21 +677,11 @@
     }
     const layer = entry.layer;
     const map = layer._map || getActiveMap();
-    const nVerts = polygonLatLngs(layer).length;
     scheduleZoneVertexHandles(layer, entry.data);
     if (map) {
       map.closePopup?.();
       map.closeTooltip?.();
     }
-    try {
-      const bounds = layer.getBounds?.();
-      if (bounds?.isValid?.()) map?.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
-    } catch {
-      /* ignore */
-    }
-    updateZoneEditHint(
-      `Вершин: ${nVerts} — тяните оранжевые точки на контуре (v${BLE_MAP_BUILD})`
-    );
     updateEditBarState();
   }
 
@@ -768,8 +705,8 @@
       point.lng = origLng;
     });
     bleDirtyMarkers.clear();
-    if (bleDirtyZone) revertZoneGeometry(bleDirtyZone.zoneId);
-    bleDirtyZone = null;
+    [...bleDirtyZones.keys()].forEach((zid) => revertZoneGeometry(zid));
+    bleDirtyZones.clear();
     disableAllZonePm();
     bleSelectedZoneId = null;
     resetZoneStyles();
@@ -804,23 +741,30 @@
     return entries.length;
   }
 
-  async function saveDirtyZone() {
-    if (!bleDirtyZone) return 0;
-    const { zoneId, name, description, layer } = bleDirtyZone;
-    const pts = latLngsToPts(polygonLatLngs(layer));
-    if (pts.length < 3) throw new Error("У зоны должно быть минимум 3 точки");
-    await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
-      name: name || `Зона ${zoneId}`,
-      description: description || null,
-      points: ptsToApiPoints(pts),
-    });
-    const z = bleZoneData.find((x) => x.id === zoneId);
-    if (z) z.pts = pts;
-    const entry = bleZoneLayers.get(zoneId);
-    if (entry) entry.data.pts = pts;
-    bleDirtyZone = null;
+  async function saveDirtyZones() {
+    if (!bleDirtyZones.size) return 0;
+    let saved = 0;
+    for (const [zoneId, dirty] of bleDirtyZones) {
+      const pts = dirty.pts;
+      if (pts.length < 3) throw new Error(`У зоны ${zoneId} должно быть минимум 3 точки`);
+      await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
+        name: dirty.name || `Зона ${zoneId}`,
+        description: dirty.description || null,
+        points: ptsToApiPoints(pts),
+      });
+      const z = bleZoneData.find((x) => x.id === zoneId);
+      if (z) z.pts = pts.map((p) => [...p]);
+      const entry = bleZoneLayers.get(zoneId);
+      if (entry) entry.data.pts = pts.map((p) => [...p]);
+      saved++;
+    }
+    bleDirtyZones.clear();
+    bleSelectedZoneId = null;
     disableAllZonePm();
-    return 1;
+    resetZoneStyles();
+    syncZoneEditUiClasses();
+    updateZoneEditHint("");
+    return saved;
   }
 
   async function saveAllEdits() {
@@ -831,12 +775,13 @@
     }
     try {
       const nMarkers = await saveDirtyMarkers();
-      const nZone = await saveDirtyZone();
+      const nZone = await saveDirtyZones();
       const parts = [];
       if (nMarkers) parts.push(`меток: ${nMarkers}`);
-      if (nZone) parts.push("зона");
+      if (nZone) parts.push(`зон: ${nZone}`);
       bleEditMapMsg = "";
       hideMapMsg();
+      redrawMapLayers();
       updateEditBarState();
     } catch (e) {
       showMapMsg("Ошибка сохранения: " + (e.message || e), "error");
@@ -866,7 +811,7 @@
       const mobile = isCoarseMobile();
       const confirmText = mobile
         ? "Режим редактирования меняет данные на сервере VSM.\n\n• Удержите метку 1 сек., затем перетащите\n\nПродолжить?"
-        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: нажмите зону, затем двигайте вершины\n\nПродолжить?";
+        : "Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: клик по зоне — вершины; снова клик — скрыть; «Сохранить» — записать все зоны\n\nПродолжить?";
       if (!opts.skipConfirm && !window.confirm(confirmText)) {
         return;
       }
@@ -879,7 +824,7 @@
       syncZoneEditUiClasses();
       bleEditMapMsg = isCoarseMobile()
         ? "Редактирование: удержите метку 1 сек., затем перетащите."
-        : "Метки: удержите 1 сек. Зоны: нажмите зону — останутся только её метки, тяните оранжевые точки по контуру.";
+        : "Метки: удержите 1 сек. Зоны: клик — вершины, снова клик — скрыть; можно править несколько зон, затем «Сохранить».";
       hideMapMsg();
     } else {
       disableAllZonePm();
@@ -915,7 +860,8 @@
       if (!z.id || z.pts.length < 3) return;
       const isSelected = bleSelectedZoneId === z.id;
       const dimmed = zoneFocused && !isSelected;
-      const layer = L.polygon(z.pts, {
+      const pts = getZoneDisplayPts(z);
+      const layer = L.polygon(pts, {
         color: z.color,
         opacity: dimmed ? 0.12 : 0.35,
         fillOpacity: dimmed ? 0.04 : forEdit ? 0.22 : 0.15,
