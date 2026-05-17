@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518f";
+  const BLE_MAP_BUILD = "20260518g";
   const BLE_FIELD_DB = "ww-ble-field-v1";
   const BLE_FIELD_META_STORE = "meta";
   const BLE_FIELD_PHOTOS_STORE = "photos";
@@ -1696,8 +1696,24 @@
     if (!url) return "";
     const local = fieldPhotoBlobUrls.get(url);
     if (local) return local;
-    if (isOfflineFirstMode() && isYandexPhotoUrl(url)) return toBlePhotoProxyUrl(url);
+    if (!navigator.onLine && isYandexPhotoUrl(url)) return toBlePhotoProxyUrl(url);
     return url;
+  }
+
+  async function fetchBleListLive(companyId) {
+    const cid = companyId ?? bleCompanyId;
+    if (!cid) return null;
+    try {
+      await ensureBleTokenForField();
+      const rawBle = await bleApiFetch(`/api/v1/map/ble/${cid}`);
+      if (Array.isArray(rawBle) && rawBle.length) {
+        bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: cid, live: true };
+        return rawBle;
+      }
+    } catch (e) {
+      console.warn("[ble-map] live BLE list", e?.message || e);
+    }
+    return null;
   }
 
   function revokeFieldPhotoBlobUrls() {
@@ -1868,6 +1884,14 @@
       }
       return;
     }
+    if (!meta.photosOk) {
+      setFieldPackStatus(
+        "Пакет без фото (устарел) — скачайте заново по Wi‑Fi с VPN",
+        "busy"
+      );
+      if (btn) btn.title = "Пересоздать пакет для поля (нужен VPN и API меток)";
+      return;
+    }
     const when = formatCacheAge(meta.savedAt);
     const mb = meta.bytesTotal ? ` · ~${(meta.bytesTotal / (1024 * 1024)).toFixed(0)} МБ` : "";
     const photos =
@@ -1927,17 +1951,21 @@
         return;
       }
       const cid = bleCompanyId || (await resolveCompanyId());
-      let raw = await refreshBleListSnapshot(cid, { forceFresh: true });
-      if (!raw?.length && bleListSnapshot?.raw?.length) raw = bleListSnapshot.raw;
+      bleListSnapshot = null;
+      const raw = await fetchBleListLive(cid);
       if (!raw?.length) {
-        const off = await fetchBleListOffline(cid);
-        raw = off?.data;
-      }
-      if (!raw?.length) {
-        alert("Нет данных меток для скачивания.");
+        alert(
+          "Не удалось загрузить метки с API (нужен интернет и доступ к API, часто VPN). Пакет не сохранён."
+        );
         return;
       }
       const photoUrls = collectPhotoUrlsFromRaw(raw);
+      if (!photoUrls.length) {
+        alert(
+          "В ответе API нет актуальных ссылок на фото. Повторите позже или проверьте VPN. Пакет не сохранён — иначе в поле фото не откроются."
+        );
+        return;
+      }
       const photoMap = new Map();
       let photosOk = 0;
       let photosFail = 0;
@@ -1985,16 +2013,20 @@
         bytesTotal,
         raw,
       };
-      await saveFieldPackToDb(meta, photoMap);
-      try {
-        sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
-      } catch {
-        /* ignore */
+      if (photosOk < 1) {
+        alert(
+          `Не удалось скачать ни одного фото (${photosFail} ошибок). Пакет не сохранён — проверьте VPN и повторите.`
+        );
+        return;
       }
+      await saveFieldPackToDb(meta, photoMap);
+      setBleMapData(mergeBleMapDataFromRaw(raw));
+      updateMapStats();
+      renderBleMarkers();
       await refreshFieldPackChrome();
       alert(
         `Пакет для поля сохранён.\n\nМеток: ${raw.length}\nФото: ${photosOk} из ${total}` +
-          (photosFail ? ` (${photosFail} не скачались — при открытии метки попробуйте снова по Wi‑Fi)` : "") +
+          (photosFail ? ` (${photosFail} не скачались)` : "") +
           `\n\nВ поле без связи откройте карту — метки и скачанные фото будут доступны. Подложка спутника без интернета может не отображаться.`
       );
     } catch (e) {
@@ -2046,18 +2078,14 @@
     return !navigator.onLine;
   }
 
-  async function fetchBleListForPhotos(companyId) {
+  async function fetchBleListForPhotos(companyId, opts = {}) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return null;
-    try {
-      const rawBle = await bleApiFetch(`/api/v1/map/ble/${cid}`);
-      if (Array.isArray(rawBle) && rawBle.length) {
-        bleListSnapshot = { at: Date.now(), raw: rawBle, companyId: cid, live: true };
-        return rawBle;
-      }
-    } catch (e) {
-      console.warn("[ble-map] photo list API", e?.message || e);
+    if (opts.apiOnly) {
+      return fetchBleListLive(cid);
     }
+    const live = await fetchBleListLive(cid);
+    if (live?.length) return live;
     try {
       const cached = await fetchBleListCached(cid);
       if (cached?.data?.length) {
@@ -2079,16 +2107,17 @@
   async function refreshBleListSnapshot(companyId, opts = {}) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return null;
-    if (!opts.forceFresh) {
-      const snap = bleListSnapshot;
-      if (
-        snap?.live &&
-        snap?.raw?.length &&
-        snap.companyId === cid &&
-        Date.now() - snap.at < BLE_LIST_SNAPSHOT_MS
-      ) {
-        return snap.raw;
-      }
+    if (opts.forceFresh) {
+      return fetchBleListForPhotos(cid, { apiOnly: true });
+    }
+    const snap = bleListSnapshot;
+    if (
+      snap?.live &&
+      snap?.raw?.length &&
+      snap.companyId === cid &&
+      Date.now() - snap.at < BLE_LIST_SNAPSHOT_MS
+    ) {
+      return snap.raw;
     }
     return fetchBleListForPhotos(cid);
   }
@@ -2113,8 +2142,10 @@
     container.innerHTML = "";
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) {
-      container.innerHTML =
-        '<p class="ble-popup-loading">Фото недоступно. Нажмите ↺ на карте — подтянутся свежие ссылки.</p>';
+      const hint = navigator.onLine
+        ? "Фото недоступно. Нажмите ↺ на карте (нужен доступ к API меток, часто VPN) или «Скачать для поля» по Wi‑Fi."
+        : "Фото не в пакете для поля. Скачайте пакет по Wi‑Fi или откройте метку при наличии сети.";
+      container.innerHTML = `<p class="ble-popup-loading">${hint}</p>`;
       return;
     }
     const wrap = document.createElement("div");
@@ -2165,9 +2196,15 @@
   async function enrichPointPhotos(pt, opts = {}) {
     if (!pt?.id || !bleCompanyId) return pt;
     try {
-      const raw = await refreshBleListSnapshot(bleCompanyId, {
-        forceFresh: !!opts.forceFresh,
-      });
+      let raw = null;
+      if (opts.forceFresh && navigator.onLine) {
+        raw = await fetchBleListLive(bleCompanyId);
+      }
+      if (!raw) {
+        raw = await refreshBleListSnapshot(bleCompanyId, {
+          forceFresh: !!opts.forceFresh,
+        });
+      }
       if (!raw) return pt;
       const found = findRawBlePoint(raw, pt);
       if (!found) return pt;
@@ -2195,16 +2232,22 @@
         ?.getElement()
         ?.querySelector(".ble-popup-photos-slot");
       const mustRefresh = needsPhotoRefresh(current);
-      if (!mustRefresh && (current.photoTag || current.photoPlace)) {
-        renderPhotosInto(slot, current);
-        return;
-      }
-      if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
-      current = await enrichPointPhotos(current, { forceFresh: mustRefresh });
-      if (!current.photoTag && !current.photoPlace) {
+      try {
+        if (!mustRefresh && (current.photoTag || current.photoPlace)) {
+          renderPhotosInto(slot, current);
+          return;
+        }
+        if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
         current = await enrichPointPhotos(current, { forceFresh: true });
+        if (!current.photoTag && !current.photoPlace && navigator.onLine) {
+          current = await enrichPointPhotos(current, { forceFresh: true });
+        }
+      } catch (e) {
+        console.warn("[ble-map] popup photos", e?.message || e);
+        current = getPointForPopup(pt);
+      } finally {
+        renderPhotosInto(slot, getPointForPopup(pt));
       }
-      renderPhotosInto(slot, current);
     });
   }
 
@@ -2893,6 +2936,13 @@
     const placeholder = document.getElementById("mapPlaceholder");
     if (placeholder) placeholder.textContent = "Загрузка карты…";
     try {
+      if (navigator.onLine) {
+        try {
+          sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
       let center = [53.038, 39.011];
       let zoom = 15;
       initBleMap(center, zoom);
