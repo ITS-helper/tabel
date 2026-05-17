@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260517p";
+  const BLE_MAP_BUILD = "20260517q";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -625,10 +625,13 @@
     const state = bleZoneVertexByMap.get(targetMap);
     if (!state) return;
     try {
-      state.handles?.forEach((h) => {
-        h.off();
+    state.handles?.forEach((h) => {
+      try {
         if (h._map) h._map.removeLayer(h);
-      });
+      } catch {
+        /* ignore */
+      }
+    });
       if (state.group?._map) targetMap.removeLayer(state.group);
     } catch {
       /* ignore */
@@ -670,13 +673,17 @@
     const finishDrag = () => {
       if (!dragging) return;
       dragging = false;
+      const el = handle.getElement();
+      try {
+        if (el?.hasPointerCapture?.(pointerId)) el.releasePointerCapture(pointerId);
+      } catch {
+        /* ignore */
+      }
       pointerId = null;
-      handle.getElement()?.classList.remove("ble-zone-vertex--dragging");
-      document.removeEventListener("mousemove", onDocMove, true);
-      document.removeEventListener("mouseup", onDocEnd, true);
-      document.removeEventListener("touchmove", onDocMove, { capture: true });
-      document.removeEventListener("touchend", onDocEnd, true);
-      document.removeEventListener("touchcancel", onDocEnd, true);
+      el?.classList.remove("ble-zone-vertex--dragging");
+      document.removeEventListener("pointermove", onDocMove, true);
+      document.removeEventListener("pointerup", onDocEnd, true);
+      document.removeEventListener("pointercancel", onDocEnd, true);
       if (map.dragging) map.dragging.enable();
       syncRingFromHandle();
       const entry = bleZoneLayers.get(zoneData.id);
@@ -686,71 +693,60 @@
     };
 
     const onDocMove = (e) => {
-      if (!dragging) return;
-      let clientX;
-      let clientY;
-      if (e.type === "touchmove") {
-        const t =
-          [...(e.touches || [])].find((x) => x.identifier === pointerId) ||
-          [...(e.changedTouches || [])][0];
-        if (!t) return;
-        clientX = t.clientX;
-        clientY = t.clientY;
-      } else {
-        if (pointerId !== "mouse") return;
-        clientX = e.clientX;
-        clientY = e.clientY;
-      }
+      if (!dragging || e.pointerId !== pointerId) return;
       if (e.cancelable) e.preventDefault();
       L.DomEvent.stopPropagation(e);
-      handle.setLatLng(clientPointToLatLng(map, clientX, clientY));
+      handle.setLatLng(clientPointToLatLng(map, e.clientX, e.clientY));
       syncRingFromHandle();
     };
 
     const onDocEnd = (e) => {
-      if (!dragging) return;
-      if (e.type.startsWith("touch")) {
-        const ended = [...(e.changedTouches || [])].some((t) => t.identifier === pointerId);
-        if (!ended && e.type !== "touchcancel") return;
-      }
+      if (!dragging || e.pointerId !== pointerId) return;
       finishDrag();
     };
 
     const onPointerDown = (e) => {
       if (!isZoneEditAllowed()) return;
-      if (e.type === "mousedown" && e.button !== 0) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       L.DomEvent.stopPropagation(e);
       if (e.cancelable) e.preventDefault();
       dragging = true;
-      pointerId = e.type === "touchstart" ? e.touches[0]?.identifier ?? 0 : "mouse";
-      handle.getElement()?.classList.add("ble-zone-vertex--dragging");
+      pointerId = e.pointerId;
+      const el = handle.getElement();
+      try {
+        el?.setPointerCapture?.(pointerId);
+      } catch {
+        /* ignore */
+      }
+      el?.classList.add("ble-zone-vertex--dragging");
       if (map.dragging) map.dragging.disable();
       layer.closeTooltip?.();
       map.closeTooltip?.();
-      document.addEventListener("mousemove", onDocMove, true);
-      document.addEventListener("mouseup", onDocEnd, true);
-      document.addEventListener("touchmove", onDocMove, { passive: false, capture: true });
-      document.addEventListener("touchend", onDocEnd, true);
-      document.addEventListener("touchcancel", onDocEnd, true);
+      document.addEventListener("pointermove", onDocMove, true);
+      document.addEventListener("pointerup", onDocEnd, true);
+      document.addEventListener("pointercancel", onDocEnd, true);
     };
 
     const bind = () => {
       const el = handle.getElement();
       if (!el || el.dataset.bleVertexDrag === "1") return;
       el.dataset.bleVertexDrag = "1";
-      L.DomEvent.on(el, "mousedown", onPointerDown, handle);
-      el.addEventListener("touchstart", onPointerDown, { passive: false, capture: true });
+      const onDown = (e) => onPointerDown(e);
+      el._bleVertexOnDown = onDown;
+      el.addEventListener("pointerdown", onDown, { capture: true });
       L.DomEvent.on(el, "click", L.DomEvent.stopPropagation);
     };
 
     const unbind = () => {
       const el = handle.getElement();
       if (!el) return;
+      if (el._bleVertexOnDown) {
+        el.removeEventListener("pointerdown", el._bleVertexOnDown, { capture: true });
+        delete el._bleVertexOnDown;
+      }
       delete el.dataset.bleVertexDrag;
-      L.DomEvent.off(el, "mousedown", onPointerDown, handle);
-      el.removeEventListener("touchstart", onPointerDown, { capture: true });
       L.DomEvent.off(el, "click", L.DomEvent.stopPropagation);
-      finishDrag();
+      if (dragging) finishDrag();
     };
 
     handle.on("add", bind);
@@ -770,18 +766,18 @@
     const handles = [];
 
     ring.forEach((ll, index) => {
-      const handle = L.marker([ll.lat, ll.lng], {
-        icon: L.divIcon({
-          className: "ble-zone-vertex-icon",
-          html: '<div class="ble-zone-vertex-pin" aria-hidden="true"></div>',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-        }),
+      const handle = L.circleMarker([ll.lat, ll.lng], {
+        radius: 11,
+        color: "#ffffff",
+        weight: 3,
+        opacity: 1,
+        fillColor: "#ff6f00",
+        fillOpacity: 1,
         pane: paneName,
         interactive: true,
+        bubblingMouseEvents: false,
         draggable: false,
-        keyboard: false,
-        zIndexOffset: 25000,
+        className: "ble-zone-vertex-handle",
       });
 
       attachZoneVertexPointerDrag(handle, layer, zoneData, index, map);
@@ -995,11 +991,17 @@
     }
   }
 
-  function redrawMapLayers() {
-    renderBleMarkers();
-    if (isMapFullscreenOpen()) renderFsMarkers();
-    if (bleMap) drawZones(bleMap);
-    if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
+  function redrawMapLayers(opts = {}) {
+    const drawMarkers = opts.markers !== false;
+    const drawZonesFlag = opts.zones !== false;
+    if (drawMarkers) {
+      renderBleMarkers();
+      if (isMapFullscreenOpen()) renderFsMarkers();
+    }
+    if (drawZonesFlag) {
+      if (bleMap) drawZones(bleMap);
+      if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
+    }
   }
 
   function setEditMode(on, opts = {}) {
@@ -1101,7 +1103,7 @@
       zoomControl: false,
       tapTolerance: 18,
       bounceAtZoomLimits: false,
-      preferCanvas: true,
+      preferCanvas: false,
       fadeAnimation: false,
       markerZoomAnimation: !mobile,
       wheelPxPerZoomLevel: 80,
@@ -1796,7 +1798,7 @@
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
     });
     bleRouteFilterApplying = false;
-    redrawMapLayers();
+    redrawMapLayers({ zones: false });
   }
 
   window.setBleMapRouteFilter = setBleMapRouteFilter;
@@ -1915,7 +1917,7 @@
     bleMapFilter = allowed;
     bleMapFSFilter = allowed;
     syncFilterUi(allowed);
-    redrawMapLayers();
+    redrawMapLayers({ zones: false });
   }
 
   window.setBleMapFilter = setBleMapFilter;
@@ -2212,7 +2214,7 @@
         zoomControl: false,
         tapTolerance: 18,
         bounceAtZoomLimits: false,
-        preferCanvas: true,
+        preferCanvas: false,
         fadeAnimation: false,
         markerZoomAnimation: !fsMobile,
         wheelPxPerZoomLevel: 80,

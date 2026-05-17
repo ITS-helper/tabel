@@ -627,6 +627,22 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
+  align-items: stretch;
+  max-width: 100%;
+}
+
+.map-float-dock .map-zone-edit-hint:not([hidden]) {
+  margin: 0;
+  padding: 4px 10px 6px;
+  border-radius: 0 0 12px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(21, 101, 192, 0.08);
+  border-top: none;
+  box-shadow: 0 4px 12px rgba(21, 101, 192, 0.1);
+}
+
+.map-float-dock:has(.map-zone-edit-hint:not([hidden])) .map-toolbar {
+  border-radius: 12px 12px 0 0;
 }
 
 .map-toolbar {
@@ -766,9 +782,48 @@ body {
     box-sizing: border-box;
   }
 
-  .map-zone-edit-hint {
-    flex: 1 1 100%;
-    order: 10;
+}
+
+@media (min-width: 769px) {
+  body.ble-map--edit .map-toolbar {
+    display: grid;
+    grid-template-columns: 148px minmax(0, 1fr) 172px;
+    grid-template-areas: "search actions route";
+    gap: 6px 8px;
+    align-items: center;
+  }
+
+  body.ble-map--edit .map-toolbar-row--fields {
+    display: contents;
+  }
+
+  body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar {
+    grid-area: search;
+    order: unset;
+    width: 100%;
+    flex: none;
+  }
+
+  body.ble-map--edit .map-toolbar-row--actions {
+    grid-area: actions;
+    order: unset;
+    flex: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body.ble-map--edit .map-route-field--toolbar {
+    grid-area: route;
+    order: unset;
+    width: 100%;
+    flex: none;
+  }
+
+  body.ble-map--edit .map-edit-tools--dock {
+    flex-wrap: nowrap;
   }
 }
 
@@ -934,42 +989,22 @@ body.ble-map--edit .ble-dot--hold-armed {
 }
 
 /* Вершины зоны */
-.ble-zone-vertex-icon {
-  background: transparent !important;
-  border: none !important;
+.ble-zone-vertex-handle {
+  cursor: grab;
   pointer-events: auto !important;
 }
 
-.ble-zone-vertex-icon.leaflet-marker-draggable,
-.ble-zone-vertex-icon.ble-zone-vertex--dragging {
+.ble-zone-vertex-handle.ble-zone-vertex--dragging {
   cursor: grabbing;
-}
-
-.ble-zone-vertex-pin {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #ff6f00;
-  border: 3px solid #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  cursor: grab;
-  pointer-events: auto;
-}
-
-.ble-zone-vertex-pin:active {
-  cursor: grabbing;
-  transform: scale(1.15);
-  background: #e65100;
 }
 
 .map-zone-edit-hint {
-  flex: 1 1 100%;
   font-size: 11px;
   line-height: 1.35;
   color: #e65100;
   font-weight: 600;
-  padding: 0 2px;
   min-width: 0;
+  margin: 0;
 }
 
 body.ble-map--zone-focus .leaflet-pm-toolbar,
