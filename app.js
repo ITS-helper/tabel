@@ -558,13 +558,11 @@ function openTeamDialog() {
 
 function bindTeamDialog() {
   const dlg = document.getElementById("teamDialog");
-  const btn = document.getElementById("teamDialogBtn");
   const done = document.getElementById("teamDialogDone");
   const dismiss = document.getElementById("teamDialogDismiss");
   const resetAssign = document.getElementById("teamAssignReset");
   const resetTitles = document.getElementById("teamTitlesReset");
 
-  if (btn) btn.addEventListener("click", () => openTeamDialog());
   if (done)
     done.addEventListener("click", () => {
       if (isAdminAuth()) {
@@ -1183,7 +1181,7 @@ function canEditEmployeeSchedule(empName) {
 
 function scheduleEditHintForUser() {
   const s = getAuthSession();
-  if (!s) return "Войдите в режиме «Редактирование».";
+  if (!s) return "Войдите в систему.";
   if (s.role === "admin") return "Редактирование всех строк (администратор).";
   if (sectionIdForEmployee(s.employeeName) === "ust") {
     return "Усть-Луга: график редактирует только администратор.";
@@ -1193,7 +1191,7 @@ function scheduleEditHintForUser() {
 
 function scheduleEditDeniedMessage() {
   const s = getAuthSession();
-  if (!s) return "Войдите в режиме «Редактирование».";
+  if (!s) return "Войдите в систему.";
   if (s.role === "admin") return "";
   if (sectionIdForEmployee(s.employeeName) === "ust") {
     return "Сотрудники Усть-Луги не редактируют график. Изменения вносит администратор.";
@@ -1367,42 +1365,137 @@ function changePasswordErrorMessageRu(errCode) {
   }
 }
 
-function syncAuthChrome() {
-  const badge = document.getElementById("authUserBadge");
-  const logoutBtn = document.getElementById("authLogoutBtn");
-  const changePwdBtn = document.getElementById("authChangePwdBtn");
-  const s = getAuthSession();
-  if (!badge || !logoutBtn) return;
-  if (!s) {
-    badge.hidden = true;
-    badge.textContent = "";
-    badge.classList.remove("auth-badge--clickable");
-    logoutBtn.hidden = true;
-    if (changePwdBtn) changePwdBtn.hidden = true;
+let authMenuOpen = false;
+
+function closeAuthMenu() {
+  const panel = document.getElementById("authMenuPanel");
+  const trigger = document.getElementById("authMenuTrigger");
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  authMenuOpen = false;
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+}
+
+function openAuthMenu() {
+  const panel = document.getElementById("authMenuPanel");
+  const trigger = document.getElementById("authMenuTrigger");
+  if (!panel || !getAuthSession()) return;
+  panel.hidden = false;
+  authMenuOpen = true;
+  if (trigger) trigger.setAttribute("aria-expanded", "true");
+}
+
+function syncModeWithAuth() {
+  if (isArchiveView()) {
+    if (state.mode !== "view") {
+      state.mode = "view";
+      document.body.dataset.mode = "view";
+      closeScheduleCellPicker();
+      render();
+    }
     return;
   }
-  logoutBtn.hidden = false;
-  if (changePwdBtn) changePwdBtn.hidden = false;
-  badge.hidden = false;
-  badge.classList.add("auth-badge--clickable");
-  if (!badge.dataset.wwPwdBound) {
-    badge.dataset.wwPwdBound = "1";
-    badge.addEventListener("click", () => {
-      if (getAuthSession()) openChangePasswordDialog({ required: false });
-    });
+  const s = getAuthSession();
+  if (s && !s.mustChangePassword) {
+    if (state.mode !== "edit") applyMode("edit");
+  } else if (!s && state.mode !== "view") {
+    applyMode("view");
   }
-  const pwdHint = " Клик по бейджу или «Сменить пароль» — смена пароля.";
+}
+
+function syncAuthChrome() {
+  const label = document.getElementById("authMenuLabel");
+  const chevron = document.getElementById("authMenuChevron");
+  const trigger = document.getElementById("authMenuTrigger");
+  const logoutBtn = document.getElementById("authLogoutBtn");
+  const changePwdBtn = document.getElementById("authChangePwdBtn");
+  const exportBtn = document.getElementById("exportBtn");
+  const teamBtn = document.getElementById("teamDialogBtn");
+  const sep = document.getElementById("authMenuSep");
+  const s = getAuthSession();
+  if (!label || !trigger) return;
+  closeAuthMenu();
+  if (!s) {
+    label.textContent = "Войти";
+    trigger.title = "Войти для редактирования табеля";
+    trigger.classList.remove("auth-menu__trigger--signed-in");
+    if (chevron) chevron.hidden = true;
+    if (exportBtn) exportBtn.hidden = true;
+    if (teamBtn) teamBtn.hidden = true;
+    if (sep) sep.hidden = true;
+    if (logoutBtn) logoutBtn.hidden = true;
+    if (changePwdBtn) changePwdBtn.hidden = true;
+    syncModeWithAuth();
+    return;
+  }
+  trigger.classList.add("auth-menu__trigger--signed-in");
+  if (chevron) chevron.hidden = false;
+  if (exportBtn) exportBtn.hidden = false;
+  if (teamBtn) teamBtn.hidden = false;
+  if (sep) sep.hidden = false;
+  if (logoutBtn) logoutBtn.hidden = false;
+  if (changePwdBtn) changePwdBtn.hidden = false;
+  const menuHint = " Меню: экспорт, объекты, смена пароля, выход.";
   if (s.role === "admin") {
-    badge.textContent = "Админ";
-    badge.title = `Вход: ${s.login}. Редактирование всех строк и настроек объектов.${pwdHint}`;
+    label.textContent = "Админ";
+    trigger.title = `Вход: ${s.login}. Редактирование всех строк и настроек объектов.${menuHint}`;
   } else {
     const short = s.employeeName ? s.employeeName.split(" ")[0] : s.login;
-    badge.textContent = short;
+    label.textContent = short;
     const schedHint =
       sectionIdForEmployee(s.employeeName) === "ust"
         ? "График только для просмотра (Усть-Луга)."
         : "Можно менять только свою строку (пилотные проекты).";
-    badge.title = `Вход: ${s.employeeName || s.login}. ${schedHint}${pwdHint}`;
+    trigger.title = `Вход: ${s.employeeName || s.login}. ${schedHint}${menuHint}`;
+  }
+  syncModeWithAuth();
+}
+
+function bindAuthMenu() {
+  const trigger = document.getElementById("authMenuTrigger");
+  const panel = document.getElementById("authMenuPanel");
+  if (!trigger || trigger.dataset.bound === "1") return;
+  trigger.dataset.bound = "1";
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!getAuthSession()) {
+      openAuthLoginDialog();
+      return;
+    }
+    if (authMenuOpen) closeAuthMenu();
+    else openAuthMenu();
+  });
+
+  panel?.addEventListener("click", (e) => e.stopPropagation());
+
+  if (!document.body.dataset.authMenuDocBound) {
+    document.body.dataset.authMenuDocBound = "1";
+    document.addEventListener(
+      "click",
+      () => {
+        closeAuthMenu();
+      },
+      true
+    );
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeAuthMenu();
+    });
+  }
+
+  const exportBtn = document.getElementById("exportBtn");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      closeAuthMenu();
+      exportFor1C();
+    });
+  }
+  const teamBtn = document.getElementById("teamDialogBtn");
+  if (teamBtn) {
+    teamBtn.addEventListener("click", () => {
+      closeAuthMenu();
+      openTeamDialog();
+    });
   }
 }
 
@@ -1412,9 +1505,6 @@ function applyMode(mode) {
     return;
   }
   state.mode = mode;
-  document.querySelectorAll(".segmented__btn").forEach((b) =>
-    b.classList.toggle("is-active", b.dataset.mode === state.mode)
-  );
   document.body.dataset.mode = state.mode;
   if (mode === "view") closeScheduleCellPicker();
   render();
@@ -2032,9 +2122,9 @@ function canEditZonePlacement() {
 
 function getZonePlacementLockHint() {
   if (isArchiveView()) return "В архиве расстановку менять нельзя.";
-  if (state.mode !== "edit") return "Включите режим «Редактирование» в шапке страницы.";
+  if (state.mode !== "edit") return "Войдите в систему, чтобы редактировать расстановку.";
   if (!isEditSessionUnlocked()) {
-    return "Нажмите «Редактирование» и войдите (логин и пароль из Supabase).";
+    return "Войдите в систему (логин и пароль из Supabase).";
   }
   return "";
 }
@@ -2620,7 +2710,9 @@ function init() {
   bindControls();
   bindAuthLoginDialog();
   bindChangePasswordDialog();
+  bindAuthMenu();
   ensureAuthPasswordFlowOnLoad();
+  syncModeWithAuth();
   bindStickyTableClick();
   bindTeamDialog();
   bindCollapsiblePanels();
@@ -2820,14 +2912,7 @@ function bindControls() {
     state.legendFilterCodes.clear();
     state.legendIncludeNoShifts = false;
     persistLegendIncludeNoShifts();
-    if (isArchiveView() && state.mode === "edit") {
-      state.mode = "view";
-      document.querySelectorAll(".segmented__btn").forEach((b) =>
-        b.classList.toggle("is-active", b.dataset.mode === state.mode)
-      );
-      document.body.dataset.mode = state.mode;
-      closeScheduleCellPicker();
-    }
+    syncModeWithAuth();
     render();
   });
 
@@ -2835,29 +2920,13 @@ function bindControls() {
     applyTheme(state.theme === "dark" ? "light" : "dark");
   });
 
-  document.querySelectorAll(".segmented__btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const m = btn.dataset.mode;
-      if (m === "edit" && isArchiveView()) {
-        alert("В архиве доступен только просмотр. Переключитесь на месяц текущего года.");
-        return;
-      }
-      if (m === "edit" && !isEditSessionUnlocked()) {
-        openAuthLoginDialog();
-        return;
-      }
-      applyMode(m);
-    });
-  });
   document.body.dataset.mode = state.mode;
-
-  document.getElementById("exportBtn").addEventListener("click", exportFor1C);
 
   const logoutBtn = document.getElementById("authLogoutBtn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
+      closeAuthMenu();
       clearAuthSession();
-      if (state.mode === "edit") applyMode("view");
     });
   }
 

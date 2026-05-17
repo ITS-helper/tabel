@@ -54,23 +54,35 @@
           <button type="button" class="btn btn--ghost" id="themeToggle" title="Тёмная тема" aria-pressed="false">
             <span class="icon-moon" aria-hidden="true"></span>
           </button>
-          <span id="authUserBadge" class="auth-badge" hidden></span>
-          <button type="button" class="btn btn--ghost auth-change-pwd-btn" id="authChangePwdBtn" hidden>
-            Сменить пароль
-          </button>
-          <button type="button" class="btn btn--ghost auth-logout-btn" id="authLogoutBtn" hidden>Выйти</button>
-          <div class="segmented" role="group" aria-label="Режим просмотра">
-            <button type="button" class="segmented__btn is-active" data-mode="view">Просмотр</button>
-            <button type="button" class="segmented__btn" data-mode="edit">
-              <span class="header__btn-text header__btn-text--long">Редактирование</span>
-              <span class="header__btn-text header__btn-text--short">Правка</span>
+          <div class="auth-menu" id="authMenu">
+            <button
+              type="button"
+              class="auth-menu__trigger btn btn--outline"
+              id="authMenuTrigger"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="authMenuPanel"
+            >
+              <span class="auth-menu__label" id="authMenuLabel">Войти</span>
+              <span class="auth-menu__chevron" id="authMenuChevron" hidden aria-hidden="true">▾</span>
             </button>
+            <div class="auth-menu__panel" id="authMenuPanel" role="menu" hidden>
+              <button type="button" class="auth-menu__item" role="menuitem" id="exportBtn">
+                <span class="icon-download" aria-hidden="true"></span>
+                Экспорт для 1С
+              </button>
+              <button type="button" class="auth-menu__item" role="menuitem" id="teamDialogBtn">
+                Объекты и состав
+              </button>
+              <hr class="auth-menu__sep" id="authMenuSep" hidden />
+              <button type="button" class="auth-menu__item" role="menuitem" id="authChangePwdBtn" hidden>
+                Сменить пароль
+              </button>
+              <button type="button" class="auth-menu__item auth-menu__item--danger" role="menuitem" id="authLogoutBtn" hidden>
+                Выйти
+              </button>
+            </div>
           </div>
-          <button type="button" class="btn btn--primary" id="exportBtn">
-            <span class="icon-download" aria-hidden="true"></span>
-            <span class="header__btn-text header__btn-text--long">Экспорт для 1С</span>
-            <span class="header__btn-text header__btn-text--short">1С</span>
-          </button>
         </div>
       </div>
       <hr class="header__divider" aria-hidden="true" />
@@ -82,10 +94,6 @@
           </nav>
         </div>
         <div class="header__toolbar-controls">
-          <button type="button" class="btn btn--outline" id="teamDialogBtn" title="Кто в каком объекте, названия вкладок">
-            <span class="header__btn-text header__btn-text--long">Объекты и состав</span>
-            <span class="header__btn-text header__btn-text--short">Объекты</span>
-          </button>
           <label class="select-wrap">
             <span class="visually-hidden">Месяц</span>
             <select id="monthSelect" class="select"></select>
@@ -375,7 +383,7 @@
         <div class="team-dialog__section">
           <h3 class="team-dialog__subtitle">Сотрудники</h3>
           <p class="team-dialog__hint">
-            ТН, должность и новые сотрудники — в режиме «Редактирование» и вход администратора. Данные синхронизируются вместе с табелем.
+            ТН, должность и новые сотрудники — после входа администратора. Данные синхронизируются вместе с табелем.
             Для админа: «↺ 12345678» — сброс пароля и обновление логина по текущему ТН.
           </p>
           <div class="team-dialog__scroll">
@@ -457,9 +465,9 @@
 
     <dialog id="editPwdDialog" class="edit-pwd-dialog">
       <div class="edit-pwd-dialog__panel">
-        <h2 class="edit-pwd-dialog__title">Вход для редактирования</h2>
+        <h2 class="edit-pwd-dialog__title">Вход</h2>
         <p class="edit-pwd-dialog__hint">
-          Просмотр доступен всем. График целиком — только администратор; сотрудники пилотных проектов — своя строка; Усть-Луга — без правки графика.
+          Без входа — только просмотр. После входа правки по роли: администратор — весь график; пилотные проекты — своя строка; Усть-Луга — график без правки.
         </p>
         <p class="edit-pwd-dialog__err" id="editPwdErr" hidden></p>
         <label class="edit-pwd-dialog__label">
