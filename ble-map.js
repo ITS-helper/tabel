@@ -24,6 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
+  const BLE_MAP_BUILD = "20260516z";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -406,8 +407,12 @@
     return bleDirtyMarkers.size > 0 || !!bleDirtyZone;
   }
 
+  function isNarrowLayout() {
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+
   function isZoneEditAllowed() {
-    return bleEditMode && !window.matchMedia("(max-width: 768px)").matches;
+    return bleEditMode && !isNarrowLayout();
   }
 
   function getMarkerZoneFilterId() {
@@ -498,7 +503,7 @@
     const paneName = "ble-zone-vertex-pane";
     if (!map.getPane(paneName)) {
       const pane = map.createPane(paneName);
-      pane.style.zIndex = "640";
+      pane.style.zIndex = "720";
     }
     return paneName;
   }
@@ -590,17 +595,16 @@
     const handles = [];
 
     ring.forEach((ll, index) => {
-      const handle = L.marker(L.latLng(ll.lat, ll.lng), {
-        icon: L.divIcon({
-          className: "ble-zone-vertex-icon",
-          html: '<div class="ble-zone-vertex" aria-hidden="true"></div>',
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
-        }),
-        draggable: false,
+      const handle = L.circleMarker([ll.lat, ll.lng], {
+        radius: 10,
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#ff6f00",
+        fillOpacity: 1,
+        pane,
         interactive: true,
-        keyboard: false,
-        zIndexOffset: 10000,
+        bubblingMouseEvents: false,
+        className: "ble-zone-vertex-handle",
       });
       attachZoneVertexPointerDrag(handle, layer, index, zoneData, map);
       handle.addTo(group);
@@ -608,11 +612,21 @@
     });
 
     try {
+      layer.closeTooltip?.();
+      map.closeTooltip?.();
       layer.bringToBack?.();
+      group.bringToFront?.();
     } catch {
       /* ignore */
     }
     bleZoneVertexByMap.set(map, { group, layer, zoneId: zoneData.id, handles });
+  }
+
+  function scheduleZoneVertexHandles(layer, zoneData) {
+    const run = () => syncZoneVertexHandles(layer, zoneData);
+    run();
+    requestAnimationFrame(run);
+    setTimeout(run, 80);
   }
 
   function onZoneGeometryChanged(e) {
@@ -667,13 +681,19 @@
     }
     const layer = entry.layer;
     const map = layer._map || getActiveMap();
-    syncZoneVertexHandles(layer, entry.data);
+    const nVerts = polygonLatLngs(layer).length;
+    scheduleZoneVertexHandles(layer, entry.data);
+    if (map) {
+      map.closePopup?.();
+      map.closeTooltip?.();
+    }
     try {
       const bounds = layer.getBounds?.();
       if (bounds?.isValid?.()) map?.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
     } catch {
       /* ignore */
     }
+    bleEditMapMsg = `Зона «${entry.data.name || entry.data.id}»: ${nVerts} вершин — тяните оранжевые точки по контуру.`;
     updateEditBarState();
   }
 
@@ -867,7 +887,7 @@
     });
     if (forEdit && bleSelectedZoneId) {
       const entry = bleZoneLayers.get(bleSelectedZoneId);
-      if (entry?.layer) syncZoneVertexHandles(entry.layer, entry.data);
+      if (entry?.layer) scheduleZoneVertexHandles(entry.layer, entry.data);
     }
   }
 
@@ -881,7 +901,7 @@
       zoomControl: false,
       tapTolerance: 18,
       bounceAtZoomLimits: false,
-      preferCanvas: mobile,
+      preferCanvas: false,
     }).setView(center, zoom);
     L.control
       .zoom({
@@ -1728,7 +1748,7 @@
         zoomControl: false,
         tapTolerance: 18,
         bounceAtZoomLimits: false,
-        preferCanvas: fsMobile,
+        preferCanvas: false,
       });
       L.control
         .zoom({
@@ -1918,6 +1938,12 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    if (typeof L !== "undefined" && L.Layer?.prototype?.pm) {
+      console.warn(
+        "[ble-map] Загружен старый кэш с Geoman — сделайте жёсткое обновление (Ctrl+F5). Версия:",
+        BLE_MAP_BUILD
+      );
+    }
     initEmbeddedChrome();
     bindUi();
     loadBleMap();

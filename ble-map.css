@@ -770,28 +770,19 @@ body.ble-map--edit .ble-dot--hold-armed {
   }
 }
 
-/* Вершины зоны — оранжевые точки по контуру */
-.ble-zone-vertex-icon {
-  background: transparent !important;
-  border: none !important;
+/* Вершины зоны — circleMarker на контуре */
+body.ble-map--zone-focus .ble-zone-vertex-handle {
+  cursor: grab;
   pointer-events: auto !important;
 }
 
-.ble-zone-vertex {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #ff6f00;
-  border: 3px solid #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-  cursor: grab;
-  pointer-events: auto;
+body.ble-map--zone-focus path.ble-zone-vertex-handle {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
 }
 
-body.ble-map--zone-focus .ble-zone-vertex:active {
-  cursor: grabbing;
-  transform: scale(1.2);
-  background: #e65100;
+body.ble-map--zone-focus .leaflet-pm-toolbar,
+body.ble-map--zone-focus .leaflet-pm-dragging-box {
+  display: none !important;
 }
 
 .map-fullscreen-btn__text {
