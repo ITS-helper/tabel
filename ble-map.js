@@ -24,8 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260519e";
-  const BLE_MAP_ACCESS_STORAGE = "ww-ble-map-access";
+  const BLE_MAP_BUILD = "20260519f";
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
   const BLE_FIELD_PACK_FETCH_TIMEOUT_MS = 25 * 60 * 1000;
@@ -4067,18 +4066,16 @@
   }
 
   let bleMapAppStarted = false;
+  let bleMapAccessGranted = false;
 
   function isBleMapAccessUnlocked() {
-    try {
-      return sessionStorage.getItem(BLE_MAP_ACCESS_STORAGE) === "1";
-    } catch {
-      return false;
-    }
+    return bleMapAccessGranted;
   }
 
   function unlockBleMapAccess() {
+    bleMapAccessGranted = true;
     try {
-      sessionStorage.setItem(BLE_MAP_ACCESS_STORAGE, "1");
+      sessionStorage.removeItem("ww-ble-map-access");
     } catch {
       /* ignore */
     }
