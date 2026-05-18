@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260519d";
+  const BLE_MAP_BUILD = "20260519e";
   const BLE_MAP_ACCESS_STORAGE = "ww-ble-map-access";
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
@@ -4066,6 +4066,8 @@
     }
   }
 
+  let bleMapAppStarted = false;
+
   function isBleMapAccessUnlocked() {
     try {
       return sessionStorage.getItem(BLE_MAP_ACCESS_STORAGE) === "1";
@@ -4082,49 +4084,36 @@
     }
   }
 
-  function bindBleMapAccessGate() {
+  function hideBleMapAccessGate() {
     const gate = document.getElementById("bleMapAccessGate");
-    if (!gate) return Promise.resolve(true);
-    if (isBleMapAccessUnlocked()) {
-      gate.hidden = true;
-      document.body.classList.remove("ble-map--locked");
-      return Promise.resolve(true);
-    }
-    document.body.classList.add("ble-map--locked");
+    if (!gate) return;
+    gate.classList.remove("is-active");
+    gate.hidden = true;
+    gate.setAttribute("aria-hidden", "true");
+  }
+
+  function showBleMapAccessGate() {
+    const gate = document.getElementById("bleMapAccessGate");
+    if (!gate) return;
     gate.hidden = false;
-    const input = document.getElementById("bleMapAccessInput");
-    const err = document.getElementById("bleMapAccessErr");
-    const submitBtn = document.getElementById("bleMapAccessSubmit");
-    return new Promise((resolve) => {
-      const trySubmit = () => {
-        const val = (input?.value || "").trim();
-        if (val === BLE_MAP_ACCESS_PASSWORD) {
-          unlockBleMapAccess();
-          gate.hidden = true;
-          document.body.classList.remove("ble-map--locked");
-          err && (err.hidden = true);
-          resolve(true);
-          return;
-        }
-        if (err) {
-          err.textContent = "Неверный пароль";
-          err.hidden = false;
-        }
-        input?.focus();
-        input?.select();
-      };
-      submitBtn?.addEventListener("click", trySubmit);
-      input?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          trySubmit();
-        }
-      });
-      window.setTimeout(() => input?.focus(), 80);
-    });
+    gate.removeAttribute("hidden");
+    gate.classList.add("is-active");
+    gate.removeAttribute("aria-hidden");
+  }
+
+  function normalizeBleMapAccessPassword(raw) {
+    return String(raw || "")
+      .trim()
+      .replace(/\u00a0/g, " ");
+  }
+
+  function isBleMapAccessPasswordOk(raw) {
+    return normalizeBleMapAccessPassword(raw) === BLE_MAP_ACCESS_PASSWORD;
   }
 
   function startBleMapApp() {
+    if (bleMapAppStarted) return;
+    bleMapAppStarted = true;
     if (typeof L !== "undefined" && L.Layer?.prototype?.pm) {
       console.warn(
         "[ble-map] Загружен старый кэш с Geoman — сделайте жёсткое обновление (Ctrl+F5). Версия:",
@@ -4140,10 +4129,44 @@
     scheduleMapResize();
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    void bindBleMapAccessGate().then((ok) => {
-      if (!ok) return;
-      startBleMapApp();
+  function bindBleMapAccessGate(onUnlocked) {
+    const gate = document.getElementById("bleMapAccessGate");
+    const form = document.getElementById("bleMapAccessForm");
+    const input = document.getElementById("bleMapAccessInput");
+    const err = document.getElementById("bleMapAccessErr");
+    if (!gate || !form) {
+      onUnlocked();
+      return;
+    }
+    if (isBleMapAccessUnlocked()) {
+      hideBleMapAccessGate();
+      onUnlocked();
+      return;
+    }
+    showBleMapAccessGate();
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (isBleMapAccessPasswordOk(input?.value)) {
+        unlockBleMapAccess();
+        hideBleMapAccessGate();
+        if (err) err.textContent = "";
+        onUnlocked();
+        return;
+      }
+      if (err) err.textContent = "Неверный пароль";
+      input?.focus();
+      input?.select();
     });
-  });
+    window.setTimeout(() => input?.focus(), 80);
+  }
+
+  function bootBleMapPage() {
+    bindBleMapAccessGate(() => startBleMapApp());
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootBleMapPage);
+  } else {
+    bootBleMapPage();
+  }
 })();

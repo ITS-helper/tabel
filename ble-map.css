@@ -34,21 +34,21 @@ body {
   border: 0;
 }
 
-body.ble-map--locked > :not(.ble-map-access-gate) {
-  display: none !important;
-}
-
 .ble-map-access-gate {
   position: fixed;
   inset: 0;
   z-index: 100000;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
   background:
     radial-gradient(ellipse 80% 60% at 50% 0%, rgba(33, 150, 243, 0.14), transparent),
     linear-gradient(165deg, #e8f4fd 0%, #f5f7fa 45%, #eef2f6 100%);
+}
+
+.ble-map-access-gate.is-active {
+  display: flex;
 }
 
 .ble-map-access-panel {
@@ -101,9 +101,15 @@ body.ble-map--locked > :not(.ble-map-access-gate) {
 }
 
 .ble-map-access-err {
-  margin: 0 0 12px;
+  margin: 0;
+  min-height: 0;
   font-size: 0.9rem;
   color: var(--danger);
+}
+
+.ble-map-access-err:not(:empty) {
+  margin: 0 0 12px;
+  min-height: 1.25em;
 }
 
 .ble-map-access-submit {

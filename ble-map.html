@@ -12,26 +12,28 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260519d" />
+  <link rel="stylesheet" href="ble-map.css?v=20260519e" />
 </head>
 <body>
-  <div class="ble-map-access-gate" id="bleMapAccessGate" hidden>
-    <div class="ble-map-access-panel" role="dialog" aria-labelledby="bleMapAccessTitle">
+  <div class="ble-map-access-gate is-active" id="bleMapAccessGate">
+    <form class="ble-map-access-panel" id="bleMapAccessForm" role="dialog" aria-labelledby="bleMapAccessTitle">
       <h2 class="ble-map-access-title" id="bleMapAccessTitle">Карта BLE-меток</h2>
       <p class="ble-map-access-hint">Введите пароль доступа к карте.</p>
-      <label class="ble-map-access-label">
+      <label class="ble-map-access-label" for="bleMapAccessInput">
         <span class="visually-hidden">Пароль</span>
         <input
           type="password"
           id="bleMapAccessInput"
           class="ble-map-access-input"
+          name="password"
           autocomplete="current-password"
           placeholder="Пароль"
+          required
         />
       </label>
-      <p class="ble-map-access-err" id="bleMapAccessErr" hidden></p>
-      <button type="button" class="ble-map-access-submit" id="bleMapAccessSubmit">Войти</button>
-    </div>
+      <p class="ble-map-access-err" id="bleMapAccessErr" role="alert"></p>
+      <button type="submit" class="ble-map-access-submit" id="bleMapAccessSubmit">Войти</button>
+    </form>
   </div>
   <header class="ble-map-page-header" id="bleMapPageHeader">
     <a class="ble-map-page-back" href="index.html" id="bleMapBackLink">← График</a>
@@ -174,7 +176,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-map.js?v=20260519d"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260519d"></script>
+  <script src="ble-map.js?v=20260519e"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260519e"></script>
 </body>
 </html>
