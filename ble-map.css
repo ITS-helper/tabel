@@ -136,6 +136,166 @@ body {
   transform: translateY(1px);
 }
 
+.map-genplan-calib-btn {
+  font-family: Oswald, sans-serif;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #90caf9;
+  background: #e3f2fd;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-genplan-calib-btn:hover {
+  background: #bbdefb;
+}
+
+.map-genplan-calib-btn[aria-pressed="true"] {
+  background: var(--primary);
+  color: #fff;
+  border-color: transparent;
+}
+
+.map-genplan-calib-panel {
+  position: fixed;
+  z-index: 100010;
+  right: 12px;
+  bottom: 12px;
+  width: min(100vw - 24px, 340px);
+  max-height: min(72vh, 520px);
+  overflow: auto;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 12px 40px rgba(21, 101, 192, 0.18);
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ble-map--genplan-calib .map-genplan-calib-panel {
+  display: block;
+}
+
+.map-genplan-calib-panel__title {
+  margin: 0 0 4px;
+  font-family: Oswald, sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.map-genplan-calib-panel__hint {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.map-genplan-calib-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.map-genplan-calib-field__label {
+  grid-column: 1 / -1;
+  color: #546e7a;
+  font-weight: 600;
+}
+
+.map-genplan-calib-field input[type="range"] {
+  grid-column: 1;
+  width: 100%;
+}
+
+.map-genplan-calib-field__val {
+  grid-column: 2;
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.map-genplan-calib-nudge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+
+.map-genplan-calib-nudge-btn {
+  flex: 1 1 auto;
+  min-width: 2.8em;
+  padding: 5px 6px;
+  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f5f7fa;
+  cursor: pointer;
+}
+
+.map-genplan-calib-nudge-btn:active {
+  background: #e3f2fd;
+}
+
+.map-genplan-calib-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.map-genplan-calib-save,
+.map-genplan-calib-reset,
+.map-genplan-calib-cancel {
+  flex: 1 1 auto;
+  padding: 8px 10px;
+  font-family: Oswald, sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.map-genplan-calib-save {
+  background: var(--success);
+  color: #fff;
+}
+
+.map-genplan-calib-reset {
+  background: #eceff1;
+  color: #455a64;
+}
+
+.map-genplan-calib-cancel {
+  background: #fff;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .map-genplan-calib-panel {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}
+
 .ble-map-page-header {
   display: none;
 }

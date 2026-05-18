@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260518a" />
+  <link rel="stylesheet" href="ble-map.css?v=20260518b" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -90,6 +90,16 @@
               <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
             </div>
             <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="map-genplan-calib-btn"
+              id="mapGenplanCalibBtn"
+              title="Подогнать генплан: поворот и сдвиг"
+              hidden
+            >
+              <span class="map-toolbar-text map-toolbar-text--long">Подогнать генплан</span>
+              <span class="map-toolbar-text map-toolbar-text--short">Генплан</span>
+            </button>
             <div class="map-layer-picker" id="mapLayerPicker" data-layer-picker>
               <button type="button" class="map-layer-mode-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Подложка карты">Карта</button>
               <div class="map-layer-menu" role="listbox" hidden>
@@ -131,6 +141,52 @@
   <div class="photo-viewer-overlay" id="photoViewerOverlay">
     <button type="button" class="photo-viewer-close" id="photoViewerClose" title="Закрыть">✕</button>
     <img id="photoViewerImg" src="" alt="" />
+  </div>
+
+  <div class="map-genplan-calib-panel" id="mapGenplanCalibPanel" hidden>
+    <header class="map-genplan-calib-panel__head">
+      <h2 class="map-genplan-calib-panel__title">Подгонка генплана</h2>
+      <p class="map-genplan-calib-panel__hint">Сверьте оси с метками. Подложка — спутник, генплан полупрозрачный.</p>
+    </header>
+    <label class="map-genplan-calib-field">
+      <span class="map-genplan-calib-field__label">Поворот</span>
+      <input type="range" id="mapGenplanRot" min="-90" max="90" step="0.2" value="0" />
+      <output id="mapGenplanRotOut" class="map-genplan-calib-field__val">0°</output>
+    </label>
+    <div class="map-genplan-calib-nudge map-genplan-calib-nudge--rot">
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="-5">−5°</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="-0.5">−0.5°</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="0.5">+0.5°</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="5">+5°</button>
+    </div>
+    <label class="map-genplan-calib-field">
+      <span class="map-genplan-calib-field__label">Север–юг, м</span>
+      <input type="range" id="mapGenplanNorth" min="-400" max="400" step="1" value="0" />
+      <output id="mapGenplanNorthOut" class="map-genplan-calib-field__val">0</output>
+    </label>
+    <label class="map-genplan-calib-field">
+      <span class="map-genplan-calib-field__label">Запад–восток, м</span>
+      <input type="range" id="mapGenplanEast" min="-400" max="400" step="1" value="0" />
+      <output id="mapGenplanEastOut" class="map-genplan-calib-field__val">0</output>
+    </label>
+    <div class="map-genplan-calib-nudge map-genplan-calib-nudge--move">
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="-10">↑10</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="-1">↑1</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="east" data-delta="-1">←1</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="east" data-delta="1">1→</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="1">↓1</button>
+      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="10">↓10</button>
+    </div>
+    <label class="map-genplan-calib-field">
+      <span class="map-genplan-calib-field__label">Масштаб</span>
+      <input type="range" id="mapGenplanScale" min="50" max="150" step="0.5" value="100" />
+      <output id="mapGenplanScaleOut" class="map-genplan-calib-field__val">100%</output>
+    </label>
+    <div class="map-genplan-calib-actions">
+      <button type="button" class="map-genplan-calib-save" id="mapGenplanCalibSave">Сохранить</button>
+      <button type="button" class="map-genplan-calib-reset" id="mapGenplanCalibReset">Сброс</button>
+      <button type="button" class="map-genplan-calib-cancel" id="mapGenplanCalibCancel">Отмена</button>
+    </div>
   </div>
 
   <div class="map-fullscreen-overlay" id="mapFullscreenOverlay">
@@ -176,9 +232,10 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-imageoverlay-rotated@0.2.0/ImageOverlay.Rotated.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-map.js?v=20260518a"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260518a"></script>
+  <script src="ble-map.js?v=20260518b"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260518b"></script>
 </body>
 </html>
