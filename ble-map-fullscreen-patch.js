@@ -319,6 +319,7 @@
           <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
           <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
           <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="genplan" hidden>Генплан</button>
         </div>
       </div>
       <div class="fs-sep"></div>

@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260519f" />
+  <link rel="stylesheet" href="ble-map.css?v=20260518a" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -96,6 +96,7 @@
                 <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
                 <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
                 <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
+                <button type="button" class="map-layer-menu__item" role="option" data-layer="genplan" hidden>Генплан</button>
               </div>
             </div>
             <input
@@ -151,6 +152,7 @@
           <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
           <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
           <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
+          <button type="button" class="map-layer-menu__item" role="option" data-layer="genplan" hidden>Генплан</button>
         </div>
       </div>
       <div class="map-fullscreen-search">
@@ -176,7 +178,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-map.js?v=20260519f"></script>
-  <script src="ble-map-fullscreen-patch.js?v=20260519f"></script>
+  <script src="ble-map.js?v=20260518a"></script>
+  <script src="ble-map-fullscreen-patch.js?v=20260518a"></script>
 </body>
 </html>

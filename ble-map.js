@@ -24,7 +24,8 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260519f";
+  const BLE_MAP_BUILD = "20260518a";
+  const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
   const BLE_FIELD_PACK_FETCH_TIMEOUT_MS = 25 * 60 * 1000;
@@ -47,7 +48,7 @@
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
-  const BLE_BASE_LAYERS = ["street", "satellite", "hybrid"];
+  const BLE_BASE_LAYERS = ["street", "satellite", "hybrid", "genplan"];
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -394,6 +395,7 @@
   let bleMapFSFilter = "all";
   let bleMapFSInitialized = false;
   let bleTileLayers = null;
+  let bleGenplanMeta = null;
   let bleBaseLayerCurrent = "street";
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
@@ -1829,7 +1831,8 @@
   function getZonePolygonStyle(z, ctx) {
     const isSatellite = ctx.layerMode === "satellite";
     const isHybrid = ctx.layerMode === "hybrid";
-    const onPhoto = isSatellite || isHybrid;
+    const isGenplan = ctx.layerMode === "genplan";
+    const onPhoto = isSatellite || isHybrid || isGenplan;
     const stroke = ctx.isSelected ? "#ffffff" : onPhoto ? BLE_ZONE_NEON : z.color || BLE_ZONE_NEON;
     const fillColor = isHybrid ? BLE_ZONE_NEON_FILL : z.color || BLE_ZONE_NEON_FILL;
     const weight = ctx.isSelected ? 2 : onPhoto ? 1.15 : 1.75;
@@ -1885,6 +1888,38 @@
     };
   }
 
+  async function fetchBleGenplanMeta() {
+    try {
+      const res = await fetch(`${BLE_GENPLAN_META_URL}?v=${BLE_MAP_BUILD}`, { cache: "no-cache" });
+      if (!res.ok) return null;
+      const meta = await res.json();
+      if (
+        !meta ||
+        !Array.isArray(meta.southWest) ||
+        meta.southWest.length < 2 ||
+        !Array.isArray(meta.northEast) ||
+        meta.northEast.length < 2
+      ) {
+        return null;
+      }
+      return meta;
+    } catch {
+      return null;
+    }
+  }
+
+  function buildGenplanOverlay(meta) {
+    const sw = meta.southWest;
+    const ne = meta.northEast;
+    const file = meta.image || "ble-genplan.jpg";
+    const bounds = L.latLngBounds([sw[0], sw[1]], [ne[0], ne[1]]);
+    return L.imageOverlay(`data/${file}?v=${BLE_MAP_BUILD}`, bounds, {
+      attribution: meta.attribution || "Генплан",
+      opacity: 0.97,
+      interactive: false,
+    });
+  }
+
   function buildBleTileLayers(mobile) {
     const satellite = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -1893,13 +1928,35 @@
     const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       updateWhenIdle: mobile,
     });
-    return { satellite, street, hybrid: satellite };
+    const layers = { satellite, street, hybrid: satellite };
+    if (bleGenplanMeta) {
+      const genplan = buildGenplanOverlay(bleGenplanMeta);
+      if (genplan) layers.genplan = genplan;
+    }
+    return layers;
+  }
+
+  function isGenplanLayerAvailable() {
+    return !!bleGenplanMeta;
+  }
+
+  function normalizeBaseLayerId(layerId) {
+    if (layerId === "genplan" && !isGenplanLayerAvailable()) return "hybrid";
+    if (BLE_BASE_LAYERS.includes(layerId)) return layerId;
+    return "street";
+  }
+
+  function syncGenplanLayerMenuVisibility() {
+    const show = isGenplanLayerAvailable();
+    document.querySelectorAll('.map-layer-menu__item[data-layer="genplan"]').forEach((el) => {
+      el.hidden = !show;
+    });
   }
 
   function readStoredBaseLayer() {
     try {
       const stored = localStorage.getItem(BLE_BASE_LAYER_KEY);
-      if (BLE_BASE_LAYERS.includes(stored)) return stored;
+      return normalizeBaseLayerId(stored);
     } catch {
       /* ignore */
     }
@@ -2064,6 +2121,7 @@
   function syncBaseLayerBodyClass(layerId) {
     document.body.classList.toggle("ble-map--layer-hybrid", layerId === "hybrid");
     document.body.classList.toggle("ble-map--layer-satellite", layerId === "satellite");
+    document.body.classList.toggle("ble-map--layer-genplan", layerId === "genplan");
   }
 
   function applyBleBaseLayerToMap(map, tileLayers, nextId, prevId) {
@@ -2074,10 +2132,14 @@
   }
 
   function setBleBaseLayer(layerId, opts = {}) {
+    layerId = normalizeBaseLayerId(layerId);
     if (!BLE_BASE_LAYERS.includes(layerId)) return;
     const prevMain = bleBaseLayerCurrent;
     const prevFs = fsTileLayerCurrent;
     if (layerId === prevMain && layerId === prevFs && !opts.force) return;
+    if (layerId === "genplan" && bleMap && !bleTileLayers?.genplan) {
+      layerId = "hybrid";
+    }
 
     bleBaseLayerCurrent = layerId;
     fsTileLayerCurrent = layerId;
@@ -3705,8 +3767,11 @@
           /* ignore */
         }
       }
-      let center = [53.038, 39.011];
-      let zoom = 15;
+      bleGenplanMeta = await fetchBleGenplanMeta();
+      syncGenplanLayerMenuVisibility();
+
+      let center = [59.6603, 28.3967];
+      let zoom = 16;
       initBleMap(center, zoom);
 
       const companyId = await resolveCompanyId();
