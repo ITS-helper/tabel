@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260520a";
+  const BLE_MAP_BUILD = "20260520c";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_GENPLAN_CALIB_KEY = "ww-ble-genplan-calibration";
   const M_PER_DEG_LAT = 111320;
@@ -1944,8 +1944,8 @@
     if (saveBtn) saveBtn.disabled = !canSave;
     const toggle = document.getElementById("mapEditToggle");
     if (toggle) toggle.classList.toggle("active", bleEditMode);
-    const tools = document.getElementById("mapEditTools");
-    if (tools) tools.hidden = !bleEditMode;
+    const toolsRow = document.getElementById("mapEditToolsRow");
+    if (toolsRow) toolsRow.hidden = !bleEditMode;
     const editBtn = document.getElementById("mapEditModeBtn");
     if (editBtn) {
       editBtn.classList.toggle("active", bleEditMode);
@@ -2615,10 +2615,23 @@
   function tileLayerZoomOpts(mobile, nativeZoom) {
     return {
       updateWhenIdle: mobile,
+      updateWhenZooming: true,
+      keepBuffer: 4,
       minZoom: BLE_MAP_MIN_ZOOM,
       maxZoom: BLE_MAP_EDIT_MAX_ZOOM,
       maxNativeZoom: nativeZoom,
     };
+  }
+
+  function createBleSatelliteUnderlay(mobile) {
+    return L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution: "Esri",
+        opacity: 0.38,
+        ...tileLayerZoomOpts(mobile, BLE_SATELLITE_NATIVE_ZOOM),
+      }
+    );
   }
 
   function applyBleMapZoomLimits(forEdit) {
@@ -2638,7 +2651,7 @@
     const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       ...tileLayerZoomOpts(mobile, BLE_STREET_NATIVE_ZOOM),
     });
-    const layers = { satellite, street, hybrid: satellite };
+    const layers = { satellite, street, hybrid: satellite, satelliteUnderlay: null };
     if (bleGenplanMeta) {
       const genplan = buildGenplanOverlay(bleGenplanMeta);
       if (genplan) layers.genplan = genplan;
@@ -2838,7 +2851,24 @@
   function applyBleBaseLayerToMap(map, tileLayers, nextId, prevId) {
     if (!map || !tileLayers || nextId === prevId) return prevId;
     if (tileLayers[prevId]) map.removeLayer(tileLayers[prevId]);
-    if (tileLayers[nextId]) tileLayers[nextId].addTo(map);
+    if (map._bleGenplanUnderlay) {
+      try {
+        map.removeLayer(map._bleGenplanUnderlay);
+      } catch {
+        /* ignore */
+      }
+      map._bleGenplanUnderlay = null;
+    }
+    if (nextId === "genplan" && tileLayers.genplan) {
+      if (!tileLayers.satelliteUnderlay) {
+        tileLayers.satelliteUnderlay = createBleSatelliteUnderlay(isCoarseMobile());
+      }
+      map._bleGenplanUnderlay = tileLayers.satelliteUnderlay;
+      map._bleGenplanUnderlay.addTo(map);
+      tileLayers.genplan.addTo(map);
+    } else if (tileLayers[nextId]) {
+      tileLayers[nextId].addTo(map);
+    }
     return nextId;
   }
 
@@ -2882,8 +2912,7 @@
 
   function mountBleBaseLayer(map, tileLayers, layerId) {
     if (!map || !tileLayers?.[layerId]) return layerId;
-    tileLayers[layerId].addTo(map);
-    return layerId;
+    return applyBleBaseLayerToMap(map, tileLayers, layerId, "");
   }
 
   function initBleMap(center, zoom) {

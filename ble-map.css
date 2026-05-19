@@ -1277,47 +1277,121 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
 
 }
 
+/* Режим правки: три строки (поля → фильтры/слой → чертёж), не одна длинная лента */
+body.ble-map--edit .map-toolbar {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch;
+  gap: 6px;
+  overflow: visible;
+}
+
+body.ble-map--edit .map-toolbar-row--fields {
+  display: flex !important;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+body.ble-map--edit .map-toolbar-row--actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+body.ble-map--edit .map-toolbar-row--edit {
+  flex: 0 0 auto;
+  width: 100%;
+  justify-content: center;
+  padding-top: 6px;
+  border-top: 1px solid rgba(21, 101, 192, 0.12);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+body.ble-map--edit .map-toolbar-row--edit::-webkit-scrollbar {
+  display: none;
+}
+
+body.ble-map--edit .map-field-pack-btn {
+  display: none !important;
+}
+
+body.ble-map--edit .map-edit-tools--dock {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+body.ble-map--edit .map-toolbar__sep--edit-extras {
+  display: none;
+}
+
+body.ble-map--edit .map-toolbar__sep--edit-extras:has(+ .map-genplan-calib-btn:not([hidden])) {
+  display: block;
+}
+
 @media (min-width: 769px) {
-  body.ble-map--edit .map-toolbar {
-    display: grid;
-    grid-template-columns: 148px minmax(0, 1fr) 172px;
-    grid-template-areas: "search actions route";
-    gap: 6px 8px;
-    align-items: center;
-  }
-
-  body.ble-map--edit .map-toolbar-row--fields {
-    display: contents;
-  }
-
   body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar {
-    grid-area: search;
+    flex: 1 1 auto;
     order: unset;
-    width: 100%;
-    flex: none;
-  }
-
-  body.ble-map--edit .map-toolbar-row--actions {
-    grid-area: actions;
-    order: unset;
-    flex: none;
-    flex-wrap: wrap;
-    justify-content: center;
-    row-gap: 4px;
-    min-width: 0;
-    max-width: 100%;
+    width: auto;
+    max-width: none;
   }
 
   body.ble-map--edit .map-route-field--toolbar {
-    grid-area: route;
+    flex: 0 0 172px;
     order: unset;
-    width: 100%;
-    flex: none;
+    width: 172px;
+    max-width: none;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  body.ble-map--edit .map-toolbar-text--long {
+    display: none;
   }
 
-  body.ble-map--edit .map-edit-tools--dock {
-    flex-wrap: nowrap;
+  body.ble-map--edit .map-toolbar-text--short {
+    display: inline;
   }
+}
+
+.map-toolbar-row--edit {
+  flex: 1 1 100%;
+  justify-content: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.map-toolbar-row--edit::-webkit-scrollbar {
+  display: none;
+}
+
+.map-toolbar-row--edit[hidden] {
+  display: none !important;
+}
+
+.map-edit-tools__save {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+body.ble-map--edit .map-edit-mode-btn {
+  align-self: center;
 }
 
 .map-toolbar__sep {
