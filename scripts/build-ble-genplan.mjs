@@ -30,8 +30,12 @@ const DWG_NAME_RE = /РАЗБИВ|СПГ|SPG/i;
 const PAD_LAT = 0.0018;
 const PAD_LNG = 0.0028;
 /** Ширина растра (DWG через SVG → resvg); для читаемого текста на зуме */
-const RENDER_WIDTH = 14000;
-const JPEG_QUALITY = 94;
+const RENDER_WIDTH = 24000;
+const JPEG_QUALITY = 96;
+const GENPLAN_TILE_MIN_Z = 19;
+const GENPLAN_TILE_MAX_Z = 20;
+const GENPLAN_TILE_SIZE = 256;
+const BUILD_TILES = process.env.BLE_GENPLAN_TILES === "1";
 
 const LIBREDWG_VER = "0.13.4";
 const LIBREDWG_ZIP = `libredwg-${LIBREDWG_VER}-win64.zip`;
@@ -241,11 +245,74 @@ async function renderPdf(pdfPath) {
   return buf;
 }
 
+function lngToWorldPx(lng, z) {
+  return ((lng + 180) / 360) * GENPLAN_TILE_SIZE * 2 ** z;
+}
+
+function latToWorldPx(lat, z) {
+  const r = (lat * Math.PI) / 180;
+  return (
+    ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * GENPLAN_TILE_SIZE * 2 ** z
+  );
+}
+
+async function buildGenplanTiles(pngPath, meta) {
+  const sharp = (await import("sharp")).default;
+  const im = sharp(pngPath, { limitInputPixels: false });
+  const info = await im.metadata();
+  const [south, west] = meta.southWest;
+  const [north, east] = meta.northEast;
+  const tilesRoot = path.join(OUT_DIR, "ble-genplan-tiles");
+  if (fs.existsSync(tilesRoot)) {
+    fs.rmSync(tilesRoot, { recursive: true, force: true });
+  }
+  let tileCount = 0;
+  for (let z = GENPLAN_TILE_MIN_Z; z <= GENPLAN_TILE_MAX_Z; z++) {
+    const imgWx0 = lngToWorldPx(west, z);
+    const imgWx1 = lngToWorldPx(east, z);
+    const imgWy0 = latToWorldPx(north, z);
+    const imgWy1 = latToWorldPx(south, z);
+    const imgW = imgWx1 - imgWx0;
+    const imgH = imgWy1 - imgWy0;
+    if (imgW <= 0 || imgH <= 0) continue;
+    const x0 = Math.floor(imgWx0 / GENPLAN_TILE_SIZE);
+    const x1 = Math.floor((imgWx1 - 1) / GENPLAN_TILE_SIZE);
+    const y0 = Math.floor(imgWy0 / GENPLAN_TILE_SIZE);
+    const y1 = Math.floor((imgWy1 - 1) / GENPLAN_TILE_SIZE);
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const tWx0 = x * GENPLAN_TILE_SIZE;
+        const tWy0 = y * GENPLAN_TILE_SIZE;
+        const tWx1 = tWx0 + GENPLAN_TILE_SIZE;
+        const tWy1 = tWy0 + GENPLAN_TILE_SIZE;
+        const ix0 = Math.max(0, Math.floor(((tWx0 - imgWx0) / imgW) * info.width));
+        const iy0 = Math.max(0, Math.floor(((tWy0 - imgWy0) / imgH) * info.height));
+        const ix1 = Math.min(info.width, Math.ceil(((tWx1 - imgWx0) / imgW) * info.width));
+        const iy1 = Math.min(info.height, Math.ceil(((tWy1 - imgWy0) / imgH) * info.height));
+        if (ix1 <= ix0 || iy1 <= iy0) continue;
+        const cropW = ix1 - ix0;
+        const cropH = iy1 - iy0;
+        const tileBuf = await im
+          .clone()
+          .extract({ left: ix0, top: iy0, width: cropW, height: cropH })
+          .resize(GENPLAN_TILE_SIZE, GENPLAN_TILE_SIZE, { fit: "fill" })
+          .png({ compressionLevel: 6 })
+          .toBuffer();
+        const dir = path.join(tilesRoot, String(z), String(x));
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, `${y}.png`), tileBuf);
+        tileCount++;
+      }
+    }
+  }
+  return { tilesRoot, tileCount };
+}
+
 async function writeOutputs(pngBuf, meta) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(OUT_PNG, pngBuf);
   const sharp = (await import("sharp")).default;
-  await sharp(pngBuf)
+  await sharp(pngBuf, { limitInputPixels: false })
     .flatten({ background: "#ffffff" })
     .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
     .toFile(OUT_JPG);
@@ -255,7 +322,7 @@ async function writeOutputs(pngBuf, meta) {
       ? "ble-genplan.jpg"
       : "ble-genplan.png";
   meta.image = useFile;
-  meta.version = 2;
+  meta.version = 3;
   meta.render_width = RENDER_WIDTH;
   meta.updated_at = new Date().toISOString();
   meta.attribution = meta.source_dwg
@@ -263,6 +330,17 @@ async function writeOutputs(pngBuf, meta) {
     : "Генплан L0 (привязка по меткам BLE)";
   meta.note =
     "Автопривязка по охвату меток; для сантиметровой точности — подгонка генплана на карте.";
+
+  if (meta.source_dwg && BUILD_TILES) {
+    const { tileCount } = await buildGenplanTiles(OUT_PNG, meta);
+    meta.tiles = true;
+    meta.tileUrl = "data/ble-genplan-tiles/{z}/{x}/{y}.png";
+    meta.tileMinZoom = GENPLAN_TILE_MIN_Z;
+    meta.tileMaxZoom = GENPLAN_TILE_MAX_Z;
+    meta.tileCount = tileCount;
+    console.log("tiles", tileCount, "z", GENPLAN_TILE_MIN_Z, "-", GENPLAN_TILE_MAX_Z);
+  }
+
   fs.writeFileSync(OUT_META, JSON.stringify(meta, null, 2));
   const imgPath = path.join(OUT_DIR, useFile);
   const dim = await sharp(imgPath).metadata();

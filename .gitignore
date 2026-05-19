@@ -10,6 +10,7 @@ _workarounds_src/
 node_modules/
 scripts/.tools/
 data/ble-field-pack.zip
+data/ble-genplan-tiles/
 scripts/auth-credentials.txt
 scripts/auth-users-seed.sql
 

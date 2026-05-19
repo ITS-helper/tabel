@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518e";
+  const BLE_MAP_BUILD = "20260520a";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_GENPLAN_CALIB_KEY = "ww-ble-genplan-calibration";
   const M_PER_DEG_LAT = 111320;
@@ -2395,16 +2395,36 @@
     };
   }
 
+  function genplanHasCalibAdjust(cal) {
+    if (!cal) return false;
+    return (
+      Math.abs(cal.rotation || 0) > 0.05 ||
+      Math.abs(cal.offsetNorthM || 0) > 0.05 ||
+      Math.abs(cal.offsetEastM || 0) > 0.05 ||
+      Math.abs((cal.scale || 1) - 1) > 0.001
+    );
+  }
+
   function buildGenplanOverlay(meta, opts = {}) {
     const cal = opts.cal || bleGenplanCalib || readBleGenplanCalib();
-    const file = meta.image || "ble-genplan.jpg";
-    const url = `data/${file}?v=${BLE_MAP_BUILD}`;
-    const corners = computeGenplanRotatedCorners(meta, cal);
     const layerOpts = {
       attribution: meta.attribution || "Генплан",
       opacity: opts.opacity ?? (bleGenplanCalibMode ? 0.84 : 0.97),
       interactive: false,
     };
+    if (meta.tiles && meta.tileUrl && !genplanHasCalibAdjust(cal)) {
+      const bounds = L.latLngBounds(meta.southWest, meta.northEast);
+      return L.tileLayer(`${meta.tileUrl}?v=${BLE_MAP_BUILD}`, {
+        ...layerOpts,
+        minZoom: meta.tileMinZoom ?? BLE_MAP_MIN_ZOOM,
+        maxZoom: meta.tileMaxZoom ?? BLE_MAP_EDIT_MAX_ZOOM,
+        bounds,
+        noWrap: true,
+      });
+    }
+    const file = meta.image || "ble-genplan.jpg";
+    const url = `data/${file}?v=${BLE_MAP_BUILD}`;
+    const corners = computeGenplanRotatedCorners(meta, cal);
     if (typeof L.imageOverlay?.rotated === "function") {
       return L.imageOverlay.rotated(url, corners.topleft, corners.topright, corners.bottomleft, layerOpts);
     }
@@ -2592,12 +2612,12 @@
     });
   }
 
-  function tileLayerZoomOpts(mobile) {
+  function tileLayerZoomOpts(mobile, nativeZoom) {
     return {
       updateWhenIdle: mobile,
       minZoom: BLE_MAP_MIN_ZOOM,
       maxZoom: BLE_MAP_EDIT_MAX_ZOOM,
-      maxNativeZoom: 19,
+      maxNativeZoom: nativeZoom,
     };
   }
 
@@ -2611,13 +2631,12 @@
   }
 
   function buildBleTileLayers(mobile) {
-    const tileOpts = tileLayerZoomOpts(mobile);
     const satellite = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { attribution: "Esri", ...tileOpts }
+      { attribution: "Esri", ...tileLayerZoomOpts(mobile, BLE_SATELLITE_NATIVE_ZOOM) }
     );
     const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      ...tileOpts,
+      ...tileLayerZoomOpts(mobile, BLE_STREET_NATIVE_ZOOM),
     });
     const layers = { satellite, street, hybrid: satellite };
     if (bleGenplanMeta) {
