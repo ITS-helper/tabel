@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518c";
+  const BLE_MAP_BUILD = "20260518e";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_GENPLAN_CALIB_KEY = "ww-ble-genplan-calibration";
   const M_PER_DEG_LAT = 111320;
@@ -406,6 +406,10 @@
   let bleGenplanCalibSavedLayer = null;
   let bleGenplanCalibOverlay = null;
   let bleGenplanCalibOverlayFs = null;
+  let bleDrawTool = null;
+  const bleDrawGroupByMap = new WeakMap();
+  const BLE_DRAW_SNAP_DEG = 15;
+  const BLE_DRAW_PARALLEL_HALF_M = 200;
   let bleBaseLayerCurrent = "street";
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
@@ -1291,6 +1295,395 @@
     clearZoneVertexHandles(bleMapFS);
   }
 
+  const bleDrawArtifacts = {
+    rulers: [],
+    polylines: [],
+    parallels: [],
+  };
+  let bleDrawSession = {
+    rulerStart: null,
+    linePts: [],
+    parallelAxis: null,
+  };
+  let bleDrawMapListeners = null;
+  let bleDrawPreview = null;
+
+  function formatDrawMeters(m) {
+    const v = Math.max(0, m);
+    if (v >= 1000) return `${(v / 1000).toFixed(2)} км`;
+    if (v >= 100) return `${Math.round(v)} м`;
+    return `${v.toFixed(1)} м`;
+  }
+
+  function distanceMeters(a, b) {
+    const R = 6371000;
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const h =
+      Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  function bearingDeg(a, b) {
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x =
+      Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  }
+
+  function destinationLatLng(from, bearing, distM) {
+    const R = 6371000;
+    const br = (bearing * Math.PI) / 180;
+    const lat1 = (from.lat * Math.PI) / 180;
+    const lng1 = (from.lng * Math.PI) / 180;
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(distM / R) +
+        Math.cos(lat1) * Math.sin(distM / R) * Math.cos(br)
+    );
+    const lng2 =
+      lng1 +
+      Math.atan2(
+        Math.sin(br) * Math.sin(distM / R) * Math.cos(lat1),
+        Math.cos(distM / R) - Math.sin(lat1) * Math.sin(lat2)
+      );
+    return L.latLng((lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI);
+  }
+
+  function snapDrawLatLng(from, to, shiftKey) {
+    if (!shiftKey || !from) return to;
+    const brg = bearingDeg(from, to);
+    const snapped = Math.round(brg / BLE_DRAW_SNAP_DEG) * BLE_DRAW_SNAP_DEG;
+    const dist = distanceMeters(from, to);
+    return destinationLatLng(from, snapped, dist);
+  }
+
+  function midpointLatLng(a, b) {
+    return L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+  }
+
+  function parallelSegmentThrough(axisA, axisB, point) {
+    const brg = bearingDeg(axisA, axisB);
+    const half = BLE_DRAW_PARALLEL_HALF_M;
+    return [destinationLatLng(point, brg, half), destinationLatLng(point, brg + 180, half)];
+  }
+
+  function getBleDrawGroup(map) {
+    if (!map) return null;
+    let group = bleDrawGroupByMap.get(map);
+    if (!group) {
+      group = L.layerGroup();
+      group.addTo(map);
+      bleDrawGroupByMap.set(map, group);
+    }
+    return group;
+  }
+
+  function makeDrawLabel(text, latlng) {
+    return L.marker(latlng, {
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({
+        className: "ble-draw-label-wrap",
+        html: `<span class="ble-draw-label">${text}</span>`,
+        iconSize: undefined,
+      }),
+    });
+  }
+
+  function drawSegmentWithLabel(group, a, b, opts = {}) {
+    const line = L.polyline([a, b], {
+      color: opts.color || "#ff6f00",
+      weight: opts.weight ?? 2.5,
+      dashArray: opts.dashArray || null,
+      interactive: false,
+    });
+    line.addTo(group);
+    const dist = distanceMeters(a, b);
+    const label = makeDrawLabel(formatDrawMeters(dist), midpointLatLng(a, b));
+    label.addTo(group);
+    return { line, label, dist };
+  }
+
+  function renderBleDrawLayers(map) {
+    const group = getBleDrawGroup(map);
+    if (!group) return;
+    group.clearLayers();
+    bleDrawPreview = null;
+
+    for (const seg of bleDrawArtifacts.rulers) {
+      drawSegmentWithLabel(group, seg.a, seg.b, { color: "#1565c0", weight: 3 });
+    }
+    for (const pts of bleDrawArtifacts.polylines) {
+      if (pts.length < 2) continue;
+      L.polyline(pts, { color: "#ff6f00", weight: 2.5, interactive: false }).addTo(group);
+      for (let i = 1; i < pts.length; i++) {
+        makeDrawLabel(
+          formatDrawMeters(distanceMeters(pts[i - 1], pts[i])),
+          midpointLatLng(pts[i - 1], pts[i])
+        ).addTo(group);
+      }
+    }
+    for (const seg of bleDrawArtifacts.parallels) {
+      drawSegmentWithLabel(group, seg.a, seg.b, { color: "#7b1fa2", dashArray: "4 8" });
+    }
+
+    if (bleDrawSession.parallelAxis?.length === 2) {
+      const [a, b] = bleDrawSession.parallelAxis;
+      L.polyline([a, b], {
+        color: "#7b1fa2",
+        weight: 2,
+        dashArray: "6 6",
+        interactive: false,
+      }).addTo(group);
+    }
+
+    if (bleDrawSession.linePts.length >= 1) {
+      const pts = [...bleDrawSession.linePts];
+      const renderPts = bleDrawPreview?.cursor ? [...pts, bleDrawPreview.cursor] : pts;
+      if (renderPts.length >= 2) {
+        L.polyline(renderPts, { color: "#ff6f00", weight: 2.5, interactive: false }).addTo(group);
+        for (let i = 1; i < renderPts.length; i++) {
+          makeDrawLabel(
+            formatDrawMeters(distanceMeters(renderPts[i - 1], renderPts[i])),
+            midpointLatLng(renderPts[i - 1], renderPts[i])
+          ).addTo(group);
+        }
+      }
+    }
+
+    if (bleDrawSession.rulerStart && bleDrawPreview?.cursor) {
+      drawSegmentWithLabel(group, bleDrawSession.rulerStart, bleDrawPreview.cursor, {
+        color: "#1565c0",
+        weight: 2,
+        dashArray: "5 5",
+      });
+    }
+  }
+
+  function renderBleDrawOnAllMaps() {
+    renderBleDrawLayers(bleMap);
+    if (bleMapFS) renderBleDrawLayers(bleMapFS);
+  }
+
+  function updateDrawToolButtons() {
+    document.querySelectorAll("[data-draw-tool]").forEach((btn) => {
+      const on = btn.dataset.drawTool === bleDrawTool;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    document.body.classList.toggle("ble-map--draw-active", !!bleDrawTool);
+    document.body.classList.toggle("ble-map--draw-ruler", bleDrawTool === "ruler");
+    document.body.classList.toggle("ble-map--draw-line", bleDrawTool === "line");
+    document.body.classList.toggle("ble-map--draw-parallel", bleDrawTool === "parallel");
+    const toZone = document.getElementById("mapDrawToZoneBtn");
+    if (toZone) {
+      toZone.hidden = !(
+        bleDrawTool === "line" &&
+        bleSelectedZoneId != null &&
+        bleDrawSession.linePts.length > 0
+      );
+    }
+  }
+
+  function updateDrawHint() {
+    if (!bleDrawTool) {
+      if (bleEditMode && isZoneEditAllowed()) {
+        updateZoneEditHint(
+          "Чертёж: линейка, линия (Shift — угол 15°), параллельные. Выберите инструмент."
+        );
+      }
+      return;
+    }
+    if (bleDrawTool === "ruler") {
+      updateZoneEditHint(
+        bleDrawSession.rulerStart
+          ? "Линейка: второй клик — конец отрезка."
+          : "Линейка: первый клик — начало отрезка."
+      );
+      return;
+    }
+    if (bleDrawTool === "line") {
+      updateZoneEditHint(
+        "Линия: клики — вершины; Shift — ровный угол; «Готово» — завершить; «В зону» — точка в выбранную зону."
+      );
+      return;
+    }
+    if (bleDrawTool === "parallel") {
+      if (!bleDrawSession.parallelAxis) {
+        updateZoneEditHint("Параллельные: два клика — направление оси (∥).");
+      } else {
+        updateZoneEditHint("Параллельные: клик — линия через точку, параллельная оси.");
+      }
+    }
+  }
+
+  function resetBleDrawSession() {
+    bleDrawSession = { rulerStart: null, linePts: [], parallelAxis: null };
+    bleDrawPreview = null;
+  }
+
+  function detachDrawMapListeners() {
+    if (!bleDrawMapListeners) return;
+    const { map, onClick, onMove } = bleDrawMapListeners;
+    map.off("click", onClick);
+    map.off("mousemove", onMove);
+    bleDrawMapListeners = null;
+  }
+
+  function attachDrawMapListeners() {
+    detachDrawMapListeners();
+    if (!bleDrawTool || !bleEditMode) return;
+    const map = getActiveMap();
+    if (!map) return;
+    const onClick = (e) => {
+      if (!bleDrawTool || !bleEditMode) return;
+      L.DomEvent.stopPropagation(e);
+      const shift = !!(e.originalEvent?.shiftKey);
+      let ll = e.latlng;
+      if (bleDrawTool === "ruler") {
+        if (!bleDrawSession.rulerStart) {
+          bleDrawSession.rulerStart = ll;
+        } else {
+          bleDrawArtifacts.rulers.push({ a: bleDrawSession.rulerStart, b: ll });
+          bleDrawSession.rulerStart = null;
+          bleDrawPreview = null;
+        }
+      } else if (bleDrawTool === "line") {
+        if (bleDrawSession.linePts.length) {
+          const prev = bleDrawSession.linePts[bleDrawSession.linePts.length - 1];
+          ll = snapDrawLatLng(prev, ll, shift);
+        }
+        bleDrawSession.linePts.push(ll);
+      } else if (bleDrawTool === "parallel") {
+        if (!bleDrawSession.parallelAxis) {
+          if (!bleDrawSession.linePts.length) {
+            bleDrawSession.linePts = [ll];
+          } else {
+            const a = bleDrawSession.linePts[0];
+            let b = ll;
+            if (shift) b = snapDrawLatLng(a, b, true);
+            bleDrawSession.parallelAxis = [a, b];
+            bleDrawSession.linePts = [];
+          }
+        } else {
+          const [axisA, axisB] = bleDrawSession.parallelAxis;
+          const [p1, p2] = parallelSegmentThrough(axisA, axisB, ll);
+          bleDrawArtifacts.parallels.push({ a: p1, b: p2 });
+        }
+      }
+      updateDrawToolButtons();
+      updateDrawHint();
+      renderBleDrawOnAllMaps();
+    };
+    const onMove = (e) => {
+      if (!bleDrawTool) return;
+      let ll = e.latlng;
+      if (bleDrawTool === "line" && bleDrawSession.linePts.length) {
+        const prev = bleDrawSession.linePts[bleDrawSession.linePts.length - 1];
+        if (e.originalEvent?.shiftKey) ll = snapDrawLatLng(prev, ll, true);
+      }
+      if (bleDrawTool === "ruler" && bleDrawSession.rulerStart) {
+        bleDrawPreview = { cursor: ll };
+        renderBleDrawOnAllMaps();
+      } else if (bleDrawTool === "line" && bleDrawSession.linePts.length) {
+        bleDrawPreview = { cursor: ll };
+        renderBleDrawOnAllMaps();
+      }
+    };
+    map.on("click", onClick);
+    map.on("mousemove", onMove);
+    bleDrawMapListeners = { map, onClick, onMove };
+  }
+
+  function setBleDrawTool(tool) {
+    const next = bleDrawTool === tool ? null : tool;
+    bleDrawTool = next;
+    resetBleDrawSession();
+    updateDrawToolButtons();
+    updateDrawHint();
+    attachDrawMapListeners();
+    renderBleDrawOnAllMaps();
+  }
+
+  function finishBleDrawPolyline() {
+    if (bleDrawSession.linePts.length >= 2) {
+      bleDrawArtifacts.polylines.push([...bleDrawSession.linePts]);
+    }
+    bleDrawSession.linePts = [];
+    bleDrawPreview = null;
+    updateDrawToolButtons();
+    renderBleDrawOnAllMaps();
+    updateDrawHint();
+  }
+
+  function clearBleDrawArtifacts() {
+    bleDrawArtifacts.rulers = [];
+    bleDrawArtifacts.polylines = [];
+    bleDrawArtifacts.parallels = [];
+    resetBleDrawSession();
+    renderBleDrawOnAllMaps();
+    updateDrawHint();
+  }
+
+  function appendLastDrawPointToZone() {
+    if (bleSelectedZoneId == null || !bleDrawSession.linePts.length) return;
+    const ll = bleDrawSession.linePts[bleDrawSession.linePts.length - 1];
+    const entry = bleZoneLayers.get(bleSelectedZoneId);
+    if (!entry?.layer) return;
+    const ring = latLngsToPts(polygonLatLngs(entry.layer));
+    ring.push([ll.lat, ll.lng]);
+    markZoneDirty(bleSelectedZoneId, ring);
+    entry.layer.setLatLngs(ring.map((p) => L.latLng(p[0], p[1])));
+    entry.data.pts = ring;
+    scheduleZoneVertexHandles(entry.layer, entry.data);
+    redrawMapLayers({ markers: false });
+    updateZoneEditHint(`Точка добавлена в зону ${bleSelectedZoneId}. «Сохранить» — на сервер.`);
+    updateDrawToolButtons();
+  }
+
+  function stopBleDrawTools() {
+    bleDrawTool = null;
+    detachDrawMapListeners();
+    resetBleDrawSession();
+    updateDrawToolButtons();
+    document.body.classList.remove(
+      "ble-map--draw-active",
+      "ble-map--draw-ruler",
+      "ble-map--draw-line",
+      "ble-map--draw-parallel"
+    );
+  }
+
+  function wireBleDrawUi() {
+    if (document.body.dataset.bleDrawWired === "1") return;
+    document.body.dataset.bleDrawWired = "1";
+    document.querySelectorAll("[data-draw-tool]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!bleEditMode) return;
+        setBleDrawTool(btn.dataset.drawTool);
+      });
+    });
+    document.getElementById("mapDrawFinishBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      finishBleDrawPolyline();
+    });
+    document.getElementById("mapDrawClearBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearBleDrawArtifacts();
+    });
+    document.getElementById("mapDrawToZoneBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      appendLastDrawPointToZone();
+    });
+  }
+
   function clientPointToLatLng(map, clientX, clientY) {
     const rect = map.getContainer().getBoundingClientRect();
     const pt = L.point(clientX - rect.left, clientY - rect.top);
@@ -1537,6 +1930,7 @@
       map.closePopup?.();
       map.closeTooltip?.();
     }
+    updateDrawToolButtons();
     updateEditBarState();
   }
 
@@ -1566,6 +1960,8 @@
     bleDirtyMarkers.clear();
     [...bleDirtyZones.keys()].forEach((zid) => revertZoneGeometry(zid));
     bleDirtyZones.clear();
+    stopBleDrawTools();
+    clearBleDrawArtifacts();
     disableAllZonePm();
     bleSelectedZoneId = null;
     resetZoneStyles();
@@ -1745,6 +2141,7 @@
       }
       enterEmbeddedEditLayout();
       syncZoneEditUiClasses();
+      updateDrawHint();
       bleEditMapMsg = isCoarseMobile()
         ? navigator.onLine
           ? "Удержите метку 1 сек., перетащите. «Сохранить» — на сервер."
@@ -1754,6 +2151,8 @@
           : "Офлайн: метки можно двигать; «Сохранить локально» — в очередь на отправку.";
       hideMapMsg();
     } else {
+      stopBleDrawTools();
+      clearBleDrawArtifacts();
       disableAllZonePm();
       bleSelectedZoneId = null;
       syncZoneEditUiClasses();
@@ -1813,6 +2212,7 @@
       if (forEdit) {
         layer.on("click", (e) => {
           if (!isZoneEditAllowed()) return;
+          if (bleDrawTool) return;
           L.DomEvent.stopPropagation(e);
           selectZoneForEdit(z.id);
         });
@@ -4260,6 +4660,8 @@
       drawZones(bleMapFS);
       bleMapFSInitialized = true;
     }
+    attachDrawMapListeners();
+    renderBleDrawOnAllMaps();
     syncFsStats();
     renderFsMarkers();
     if (bleEditMode && bleMapFS) drawZones(bleMapFS);
@@ -4284,6 +4686,7 @@
   function bindUi() {
     wireBaseLayerPickers();
     wireGenplanCalibUi();
+    wireBleDrawUi();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
@@ -4353,6 +4756,10 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (bleDrawTool) {
+        setBleDrawTool(bleDrawTool);
+        return;
+      }
       if (bleEditMode) {
         setEditMode(false);
         return;

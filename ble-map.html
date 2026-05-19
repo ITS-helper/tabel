@@ -86,6 +86,14 @@
               <span class="map-toolbar-text map-toolbar-text--short">Правка</span>
             </button>
             <div id="mapEditTools" class="map-edit-tools map-edit-tools--dock" hidden>
+              <div id="mapZoneDrawTools" class="map-zone-draw-tools" role="group" aria-label="Чертёж зон">
+                <button type="button" class="map-zone-draw-btn" data-draw-tool="ruler" title="Линейка — расстояние в метрах">Линейка</button>
+                <button type="button" class="map-zone-draw-btn" data-draw-tool="line" title="Прямая линия; Shift — ровный угол">Линия</button>
+                <button type="button" class="map-zone-draw-btn" data-draw-tool="parallel" title="Параллельные: 2 клика — ось, далее линии через точки">∥</button>
+                <button type="button" class="map-zone-draw-btn" id="mapDrawToZoneBtn" title="Добавить последнюю точку в выбранную зону" hidden>В зону</button>
+                <button type="button" class="map-zone-draw-btn map-zone-draw-btn--ghost" id="mapDrawFinishBtn" title="Завершить ломаную">Готово</button>
+                <button type="button" class="map-zone-draw-btn map-zone-draw-btn--ghost" id="mapDrawClearBtn" title="Удалить чертёж">Очистить</button>
+              </div>
               <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
               <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
             </div>

@@ -1585,6 +1585,77 @@ body.ble-map--zone-focus #bleMapFS {
   display: none !important;
 }
 
+.map-zone-draw-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 10px;
+  background: rgba(255, 243, 224, 0.95);
+  border: 1px solid #ffcc80;
+}
+
+.map-zone-draw-btn {
+  font-family: Oswald, sans-serif;
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #ffb74d;
+  background: #fff;
+  color: #e65100;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-zone-draw-btn:hover {
+  background: #ffe0b2;
+}
+
+.map-zone-draw-btn.active {
+  background: #ff6f00;
+  border-color: #e65100;
+  color: #fff;
+}
+
+.map-zone-draw-btn--ghost {
+  background: transparent;
+  border-color: #cfd8dc;
+  color: #546e7a;
+}
+
+.ble-draw-label-wrap {
+  background: transparent;
+  border: none;
+}
+
+.ble-draw-label {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #1a237e;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(21, 101, 192, 0.35);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+body.ble-map--draw-active #bleMap,
+body.ble-map--draw-active #bleMapFS {
+  cursor: crosshair;
+}
+
+body.ble-map--draw-active.ble-map--zone-focus .leaflet-interactive {
+  cursor: crosshair;
+}
+
 body.ble-map--edit-layout .ble-map-page-header {
   display: none !important;
 }
