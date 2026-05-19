@@ -4,3 +4,6 @@ verify_jwt = false
 
 [functions.ble-map-sync]
 verify_jwt = false
+
+[functions.google-sheet-fetch]
+verify_jwt = false

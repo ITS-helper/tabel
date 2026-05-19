@@ -25,6 +25,21 @@
 
 Выгрузка **CSV** из Google Таблицы по-прежнему обрабатывается **`scripts/parse-tabel-csv.mjs`** (для одного месяца в отдельный `.js`; для января–июня из книги Excel используйте **`ingest-xlsx`**).
 
+## Синхронизация из Google Таблицы (кнопка, только админ)
+
+Основная книга: [график в Google Sheets](https://docs.google.com/spreadsheets/d/1h-GMxdT2z3MC-somIq8sX3iV6KfjaoCffIIfeBQezRk/edit?gid=1225208192) (лист `gid=1225208192`).
+
+- **B** — объект (аббревиатура), **C** — полное название, **D** — ТН, **E** — ФИО, **F** и далее — дни (в строке 1 — месяцы; **F** = 1-е января).
+- В меню под **«Админ»** → **«Синхронизировать из Google»** (только загрузка в табель, без обратной записи в таблицу).
+- Перед синхронизацией на этом устройстве сохраняется копия для **«Откатить синхронизацию Google»**.
+- Таблица должна быть доступна по ссылке (**просмотр** для всех с ссылкой). Запрос идёт через Edge Function Supabase **`google-sheet-fetch`** (обход CORS).
+
+Развернуть функцию (один раз, из корня репозитория с [Supabase CLI](https://supabase.com/docs/guides/cli)):
+
+```bash
+supabase functions deploy google-sheet-fetch --project-ref <ваш-project-ref>
+```
+
 ## GitHub Pages
 
 ### Вариант A — через GitHub Actions (рекомендуется)

@@ -1973,6 +1973,14 @@ body[data-mode="edit"] .pill:hover {
   background: color-mix(in srgb, #ef5350 12%, var(--surface));
 }
 
+.auth-menu__item--warn {
+  color: #e65100;
+}
+
+.auth-menu__item--warn:hover {
+  background: color-mix(in srgb, #ff9800 14%, var(--surface));
+}
+
 .auth-menu__sep {
   margin: 4px 0;
   border: none;

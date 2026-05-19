@@ -74,6 +74,24 @@
               <button type="button" class="auth-menu__item" role="menuitem" id="teamDialogBtn">
                 Объекты и состав
               </button>
+              <button
+                type="button"
+                class="auth-menu__item"
+                role="menuitem"
+                id="googleSheetSyncBtn"
+                hidden
+              >
+                Синхронизировать из Google
+              </button>
+              <button
+                type="button"
+                class="auth-menu__item auth-menu__item--warn"
+                role="menuitem"
+                id="googleSheetRollbackBtn"
+                hidden
+              >
+                Откатить синхронизацию Google
+              </button>
               <hr class="auth-menu__sep" id="authMenuSep" hidden />
               <button type="button" class="auth-menu__item" role="menuitem" id="authChangePwdBtn" hidden>
                 Сменить пароль
@@ -486,6 +504,7 @@
   </div>
   <script src="scripts/parsed-employees-2026-h1.js"></script>
   <script src="zone-placement.js"></script>
+  <script src="google-sheet-sync.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

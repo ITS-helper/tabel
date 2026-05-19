@@ -103,8 +103,11 @@ const STORAGE_ROSTER_EXTRAS = "ww-roster-extras";
 const STORAGE_LEGEND_INCLUDE_NO_SHIFTS = "ww-legend-include-no-shifts";
 const STORAGE_ZONE_PLACEMENT = "ww-zone-placement";
 const SUPABASE_PUSH_DEBOUNCE_MS = 900;
+const STORAGE_GOOGLE_SYNC_BACKUP = "ww-google-sync-backup";
+const GOOGLE_SHEET_FETCH_FN = "google-sheet-fetch";
 
 let supabasePushTimer = null;
+let googleSheetSyncInFlight = false;
 
 function loadLegendIncludeNoShifts() {
   try {
@@ -1470,6 +1473,7 @@ function syncAuthChrome() {
     if (sep) sep.hidden = true;
     if (logoutBtn) logoutBtn.hidden = true;
     if (changePwdBtn) changePwdBtn.hidden = true;
+    syncGoogleSyncMenuChrome();
     syncModeWithAuth();
     return;
   }
@@ -1493,6 +1497,7 @@ function syncAuthChrome() {
         : "Можно менять только свою строку (пилотные проекты).";
     trigger.title = `Вход: ${s.employeeName || s.login}. ${schedHint}${menuHint}`;
   }
+  syncGoogleSyncMenuChrome();
   syncModeWithAuth();
 }
 
@@ -1542,6 +1547,7 @@ function bindAuthMenu() {
       openTeamDialog();
     });
   }
+  bindGoogleSheetSync();
 }
 
 function applyMode(mode) {
@@ -2292,6 +2298,276 @@ function buildSharedPayload() {
     legendIncludeNoShifts: !!state.legendIncludeNoShifts,
     zonePlacementByMonth: JSON.parse(JSON.stringify(state.zonePlacementByMonth)),
   };
+}
+
+function capturePayloadSnapshot() {
+  return {
+    savedAt: new Date().toISOString(),
+    payload: buildSharedPayload(),
+  };
+}
+
+function loadGoogleSyncBackupMeta() {
+  try {
+    const r = localStorage.getItem(STORAGE_GOOGLE_SYNC_BACKUP);
+    if (!r) return null;
+    const o = JSON.parse(r);
+    if (!o?.payload || typeof o.payload !== "object") return null;
+    return o;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveGoogleSyncBackup(snapshot) {
+  try {
+    localStorage.setItem(STORAGE_GOOGLE_SYNC_BACKUP, JSON.stringify(snapshot));
+  } catch (e) {
+    console.warn("Google sync backup not saved", e);
+  }
+}
+
+function clearGoogleSyncBackup() {
+  try {
+    localStorage.removeItem(STORAGE_GOOGLE_SYNC_BACKUP);
+  } catch (_) {}
+}
+
+function hasGoogleSyncBackup() {
+  return !!loadGoogleSyncBackupMeta();
+}
+
+function applyPayloadSnapshot(snapshot) {
+  if (!snapshot?.payload) return;
+  applySharedPayload(snapshot.payload);
+}
+
+function findEmployeeRowIndexByName(monthKey, name) {
+  const data = getDatasetForMonthKey(monthKey);
+  if (!data?.employees) return -1;
+  const target = WorkWatchGoogleSync.normalizeName(name);
+  return data.employees.findIndex((e) => WorkWatchGoogleSync.normalizeName(e.name) === target);
+}
+
+async function fetchGoogleSheetCsvText() {
+  const url = `${SUPABASE_URL}/functions/v1/${GOOGLE_SHEET_FETCH_FN}`;
+  const res = await fetch(url, { headers: supabaseRestHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const hint = data?.hint ? `\n${data.hint}` : "";
+    throw new Error((data?.error || `Ошибка ${res.status}`) + hint);
+  }
+  if (!data?.csv || typeof data.csv !== "string") {
+    throw new Error("Пустой ответ от сервера — нет CSV.");
+  }
+  return data.csv;
+}
+
+function applyGoogleSheetParsed(parsed) {
+  let updatedCells = 0;
+  let updatedSections = 0;
+  let addedRows = 0;
+  let skippedMonths = 0;
+
+  for (const { monthKey, employees } of parsed.months) {
+    if (!monthKeyAllowedSynthetic(monthKey) && !DATABASE[monthKey] && !ARCHIVE_DATABASE[monthKey]) {
+      skippedMonths++;
+      continue;
+    }
+
+    for (const empSheet of employees) {
+      const name = WorkWatchGoogleSync.normalizeName(empSheet.name);
+      if (!name) continue;
+
+      if (empSheet.sectionId === "ust" || empSheet.sectionId === "pilot") {
+        const cur = sectionIdForEmployee(name);
+        if (cur !== empSheet.sectionId) {
+          state.sectionAssignOverrides[name] = empSheet.sectionId;
+          updatedSections++;
+        } else if (state.sectionAssignOverrides[name] && defaultSectionForName(name) === empSheet.sectionId) {
+          delete state.sectionAssignOverrides[name];
+        }
+      }
+
+      let rowIndex = findEmployeeRowIndexByName(monthKey, name);
+
+      if (rowIndex < 0) {
+        if (!state.addedEmployeesByMonth[monthKey]) state.addedEmployeesByMonth[monthKey] = [];
+        const pos =
+          typeof POSITION_BY_NAME !== "undefined" && POSITION_BY_NAME[name]
+            ? POSITION_BY_NAME[name]
+            : "";
+        state.addedEmployeesByMonth[monthKey].push({
+          tn: empSheet.tn,
+          name,
+          position: pos,
+          daysOnShift: empSheet.daysOnShift,
+          schedule: { ...empSheet.schedule },
+        });
+        addedRows++;
+        continue;
+      }
+
+      const fieldBucket = rosterFieldBucketForMonth(monthKey);
+      const tnNorm = String(empSheet.tn || "").trim();
+      if (tnNorm && tnNorm !== "—") {
+        const curTn = fieldBucket[name]?.tn;
+        const data = getDatasetForMonthKey(monthKey);
+        const baseTn = data?.employees?.[rowIndex]?.tn;
+        if (tnNorm !== String(curTn ?? baseTn ?? "").trim()) {
+          if (!fieldBucket[name]) fieldBucket[name] = {};
+          fieldBucket[name].tn = tnNorm;
+        }
+      }
+
+      const bucket = scheduleOverridesBucketFor(monthKey);
+      const data = getDatasetForMonthKey(monthKey);
+      const baseEmp = data?.employees?.[rowIndex];
+      const nextRow = {};
+      for (let d = 1; d <= empSheet.dim; d++) {
+        const code = empSheet.schedule[d] ?? "";
+        const baseCode = baseEmp?.schedule?.[d] ?? "";
+        if (code !== baseCode) {
+          nextRow[d] = code;
+          updatedCells++;
+        }
+      }
+      if (Object.keys(nextRow).length) bucket[rowIndex] = nextRow;
+      else if (bucket[rowIndex]) delete bucket[rowIndex];
+    }
+  }
+
+  persistSectionAssignOverrides();
+  persistScheduleByMonthLocal();
+  persistRosterExtrasLocal();
+  return { updatedCells, updatedSections, addedRows, skippedMonths };
+}
+
+async function runGoogleSheetSync() {
+  if (!isAdminAuth()) {
+    alert("Синхронизация из Google доступна только администратору.");
+    return;
+  }
+  if (googleSheetSyncInFlight) return;
+  if (typeof WorkWatchGoogleSync === "undefined") {
+    alert("Модуль google-sheet-sync.js не загружен.");
+    return;
+  }
+  if (
+    !window.confirm(
+      "Загрузить график из Google Таблицы?\n\nТекущие правки (ячейки, состав, ТН) будут сохранены на этом устройстве для отката. Данные уйдут в облако Supabase после синхронизации.\n\nПродолжить?"
+    )
+  ) {
+    return;
+  }
+
+  googleSheetSyncInFlight = true;
+  const syncBtn = document.getElementById("googleSheetSyncBtn");
+  if (syncBtn) syncBtn.disabled = true;
+
+  try {
+    const csv = await fetchGoogleSheetCsvText();
+    const parsed = WorkWatchGoogleSync.parseGoogleSheetCsv(
+      csv,
+      WorkWatchGoogleSync.SHEET_SCHEDULE_YEAR
+    );
+    const backup = capturePayloadSnapshot();
+    const stats = applyGoogleSheetParsed(parsed);
+    saveGoogleSyncBackup(backup);
+    await pushTabelRemoteState();
+    render();
+    syncGoogleSyncMenuChrome();
+    alert(
+      `Синхронизация завершена.\n\n` +
+        `Месяцев в таблице: ${parsed.months.length}\n` +
+        `Обновлено ячеек (отличий от базы): ${stats.updatedCells}\n` +
+        `Смен объекта (состав): ${stats.updatedSections}\n` +
+        `Добавлено строк (не было в табеле): ${stats.addedRows}` +
+        (stats.skippedMonths ? `\nПропущено месяцев (нет в табеле): ${stats.skippedMonths}` : "") +
+        `\n\nОткат: меню → «Откатить синхронизацию Google».`
+    );
+  } catch (e) {
+    console.warn("Google sheet sync failed", e);
+    alert(
+      `Не удалось синхронизировать.\n\n${e?.message || e}\n\n` +
+        "Проверьте доступ к таблице (просмотр по ссылке) и что Edge Function google-sheet-fetch развёрнута в Supabase."
+    );
+  } finally {
+    googleSheetSyncInFlight = false;
+    if (syncBtn) syncBtn.disabled = false;
+  }
+}
+
+async function runGoogleSheetRollback() {
+  if (!isAdminAuth()) return;
+  const backup = loadGoogleSyncBackupMeta();
+  if (!backup) {
+    alert("Нет сохранённой копии для отката на этом устройстве.");
+    return;
+  }
+  const when = backup.savedAt
+    ? new Date(backup.savedAt).toLocaleString("ru-RU")
+    : "неизвестно";
+  if (
+    !window.confirm(
+      `Вернуть табель к состоянию до последней синхронизации из Google?\n\nСохранено: ${when}\n\nПродолжить?`
+    )
+  ) {
+    return;
+  }
+  try {
+    applyPayloadSnapshot(backup);
+    clearGoogleSyncBackup();
+    await pushTabelRemoteState();
+    render();
+    syncGoogleSyncMenuChrome();
+    alert("Откат выполнен. Состояние восстановлено и отправлено в Supabase.");
+  } catch (e) {
+    console.warn("Google sync rollback failed", e);
+    alert(`Ошибка отката: ${e?.message || e}`);
+  }
+}
+
+function syncGoogleSyncMenuChrome() {
+  const syncBtn = document.getElementById("googleSheetSyncBtn");
+  const rollbackBtn = document.getElementById("googleSheetRollbackBtn");
+  const admin = isAdminAuth();
+  if (syncBtn) syncBtn.hidden = !admin;
+  if (rollbackBtn) {
+    rollbackBtn.hidden = !admin || !hasGoogleSyncBackup();
+    if (admin && hasGoogleSyncBackup()) {
+      const b = loadGoogleSyncBackupMeta();
+      const when = b?.savedAt
+        ? new Date(b.savedAt).toLocaleString("ru-RU", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "";
+      rollbackBtn.title = when ? `Копия от ${when}` : "Вернуть состояние до последней синхронизации";
+    }
+  }
+}
+
+function bindGoogleSheetSync() {
+  const syncBtn = document.getElementById("googleSheetSyncBtn");
+  const rollbackBtn = document.getElementById("googleSheetRollbackBtn");
+  if (syncBtn && syncBtn.dataset.bound !== "1") {
+    syncBtn.dataset.bound = "1";
+    syncBtn.addEventListener("click", () => {
+      closeAuthMenu();
+      void runGoogleSheetSync();
+    });
+  }
+  if (rollbackBtn && rollbackBtn.dataset.bound !== "1") {
+    rollbackBtn.dataset.bound = "1";
+    rollbackBtn.addEventListener("click", () => {
+      closeAuthMenu();
+      void runGoogleSheetRollback();
+    });
+  }
+  syncGoogleSyncMenuChrome();
 }
 
 function applySharedPayload(payload) {
