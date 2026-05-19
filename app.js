@@ -1117,7 +1117,7 @@ function queueScheduleScrollToTodayColumn() {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       const th = document.querySelector(
-        `#scheduleHead th.schedule-day-th[data-schedule-month-key="${hit.monthKey}"][data-schedule-day="${hit.todayD}"]`
+        `#scheduleHead tr.schedule-head-days th.schedule-day-th[data-schedule-month-key="${hit.monthKey}"][data-schedule-day="${hit.todayD}"]`
       );
       if (!th) return;
       th.scrollIntoView({ block: "nearest", inline: "center" });
@@ -3428,6 +3428,37 @@ function scheduleCodeForViewRow(seg, viewRow, day) {
   return emp.schedule[day] ?? "";
 }
 
+function formatScheduleMonthLabel(seg, monthSegments) {
+  const years = new Set(monthSegments.map((s) => s.year));
+  if (years.size > 1) {
+    return `${MONTH_NAMES[seg.monthIndex]} ${seg.year}`;
+  }
+  return MONTH_NAMES[seg.monthIndex];
+}
+
+function appendScheduleMonthLabelRow(monthRow, monthSegments) {
+  monthSegments.forEach((seg, segIdx) => {
+    if (segIdx > 0) {
+      const gap = document.createElement("th");
+      gap.scope = "col";
+      gap.rowSpan = 2;
+      gap.className = "schedule-month-gap-th";
+      gap.setAttribute("aria-hidden", "true");
+      gap.innerHTML = "&nbsp;";
+      monthRow.appendChild(gap);
+    }
+    const th = document.createElement("th");
+    th.scope = "colgroup";
+    th.colSpan = seg.dim;
+    th.className = "schedule-month-label-th";
+    th.dataset.scheduleMonthKey = seg.monthKey;
+    const label = formatScheduleMonthLabel(seg, monthSegments);
+    th.textContent = label;
+    th.setAttribute("aria-label", `Месяц: ${label}`);
+    monthRow.appendChild(th);
+  });
+}
+
 function appendScheduleMonthDayHeaders(headerRow, seg, monthBoundary) {
   for (let day = 1; day <= seg.dim; day++) {
     const w = isWeekend(seg.year, seg.monthIndex, day);
@@ -3450,15 +3481,6 @@ function appendScheduleMonthDayHeaders(headerRow, seg, monthBoundary) {
     if (seg.todayD === day) th.classList.add("schedule-day-col--today");
     headerRow.appendChild(th);
   }
-}
-
-function appendScheduleMonthGapTh(headerRow) {
-  const th = document.createElement("th");
-  th.scope = "col";
-  th.className = "schedule-month-gap-th";
-  th.setAttribute("aria-hidden", "true");
-  th.innerHTML = "&nbsp;";
-  headerRow.appendChild(th);
 }
 
 function appendScheduleMonthGapTd(tr) {
@@ -3557,15 +3579,19 @@ function renderSchedule(data) {
     badge.removeAttribute("title");
   }
 
-  const headerRow = document.createElement("tr");
+  const monthRow = document.createElement("tr");
+  monthRow.className = "schedule-head-months";
+  const dayRow = document.createElement("tr");
+  dayRow.className = "schedule-head-days";
   const keys = layout.visibleKeys;
   const lastKey = keys[keys.length - 1];
 
   keys.forEach((key, slot) => {
     const th = document.createElement("th");
     th.scope = "col";
+    th.rowSpan = 2;
     th.dataset.stickyKey = key;
-    th.className = `sticky-col sticky-${key} ${STICKY_CELL_CLASS[key]} sticky-th-toggle`;
+    th.className = `sticky-col sticky-${key} ${STICKY_CELL_CLASS[key]} sticky-th-toggle schedule-head-sticky`;
     if (slot === 0) th.classList.add("schedule__corner");
     th.innerHTML = `<div class="sticky-th__inner${key === "days" ? " sticky-th__inner--center" : ""}">
       <span class="sticky-th__main">${STICKY_LABEL[key]}</span>
@@ -3574,14 +3600,15 @@ function renderSchedule(data) {
     th.title = `Нажмите, чтобы скрыть столбец «${STICKY_LABEL[key]}»`;
     applyStickyGeometry(th, slot, "thead", layout.left[key]);
     if (key === lastKey) th.classList.add("sticky-col--edge");
-    headerRow.appendChild(th);
+    monthRow.appendChild(th);
   });
 
+  appendScheduleMonthLabelRow(monthRow, monthSegments);
   monthSegments.forEach((seg, segIdx) => {
-    if (segIdx > 0) appendScheduleMonthGapTh(headerRow);
-    appendScheduleMonthDayHeaders(headerRow, seg, segIdx > 0);
+    appendScheduleMonthDayHeaders(dayRow, seg, segIdx > 0);
   });
-  head.appendChild(headerRow);
+  head.appendChild(monthRow);
+  head.appendChild(dayRow);
 
   const onShiftBySegment = monthSegments.map((seg) => {
     const counts = {};

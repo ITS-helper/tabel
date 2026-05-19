@@ -1414,6 +1414,40 @@ body {
   background: rgba(21, 101, 192, 0.06);
 }
 
+.schedule {
+  --sched-month-head-h: 30px;
+}
+
+.schedule thead th.schedule-month-label-th {
+  font-family: Oswald, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg));
+  padding: 5px 8px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  position: sticky;
+  top: 0;
+  z-index: 22;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.schedule thead th.schedule-head-sticky {
+  z-index: 24;
+  vertical-align: bottom;
+}
+
+.schedule thead tr.schedule-head-days th {
+  top: var(--sched-month-head-h);
+}
+
+.schedule thead tr.schedule-head-days th.schedule-day-th {
+  z-index: 21;
+}
+
 .schedule thead th.schedule-day-th--month-start,
 .schedule tbody td.schedule-day-col--month-start,
 .schedule tfoot td.schedule-day-col--month-start {
