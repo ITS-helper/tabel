@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260518b";
+  const BLE_MAP_BUILD = "20260518c";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_GENPLAN_CALIB_KEY = "ww-ble-genplan-calibration";
   const M_PER_DEG_LAT = 111320;
@@ -44,6 +44,9 @@
   const BLE_FIELD_YIELD_EVERY = 1;
   const BLE_DEFAULT_CENTER_BLE = "20";
   const BLE_DEFAULT_CENTER_ZOOM = 18;
+  const BLE_MAP_MIN_ZOOM = 14;
+  const BLE_MAP_MAX_ZOOM = 21;
+  const BLE_MAP_EDIT_MAX_ZOOM = 23;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
   const BLE_DEFAULT_CENTER_MAX_ATTEMPTS = 18;
   const BLE_ZONE_NEON = "#00e5ff";
@@ -1733,6 +1736,7 @@
       }
     }
     bleEditMode = on;
+    applyBleMapZoomLimits(bleEditMode);
     document.body.classList.toggle("ble-map--edit", bleEditMode);
     document.body.classList.toggle("ble-map--zone-edit", bleEditMode && isZoneEditAllowed());
     if (bleEditMode) {
@@ -2185,13 +2189,32 @@
     });
   }
 
+  function tileLayerZoomOpts(mobile) {
+    return {
+      updateWhenIdle: mobile,
+      minZoom: BLE_MAP_MIN_ZOOM,
+      maxZoom: BLE_MAP_EDIT_MAX_ZOOM,
+      maxNativeZoom: 19,
+    };
+  }
+
+  function applyBleMapZoomLimits(forEdit) {
+    const maxZ = forEdit ? BLE_MAP_EDIT_MAX_ZOOM : BLE_MAP_MAX_ZOOM;
+    for (const map of [bleMap, bleMapFS]) {
+      if (!map) continue;
+      map.setMinZoom(BLE_MAP_MIN_ZOOM);
+      map.setMaxZoom(maxZ);
+    }
+  }
+
   function buildBleTileLayers(mobile) {
+    const tileOpts = tileLayerZoomOpts(mobile);
     const satellite = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { attribution: "Esri", updateWhenIdle: mobile }
+      { attribution: "Esri", ...tileOpts }
     );
     const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      updateWhenIdle: mobile,
+      ...tileOpts,
     });
     const layers = { satellite, street, hybrid: satellite };
     if (bleGenplanMeta) {
@@ -2455,7 +2478,10 @@
       fadeAnimation: false,
       markerZoomAnimation: !mobile,
       wheelPxPerZoomLevel: 80,
+      minZoom: BLE_MAP_MIN_ZOOM,
+      maxZoom: BLE_MAP_MAX_ZOOM,
     }).setView(center, zoom);
+    applyBleMapZoomLimits(bleEditMode);
     L.control
       .zoom({
         position: mobile ? "bottomright" : "topright",
@@ -3358,10 +3384,10 @@
     return L.markerClusterGroup({
       maxClusterRadius(zoom) {
         if (zoom < 17) return 120;
-        if (zoom < 18) return 40;
+        if (zoom < 19) return 40;
         return 1;
       },
-      disableClusteringAtZoom: 18,
+      disableClusteringAtZoom: 20,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
       animate: false,
@@ -4171,7 +4197,10 @@
         fadeAnimation: false,
         markerZoomAnimation: !fsMobile,
         wheelPxPerZoomLevel: 80,
+        minZoom: BLE_MAP_MIN_ZOOM,
+        maxZoom: BLE_MAP_MAX_ZOOM,
       });
+      applyBleMapZoomLimits(bleEditMode);
       L.control
         .zoom({
           position: fsMobile ? "bottomright" : "topright",
