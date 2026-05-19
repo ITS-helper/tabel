@@ -1399,6 +1399,27 @@ body {
   width: 52px;
 }
 
+.schedule col.schedule-col-month-gap {
+  width: 6px;
+}
+
+.schedule .schedule-month-gap-th,
+.schedule .schedule-month-gap-td {
+  padding: 0;
+  width: 6px;
+  min-width: 6px;
+  max-width: 6px;
+  border-left: 3px solid var(--primary);
+  border-right: none;
+  background: rgba(21, 101, 192, 0.06);
+}
+
+.schedule thead th.schedule-day-th--month-start,
+.schedule tbody td.schedule-day-col--month-start,
+.schedule tfoot td.schedule-day-col--month-start {
+  border-left: 3px solid var(--primary);
+}
+
 .schedule th,
 .schedule td {
   padding: 8px 6px;

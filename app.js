@@ -793,7 +793,7 @@ function showStickyCol(key) {
   render();
 }
 
-function injectScheduleColgroup(table, dayCount, vis, todayDay) {
+function injectScheduleColgroup(table, monthSegments, vis) {
   table.querySelectorAll("colgroup").forEach((el) => el.remove());
   const cg = document.createElement("colgroup");
   const addCol = (cls) => {
@@ -805,11 +805,18 @@ function injectScheduleColgroup(table, dayCount, vis, todayDay) {
   if (vis.name) addCol("col-name");
   if (vis.pos) addCol("col-pos");
   if (vis.days) addCol("col-days");
-  for (let d = 1; d <= dayCount; d++) {
-    const col = document.createElement("col");
-    col.className = "schedule-col-day" + (todayDay === d ? " schedule-col-day--today" : "");
-    cg.appendChild(col);
-  }
+  monthSegments.forEach((seg, segIdx) => {
+    if (segIdx > 0) {
+      const gap = document.createElement("col");
+      gap.className = "schedule-col-month-gap";
+      cg.appendChild(gap);
+    }
+    for (let d = 1; d <= seg.dim; d++) {
+      const col = document.createElement("col");
+      col.className = "schedule-col-day" + (seg.todayD === d ? " schedule-col-day--today" : "");
+      cg.appendChild(col);
+    }
+  });
   table.insertBefore(cg, table.firstChild);
 }
 
@@ -846,6 +853,33 @@ function monthKey(year, monthIndex) {
 function parseMonthKey(key) {
   const [y, m] = key.split("-").map(Number);
   return { year: y, monthIndex: m - 1 };
+}
+
+/** Следующий календарный месяц после ключа `YYYY-M`. */
+function nextMonthKey(mk) {
+  const { year, monthIndex } = parseMonthKey(mk);
+  const d = new Date(year, monthIndex + 1, 1);
+  return monthKey(d.getFullYear(), d.getMonth());
+}
+
+/** Два месяца в таблице графика: выбранный и следующий. */
+function scheduleMonthSegmentsForView() {
+  const primaryMk = state.monthKey;
+  const secondaryMk = nextMonthKey(primaryMk);
+  return [primaryMk, secondaryMk].map((monthKey) => {
+    const { year, monthIndex } = parseMonthKey(monthKey);
+    return {
+      monthKey,
+      year,
+      monthIndex,
+      dim: daysInMonth(year, monthIndex),
+      todayD: viewMonthTodayDayNumber(year, monthIndex),
+    };
+  });
+}
+
+function canEditScheduleMonthKey(monthKey) {
+  return isLiveMonthKey(monthKey);
 }
 
 /** Год ключей в `DATABASE` (март–декабрь в селекторе: архив / остаток года, кроме трёх «живых» месяцев). */
@@ -928,7 +962,15 @@ function monthKeyAllowedSynthetic(monthKey) {
 
 function syncHeaderSchedulePeriod() {
   const yl = document.getElementById("yearLabel");
-  if (yl) yl.textContent = String(parseMonthKey(state.monthKey).year);
+  if (yl) {
+    const p = parseMonthKey(state.monthKey);
+    const s = parseMonthKey(nextMonthKey(state.monthKey));
+    if (p.year === s.year) {
+      yl.textContent = `${MONTH_NAMES[p.monthIndex]}–${MONTH_NAMES[s.monthIndex]} ${p.year}`;
+    } else {
+      yl.textContent = `${MONTH_NAMES[p.monthIndex]} ${p.year} – ${MONTH_NAMES[s.monthIndex]} ${s.year}`;
+    }
+  }
   document.body.dataset.archiveView = isArchiveView() ? "1" : "0";
 }
 
@@ -1064,14 +1106,16 @@ function viewMonthTodayDayNumber(year, monthIndex) {
 let scheduleScrollToTodayAppliedForMonthKey = null;
 
 function queueScheduleScrollToTodayColumn() {
-  const { year, monthIndex } = parseMonthKey(state.monthKey);
-  const todayD = viewMonthTodayDayNumber(year, monthIndex);
-  if (todayD == null) return;
   if (scheduleScrollToTodayAppliedForMonthKey === state.monthKey) return;
+  const segments = scheduleMonthSegmentsForView();
+  const hit = segments.find((seg) => seg.todayD != null);
+  if (!hit) return;
   scheduleScrollToTodayAppliedForMonthKey = state.monthKey;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const th = document.querySelector(`#scheduleHead th.schedule-day-th[data-schedule-day="${todayD}"]`);
+      const th = document.querySelector(
+        `#scheduleHead th.schedule-day-th[data-schedule-month-key="${hit.monthKey}"][data-schedule-day="${hit.todayD}"]`
+      );
       if (!th) return;
       th.scrollIntoView({ block: "nearest", inline: "center" });
     });
@@ -1199,8 +1243,9 @@ function scheduleEditDeniedMessage() {
   return "Можно редактировать только свою строку. Все строки — у администратора.";
 }
 
-function canEditScheduleRow(rowIndex) {
-  const data = getDataset();
+function canEditScheduleRow(rowIndex, monthKey = state.monthKey) {
+  if (!canEditScheduleMonthKey(monthKey)) return false;
+  const data = getDatasetForMonthKey(monthKey);
   const emp = data?.employees?.[rowIndex];
   if (!emp) return false;
   return canEditEmployeeSchedule(emp.name);
@@ -1788,14 +1833,13 @@ function closeScheduleCellPicker() {
   }
 }
 
-function openScheduleCellPicker(rowIndex, day, pillEl) {
-  if (isArchiveView()) return;
+function openScheduleCellPicker(rowIndex, day, pillEl, monthKey = state.monthKey) {
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
-  if (!canEditScheduleRow(rowIndex)) {
+  if (!canEditScheduleRow(rowIndex, monthKey)) {
     alert(scheduleEditDeniedMessage());
     return;
   }
-  const data = getDataset();
+  const data = getDatasetForMonthKey(monthKey);
   if (!data) return;
   closeScheduleCellPicker();
   const sel = ensureScheduleCellPicker();
@@ -1827,6 +1871,7 @@ function openScheduleCellPicker(rowIndex, day, pillEl) {
   sel.style.width = `${w}px`;
   sel.dataset.rowIndex = String(rowIndex);
   sel.dataset.day = String(day);
+  sel.dataset.scheduleMonthKey = monthKey;
   sel._pillEl = pillEl;
   sel.hidden = false;
 
@@ -1850,7 +1895,8 @@ function openScheduleCellPicker(rowIndex, day, pillEl) {
     const next = sel.value;
     const ri = Number(sel.dataset.rowIndex, 10);
     const d = Number(sel.dataset.day, 10);
-    applyScheduleCellValue(ri, d, next, sel._pillEl);
+    const mk = sel.dataset.scheduleMonthKey || state.monthKey;
+    applyScheduleCellValue(ri, d, next, sel._pillEl, mk);
     closeScheduleCellPicker();
   };
 
@@ -1864,9 +1910,9 @@ function openScheduleCellPicker(rowIndex, day, pillEl) {
   });
 }
 
-function applyScheduleCellValue(rowIndex, day, next, pillEl) {
+function applyScheduleCellValue(rowIndex, day, next, pillEl, monthKey = state.monthKey) {
   if (!pillEl) return;
-  const bucket = scheduleOverridesBucket();
+  const bucket = scheduleOverridesBucketFor(monthKey);
   if (!bucket[rowIndex]) bucket[rowIndex] = {};
   bucket[rowIndex][day] = next;
 
@@ -1916,7 +1962,11 @@ function updateFillDragPreview() {
   const hi = Math.max(pi.day0, pi.day1);
   const row = String(pi.rowIndex);
   let trEl = null;
-  document.querySelectorAll(`#scheduleBody .pill[data-row="${row}"]`).forEach((pill) => {
+  document
+    .querySelectorAll(
+      `#scheduleBody .pill[data-row="${row}"][data-schedule-month-key="${pi.monthKey}"]`
+    )
+    .forEach((pill) => {
     const d = Number(pill.dataset.day, 10);
     if (!Number.isNaN(d) && d >= lo && d <= hi) {
       pill.classList.add("pill--fill-range");
@@ -1974,15 +2024,15 @@ function cancelPillFillInteraction() {
   pillFillInteraction = null;
 }
 
-function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
-  if (!canEditScheduleRow(rowIndex)) return;
-  const data = getDataset();
+function applyScheduleRowDayRange(rowIndex, dayA, dayB, code, monthKey = state.monthKey) {
+  if (!canEditScheduleRow(rowIndex, monthKey)) return;
+  const data = getDatasetForMonthKey(monthKey);
   if (!data || rowIndex < 0 || rowIndex >= data.employees.length) return;
-  const { year, monthIndex } = parseMonthKey(state.monthKey);
+  const { year, monthIndex } = parseMonthKey(monthKey);
   const dim = daysInMonth(year, monthIndex);
   const lo = Math.max(1, Math.min(Math.min(dayA, dayB), dim));
   const hi = Math.min(dim, Math.max(Math.max(dayA, dayB), 1));
-  const bucket = scheduleOverridesBucket();
+  const bucket = scheduleOverridesBucketFor(monthKey);
   if (!bucket[rowIndex]) bucket[rowIndex] = {};
   for (let d = lo; d <= hi; d++) {
     bucket[rowIndex][d] = code;
@@ -1992,12 +2042,11 @@ function applyScheduleRowDayRange(rowIndex, dayA, dayB, code) {
   render();
 }
 
-function startPillFillInteraction(ev, rowIndex, day, pillEl) {
-  if (isArchiveView()) return;
+function startPillFillInteraction(ev, rowIndex, day, pillEl, monthKey = state.monthKey) {
   if (state.mode !== "edit" || !isEditSessionUnlocked()) return;
-  if (!canEditScheduleRow(rowIndex)) return;
+  if (!canEditScheduleRow(rowIndex, monthKey)) return;
   if (ev.button !== 0) return;
-  const data = getDataset();
+  const data = getDatasetForMonthKey(monthKey);
   if (!data) return;
   if (pillFillInteraction) cancelPillFillInteraction();
 
@@ -2016,7 +2065,11 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl) {
     }
     if (!pi.dragging) return;
     const p = pillUnderPoint(e.clientX, e.clientY);
-    if (p && p.dataset.row === String(pi.rowIndex)) {
+    if (
+      p &&
+      p.dataset.row === String(pi.rowIndex) &&
+      p.dataset.scheduleMonthKey === pi.monthKey
+    ) {
       const d = Number(p.dataset.day, 10);
       if (!Number.isNaN(d) && pi.day1 !== d) {
         pi.day1 = d;
@@ -2030,14 +2083,15 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl) {
     const pi = pillFillInteraction;
     cancelPillFillInteraction();
     if (pi.dragging) {
-      applyScheduleRowDayRange(pi.rowIndex, pi.day0, pi.day1, pi.code);
+      applyScheduleRowDayRange(pi.rowIndex, pi.day0, pi.day1, pi.code, pi.monthKey);
     } else {
-      openScheduleCellPicker(pi.rowIndex, pi.day0, pi.pillEl);
+      openScheduleCellPicker(pi.rowIndex, pi.day0, pi.pillEl, pi.monthKey);
     }
   };
 
   pillFillInteraction = {
     rowIndex,
+    monthKey,
     day0: day,
     day1: day,
     code,
@@ -2192,10 +2246,13 @@ let state = {
   zonePlacementByMonth: loadZonePlacementFromLocal(),
 };
 
+function scheduleOverridesBucketFor(monthKey) {
+  if (!state.scheduleByMonth[monthKey]) state.scheduleByMonth[monthKey] = {};
+  return state.scheduleByMonth[monthKey];
+}
+
 function scheduleOverridesBucket() {
-  const k = state.monthKey;
-  if (!state.scheduleByMonth[k]) state.scheduleByMonth[k] = {};
-  return state.scheduleByMonth[k];
+  return scheduleOverridesBucketFor(state.monthKey);
 }
 
 function persistScheduleByMonthLocal() {
@@ -3047,9 +3104,154 @@ function stickyCellValue(emp, key) {
   return String(emp.daysOnShift);
 }
 
+/** Строки таблицы: выбранный месяц + следующий (сотрудники только во 2-м — в конце). */
+function buildScheduleViewRows(primaryData, secondaryData) {
+  const { rows: primaryRows, total } = getFilteredEmployeesForView(primaryData);
+  const secByName = new Map();
+  if (secondaryData?.employees) {
+    secondaryData.employees.forEach((e, i) => {
+      secByName.set(e.name, i);
+    });
+  }
+  const viewRows = primaryRows.map((emp) => {
+    const primaryRowIndex = primaryData.employees.findIndex((e) => e.name === emp.name);
+    const secondaryRowIndex = secByName.has(emp.name) ? secByName.get(emp.name) : null;
+    return { emp, primaryRowIndex, secondaryRowIndex };
+  });
+
+  if (secondaryData) {
+    const { year, monthIndex } = parseMonthKey(nextMonthKey(state.monthKey));
+    const secDim = daysInMonth(year, monthIndex);
+    const codes = [...state.legendFilterCodes];
+    const primaryNames = new Set(primaryRows.map((e) => e.name));
+    for (const emp of employeesForSection(secondaryData.employees, state.sectionId)) {
+      if (primaryNames.has(emp.name)) continue;
+      let show =
+        state.legendIncludeNoShifts || employeeRowShownInSchedule(emp, secDim);
+      if (codes.length > 0) {
+        show = show && codes.some((c) => employeeHasLegendCodeInMonth(emp, c, secDim));
+      }
+      if (!show) continue;
+      viewRows.push({
+        emp,
+        primaryRowIndex: null,
+        secondaryRowIndex: secByName.get(emp.name) ?? null,
+      });
+    }
+  }
+  return { viewRows, total };
+}
+
+function scheduleCodeForViewRow(seg, viewRow, day) {
+  const rowIndex =
+    seg.monthKey === state.monthKey ? viewRow.primaryRowIndex : viewRow.secondaryRowIndex;
+  if (rowIndex == null) return "";
+  const data = getDatasetForMonthKey(seg.monthKey);
+  const emp = data?.employees?.[rowIndex];
+  if (!emp) return "";
+  return emp.schedule[day] ?? "";
+}
+
+function appendScheduleMonthDayHeaders(headerRow, seg, monthBoundary) {
+  for (let day = 1; day <= seg.dim; day++) {
+    const w = isWeekend(seg.year, seg.monthIndex, day);
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.className = `${w ? "weekend " : ""}schedule-day-th`.trim();
+    if (day === 1 && monthBoundary) th.classList.add("schedule-day-th--month-start");
+    const wd = weekdayShortRu(seg.year, seg.monthIndex, day);
+    th.innerHTML = `
+      <span class="schedule-day-head">
+        <span class="schedule-day-head__d">${pad(day)}.${pad(seg.monthIndex + 1)}</span>
+        <span class="schedule-day-head__w">${wd}</span>
+      </span>`;
+    th.setAttribute(
+      "aria-label",
+      `${day} ${MONTH_NAMES[seg.monthIndex]} ${seg.year}, ${wd}`
+    );
+    th.dataset.scheduleDay = String(day);
+    th.dataset.scheduleMonthKey = seg.monthKey;
+    if (seg.todayD === day) th.classList.add("schedule-day-col--today");
+    headerRow.appendChild(th);
+  }
+}
+
+function appendScheduleMonthGapTh(headerRow) {
+  const th = document.createElement("th");
+  th.scope = "col";
+  th.className = "schedule-month-gap-th";
+  th.setAttribute("aria-hidden", "true");
+  th.innerHTML = "&nbsp;";
+  headerRow.appendChild(th);
+}
+
+function appendScheduleMonthGapTd(tr) {
+  const td = document.createElement("td");
+  td.className = "schedule-month-gap-td";
+  td.setAttribute("aria-hidden", "true");
+  td.innerHTML = "&nbsp;";
+  tr.appendChild(td);
+}
+
+function appendScheduleDayCells(tr, viewRow, seg, onShiftCount, monthBoundary) {
+  for (let day = 1; day <= seg.dim; day++) {
+    const w = isWeekend(seg.year, seg.monthIndex, day);
+    const rowIndex =
+      seg.monthKey === state.monthKey ? viewRow.primaryRowIndex : viewRow.secondaryRowIndex;
+    const code = scheduleCodeForViewRow(seg, viewRow, day);
+    const td = document.createElement("td");
+    td.className = (w ? "weekend " : "").trim();
+    if (day === 1 && monthBoundary) td.classList.add("schedule-day-col--month-start");
+    if (seg.todayD === day) td.classList.add("schedule-day-col--today");
+    td.dataset.scheduleDay = String(day);
+    td.dataset.scheduleMonthKey = seg.monthKey;
+    const pill = document.createElement("span");
+    pill.className = "pill" + (code ? "" : " pill--empty");
+    if (code) {
+      pill.textContent = code;
+      const st = getLegendStyle(code);
+      pill.style.background = st.bg;
+      pill.style.color = st.fg;
+      pill.setAttribute("aria-label", `Отметка ${code}`);
+    } else {
+      pill.textContent = EMPTY_MARK;
+      pill.setAttribute("aria-label", "Нет отметки");
+    }
+    if (ON_SHIFT_CODES.has(code)) onShiftCount[day] += 1;
+
+    if (rowIndex != null) {
+      pill.dataset.row = String(rowIndex);
+      pill.dataset.day = String(day);
+      pill.dataset.scheduleMonthKey = seg.monthKey;
+      const canPick = canEditScheduleRow(rowIndex, seg.monthKey);
+      pill.title = canPick
+        ? code
+          ? `Код: ${code}. Клик — список; зажмите и тяните по дням — заполнить как в Excel`
+          : "Клик — список; зажмите и тяните — очистить диапазон дней"
+        : code
+          ? `Код: ${code}`
+          : scheduleEditHintForUser();
+      if (canPick) {
+        pill.classList.add("pill--editable");
+        pill.addEventListener("pointerdown", (e) =>
+          startPillFillInteraction(e, rowIndex, day, pill, seg.monthKey)
+        );
+      } else {
+        pill.classList.add("pill--readonly");
+      }
+    } else {
+      pill.classList.add("pill--readonly");
+      pill.title = code ? `Код: ${code}` : "Нет отметки";
+    }
+
+    td.appendChild(pill);
+    tr.appendChild(td);
+  }
+}
+
 function renderSchedule(data) {
-  const { year, monthIndex } = parseMonthKey(state.monthKey);
-  const dim = daysInMonth(year, monthIndex);
+  const monthSegments = scheduleMonthSegmentsForView();
+  const secondaryData = getDatasetForMonthKey(monthSegments[1].monthKey);
   const table = document.getElementById("scheduleTable");
   const head = document.getElementById("scheduleHead");
   const body = document.getElementById("scheduleBody");
@@ -3066,18 +3268,16 @@ function renderSchedule(data) {
   head.innerHTML = "";
   body.innerHTML = "";
   foot.innerHTML = "";
-  const todayD = viewMonthTodayDayNumber(year, monthIndex);
-  injectScheduleColgroup(table, dim, vis, todayD);
+  injectScheduleColgroup(table, monthSegments, vis);
 
-  const fullEmployees = data.employees;
-  const { rows: employees, total: totalEmployees } = getFilteredEmployeesForView(data);
+  const { viewRows, total: totalEmployees } = buildScheduleViewRows(data, secondaryData);
   const badge = document.getElementById("employeeCount");
   if (state.legendFilterCodes.size > 0) {
     const label = [...state.legendFilterCodes].join(", ");
-    badge.textContent = `${employees.length} из ${totalEmployees} сотр.`;
-    badge.title = `Фильтр: есть хотя бы один день с одной из отметок: ${label}`;
+    badge.textContent = `${viewRows.length} из ${totalEmployees} сотр.`;
+    badge.title = `Фильтр: есть хотя бы один день с одной из отметок: ${label} (по выбранному месяцу)`;
   } else {
-    badge.textContent = `${employees.length} сотр.`;
+    badge.textContent = `${viewRows.length} сотр.`;
     badge.removeAttribute("title");
   }
 
@@ -3101,84 +3301,34 @@ function renderSchedule(data) {
     headerRow.appendChild(th);
   });
 
-  for (let day = 1; day <= dim; day++) {
-    const w = isWeekend(year, monthIndex, day);
-    const th = document.createElement("th");
-    th.scope = "col";
-    th.className = `${w ? "weekend " : ""}schedule-day-th`.trim();
-    const wd = weekdayShortRu(year, monthIndex, day);
-    th.innerHTML = `
-      <span class="schedule-day-head">
-        <span class="schedule-day-head__d">${pad(day)}.${pad(monthIndex + 1)}</span>
-        <span class="schedule-day-head__w">${wd}</span>
-      </span>`;
-    th.setAttribute(
-      "aria-label",
-      `${day} ${MONTH_NAMES[monthIndex]} ${year}, ${wd}`
-    );
-    th.dataset.scheduleDay = String(day);
-    if (todayD === day) th.classList.add("schedule-day-col--today");
-    headerRow.appendChild(th);
-  }
+  monthSegments.forEach((seg, segIdx) => {
+    if (segIdx > 0) appendScheduleMonthGapTh(headerRow);
+    appendScheduleMonthDayHeaders(headerRow, seg, segIdx > 0);
+  });
   head.appendChild(headerRow);
 
-  const onShiftCount = {};
-  for (let day = 1; day <= dim; day++) onShiftCount[day] = 0;
+  const onShiftBySegment = monthSegments.map((seg) => {
+    const counts = {};
+    for (let day = 1; day <= seg.dim; day++) counts[day] = 0;
+    return counts;
+  });
 
-  employees.forEach((emp) => {
-    const rowIndex = fullEmployees.indexOf(emp);
+  viewRows.forEach((viewRow) => {
     const tr = document.createElement("tr");
     keys.forEach((key, slot) => {
       const cell = slot === 0 ? document.createElement("th") : document.createElement("td");
       if (slot === 0) cell.scope = "row";
       cell.className = `sticky-col sticky-${key} ${STICKY_CELL_CLASS[key]}`;
-      cell.textContent = stickyCellValue(emp, key);
+      cell.textContent = stickyCellValue(viewRow.emp, key);
       applyStickyGeometry(cell, slot, "body", layout.left[key]);
       if (key === lastKey) cell.classList.add("sticky-col--edge");
       tr.appendChild(cell);
     });
 
-    for (let day = 1; day <= dim; day++) {
-      const w = isWeekend(year, monthIndex, day);
-      const code = emp.schedule[day] ?? "";
-      const td = document.createElement("td");
-      td.className = (w ? "weekend " : "").trim();
-      if (todayD === day) td.classList.add("schedule-day-col--today");
-      td.dataset.scheduleDay = String(day);
-      const pill = document.createElement("span");
-      pill.className = "pill" + (code ? "" : " pill--empty");
-      if (code) {
-        pill.textContent = code;
-        const st = getLegendStyle(code);
-        pill.style.background = st.bg;
-        pill.style.color = st.fg;
-        pill.setAttribute("aria-label", `Отметка ${code}`);
-      } else {
-        pill.textContent = EMPTY_MARK;
-        pill.setAttribute("aria-label", "Нет отметки");
-      }
-      if (ON_SHIFT_CODES.has(code)) onShiftCount[day] += 1;
-
-      pill.dataset.row = String(rowIndex); /* индекс в полном списке — для правок и overrides */
-      pill.dataset.day = String(day);
-      const canPick = canEditScheduleRow(rowIndex);
-      pill.title = canPick
-        ? code
-          ? `Код: ${code}. Клик — список; зажмите и тяните по дням — заполнить как в Excel`
-          : "Клик — список; зажмите и тяните — очистить диапазон дней"
-        : code
-          ? `Код: ${code}`
-          : scheduleEditHintForUser();
-      if (canPick) {
-        pill.classList.add("pill--editable");
-        pill.addEventListener("pointerdown", (e) => startPillFillInteraction(e, rowIndex, day, pill));
-      } else {
-        pill.classList.add("pill--readonly");
-      }
-
-      td.appendChild(pill);
-      tr.appendChild(td);
-    }
+    monthSegments.forEach((seg, segIdx) => {
+      if (segIdx > 0) appendScheduleMonthGapTd(tr);
+      appendScheduleDayCells(tr, viewRow, seg, onShiftBySegment[segIdx], segIdx > 0);
+    });
     body.appendChild(tr);
   });
 
@@ -3203,45 +3353,58 @@ function renderSchedule(data) {
     footRow.appendChild(padCell);
   }
 
-  for (let day = 1; day <= dim; day++) {
-    const w = isWeekend(year, monthIndex, day);
-    const td = document.createElement("td");
-    td.className = `${w ? "weekend " : ""}sticky-footer-num`.trim();
-    if (todayD === day) td.classList.add("schedule-day-col--today");
-    td.dataset.scheduleDay = String(day);
-    td.textContent = String(onShiftCount[day]);
-    td.setAttribute("aria-label", `На смене ${onShiftCount[day]} чел.`);
-    footRow.appendChild(td);
-  }
+  monthSegments.forEach((seg, segIdx) => {
+    if (segIdx > 0) appendScheduleMonthGapTd(footRow);
+    const onShiftCount = onShiftBySegment[segIdx];
+    for (let day = 1; day <= seg.dim; day++) {
+      const w = isWeekend(seg.year, seg.monthIndex, day);
+      const td = document.createElement("td");
+      td.className = `${w ? "weekend " : ""}sticky-footer-num`.trim();
+      if (day === 1 && segIdx > 0) td.classList.add("schedule-day-col--month-start");
+      if (seg.todayD === day) td.classList.add("schedule-day-col--today");
+      td.dataset.scheduleDay = String(day);
+      td.dataset.scheduleMonthKey = seg.monthKey;
+      td.textContent = String(onShiftCount[day]);
+      td.setAttribute(
+        "aria-label",
+        `На смене ${onShiftCount[day]} чел., ${MONTH_NAMES[seg.monthIndex]}`
+      );
+      footRow.appendChild(td);
+    }
+  });
   foot.appendChild(footRow);
 }
 
 function updateFooterTotals() {
   const data = getDataset();
   if (!data) return;
-  const { year, monthIndex } = parseMonthKey(state.monthKey);
-  const dim = daysInMonth(year, monthIndex);
-  const onShiftCount = {};
-  for (let day = 1; day <= dim; day++) onShiftCount[day] = 0;
-
-  const { rows } = getFilteredEmployeesForView(data);
-  rows.forEach((emp) => {
-    for (let day = 1; day <= dim; day++) {
-      const code = emp.schedule[day] ?? "";
-      if (ON_SHIFT_CODES.has(code)) onShiftCount[day] += 1;
-    }
-  });
+  const secondaryData = getDatasetForMonthKey(nextMonthKey(state.monthKey));
+  const monthSegments = scheduleMonthSegmentsForView();
+  const { viewRows } = buildScheduleViewRows(data, secondaryData);
 
   const footRow = document.querySelector("#scheduleFoot tr");
   if (!footRow) return;
-  const cells = footRow.querySelectorAll("td.sticky-footer-num");
-  cells.forEach((td, i) => {
-    const day = i + 1;
-    if (day <= dim) {
-      const n = onShiftCount[day];
-      td.textContent = String(n);
-      td.setAttribute("aria-label", `На смене ${n} чел.`);
-    }
+
+  monthSegments.forEach((seg) => {
+    const onShiftCount = {};
+    for (let day = 1; day <= seg.dim; day++) onShiftCount[day] = 0;
+    viewRows.forEach((viewRow) => {
+      for (let day = 1; day <= seg.dim; day++) {
+        const code = scheduleCodeForViewRow(seg, viewRow, day);
+        if (ON_SHIFT_CODES.has(code)) onShiftCount[day] += 1;
+      }
+    });
+    footRow
+      .querySelectorAll(`td.sticky-footer-num[data-schedule-month-key="${seg.monthKey}"]`)
+      .forEach((td) => {
+        const day = Number(td.dataset.scheduleDay, 10);
+        const n = onShiftCount[day] ?? 0;
+        td.textContent = String(n);
+        td.setAttribute(
+          "aria-label",
+          `На смене ${n} чел., ${MONTH_NAMES[seg.monthIndex]}`
+        );
+      });
   });
 }
 
