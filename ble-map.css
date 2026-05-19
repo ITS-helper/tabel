@@ -1277,46 +1277,69 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
 
 }
 
-/* Режим правки: три строки (поля → фильтры/слой → чертёж), не одна длинная лента */
+/* Режим правки: одна компактная строка (прокрутка по горизонтали) */
 body.ble-map--edit .map-toolbar {
+  --map-toolbar-control-h: 30px;
   display: flex !important;
-  flex-direction: column !important;
+  flex-direction: row !important;
   flex-wrap: nowrap !important;
-  align-items: stretch;
-  gap: 6px;
-  overflow: visible;
-}
-
-body.ble-map--edit .map-toolbar-row--fields {
-  display: flex !important;
-  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-body.ble-map--edit .map-toolbar-row--actions {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-  overflow: visible;
-}
-
-body.ble-map--edit .map-toolbar-row--edit {
-  flex: 0 0 auto;
-  width: 100%;
-  justify-content: center;
-  padding-top: 6px;
-  border-top: 1px solid rgba(21, 101, 192, 0.12);
+  gap: 4px;
+  padding: 4px 6px;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: hidden;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-body.ble-map--edit .map-toolbar-row--edit::-webkit-scrollbar {
+body.ble-map--edit .map-toolbar::-webkit-scrollbar {
   display: none;
+}
+
+body.ble-map--edit .map-toolbar-row--fields,
+body.ble-map--edit .map-toolbar-row--actions,
+body.ble-map--edit .map-toolbar-row--edit {
+  display: contents;
+}
+
+body.ble-map--edit .map-ww-logo-btn {
+  display: none;
+}
+
+body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar {
+  flex: 0 0 92px;
+  width: 92px;
+  min-width: 72px;
+  max-width: 120px;
+  order: unset;
+}
+
+body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar input {
+  min-height: var(--map-toolbar-control-h);
+  height: var(--map-toolbar-control-h);
+  padding: 0 22px 0 8px;
+  font-size: 11px;
+}
+
+body.ble-map--edit .map-route-field--toolbar {
+  flex: 0 0 100px;
+  width: 100px;
+  min-width: 0;
+  max-width: 120px;
+  order: unset;
+}
+
+body.ble-map--edit .map-route-field--toolbar .map-route-select {
+  min-height: var(--map-toolbar-control-h);
+  height: var(--map-toolbar-control-h);
+  padding: 0 22px 0 8px;
+  font-size: 11px;
+}
+
+body.ble-map--edit .map-route-field--toolbar .map-route-field__label {
+  font-size: 9px;
+  top: -6px;
+  left: 6px;
 }
 
 body.ble-map--edit .map-field-pack-btn {
@@ -1324,13 +1347,49 @@ body.ble-map--edit .map-field-pack-btn {
 }
 
 body.ble-map--edit .map-edit-tools--dock {
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
-  max-width: 100%;
+  gap: 4px;
   min-width: 0;
+}
+
+body.ble-map--edit .map-zone-draw-tools {
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 1px 3px;
+}
+
+body.ble-map--edit .map-zone-draw-btn {
+  padding: 3px 6px;
+  font-size: 0.56em;
+}
+
+body.ble-map--edit .map-edit-save,
+body.ble-map--edit .map-edit-cancel {
+  padding: 4px 8px;
+  font-size: 0.58em;
+  min-height: var(--map-toolbar-control-h);
+}
+
+body.ble-map--edit .map-filter-btn,
+body.ble-map--edit .map-edit-mode-btn,
+body.ble-map--edit .map-genplan-calib-btn,
+body.ble-map--edit .map-layer-mode-btn {
+  min-height: var(--map-toolbar-control-h);
+  padding: 4px 8px;
+  font-size: 0.62em;
+}
+
+body.ble-map--edit .map-toolbar-text--long,
+body.ble-map--edit .map-filter-label--long {
+  display: none;
+}
+
+body.ble-map--edit .map-toolbar-text--short,
+body.ble-map--edit .map-filter-label--short {
+  display: inline;
 }
 
 body.ble-map--edit .map-toolbar__sep--edit-extras {
@@ -1341,38 +1400,16 @@ body.ble-map--edit .map-toolbar__sep--edit-extras:has(+ .map-genplan-calib-btn:n
   display: block;
 }
 
-@media (min-width: 769px) {
-  body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar {
-    flex: 1 1 auto;
-    order: unset;
-    width: auto;
-    max-width: none;
-  }
-
-  body.ble-map--edit .map-route-field--toolbar {
-    flex: 0 0 172px;
-    order: unset;
-    width: 172px;
-    max-width: none;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1100px) {
-  body.ble-map--edit .map-toolbar-text--long {
-    display: none;
-  }
-
-  body.ble-map--edit .map-toolbar-text--short {
-    display: inline;
-  }
+body.ble-map--edit .map-float-dock .map-zone-edit-hint:not([hidden]) {
+  padding: 2px 8px 3px;
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 .map-toolbar-row--edit {
-  flex: 1 1 100%;
-  justify-content: center;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  overflow: visible;
 }
 
 .map-toolbar-row--edit::-webkit-scrollbar {
