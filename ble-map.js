@@ -45,8 +45,11 @@
   const BLE_DEFAULT_CENTER_BLE = "20";
   const BLE_DEFAULT_CENTER_ZOOM = 18;
   const BLE_MAP_MIN_ZOOM = 14;
-  const BLE_MAP_MAX_ZOOM = 21;
-  const BLE_MAP_EDIT_MAX_ZOOM = 23;
+  /** Esri в этом районе без тайлов выше ~18 — выше только upscale, не новые запросы */
+  const BLE_SATELLITE_NATIVE_ZOOM = 18;
+  const BLE_STREET_NATIVE_ZOOM = 19;
+  const BLE_MAP_MAX_ZOOM = 19;
+  const BLE_MAP_EDIT_MAX_ZOOM = 20;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
   const BLE_DEFAULT_CENTER_MAX_ATTEMPTS = 18;
   const BLE_ZONE_NEON = "#00e5ff";
