@@ -36,6 +36,11 @@ const GENPLAN_TILE_MIN_Z = 19;
 const GENPLAN_TILE_MAX_Z = 20;
 const GENPLAN_TILE_SIZE = 256;
 const BUILD_TILES = process.env.BLE_GENPLAN_TILES === "1";
+/** Цвета растра из DWG (SVG → PNG) */
+const GENPLAN_TEXT_COLOR = process.env.BLE_GENPLAN_TEXT_COLOR || "#16a34a";
+const GENPLAN_LINE_COLOR = process.env.BLE_GENPLAN_LINE_COLOR || "#000000";
+const GENPLAN_TRANSPARENT = process.env.BLE_GENPLAN_TRANSPARENT !== "0";
+const GENPLAN_OUT = process.env.BLE_GENPLAN_OUT || "";
 
 const LIBREDWG_VER = "0.13.4";
 const LIBREDWG_ZIP = `libredwg-${LIBREDWG_VER}-win64.zip`;
@@ -184,18 +189,86 @@ function dwgToSvg(dwg2svgExe, dwgPath) {
   return svgPath;
 }
 
+function styleGenplanSvg(svg) {
+  let out = svg;
+  out = out.replace(
+    /(<text\b[^>]*?\s)fill="(?:black|#000000|#000)"/gi,
+    `$1fill="${GENPLAN_TEXT_COLOR}"`
+  );
+  out = out.replace(
+    /(<text\b[^>]*?)style="([^"]*)"/gi,
+    (_, open, style) =>
+      `${open}style="${style
+        .replace(/\bfill\s*:\s*(?:black|#000000|#000)\b/gi, `fill:${GENPLAN_TEXT_COLOR}`)
+        .replace(/\bstroke\s*:\s*[^;"]+/gi, (m) =>
+          /none/i.test(m) ? m : `stroke:${GENPLAN_LINE_COLOR}`
+        )}"`
+  );
+  out = out.replace(/stroke:\s*black\b/gi, `stroke:${GENPLAN_LINE_COLOR}`);
+  out = out.replace(/stroke-width:\s*0(?:\.0+)?px/gi, "stroke-width:0.1px");
+  out = out.replace(/fill:\s*black\b/gi, (m, offset) => {
+    const before = out.slice(Math.max(0, offset - 80), offset);
+    return /<text\b/i.test(before) ? `fill:${GENPLAN_TEXT_COLOR}` : `fill:${GENPLAN_LINE_COLOR}`;
+  });
+  return out;
+}
+
 async function renderDwg(dwgPath) {
   const dwg2svg = await ensureLibreDwg();
   console.log("[ble-genplan] DWG → SVG…");
   const svgPath = dwgToSvg(dwg2svg, dwgPath);
-  console.log("[ble-genplan] SVG → PNG, width", RENDER_WIDTH);
+  console.log("[ble-genplan] стили: линии", GENPLAN_LINE_COLOR, "текст", GENPLAN_TEXT_COLOR);
+  console.log("[ble-genplan] SVG → PNG, width", RENDER_WIDTH, GENPLAN_TRANSPARENT ? "(прозрачный фон)" : "");
   const { Resvg } = await import("@resvg/resvg-js");
-  const svgBuf = fs.readFileSync(svgPath);
-  const resvg = new Resvg(svgBuf, {
+  const svgRaw = fs.readFileSync(svgPath, "utf8");
+  const svgStyled = styleGenplanSvg(svgRaw);
+  fs.writeFileSync(svgPath.replace(/\.svg$/i, ".styled.svg"), svgStyled, "utf8");
+  const resvg = new Resvg(Buffer.from(svgStyled, "utf8"), {
     fitTo: { mode: "width", value: RENDER_WIDTH },
-    background: "white",
+    background: GENPLAN_TRANSPARENT ? "transparent" : "white",
   });
-  return resvg.render().asPng();
+  let pngBuf = resvg.render().asPng();
+  pngBuf = await postProcessGenplanPng(pngBuf);
+  return pngBuf;
+}
+
+/** Прозрачный фон; серый antialias → чистый чёрный / зелёный */
+async function postProcessGenplanPng(pngBuf) {
+  const sharp = (await import("sharp")).default;
+  const [tr, tg, tb] = [0x16, 0xa3, 0x4a];
+  const { data, info } = await sharp(pngBuf, { limitInputPixels: false })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const a = data[i + 3];
+    if (a < 24) {
+      data[i + 3] = 0;
+      continue;
+    }
+    if (g > 50 && g > r + 12 && g > b + 8) {
+      data[i] = tr;
+      data[i + 1] = tg;
+      data[i + 2] = tb;
+      data[i + 3] = 255;
+    } else if (r + g + b < 520) {
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 0;
+      data[i + 3] = 255;
+    } else {
+      data[i + 3] = 0;
+    }
+  }
+  return sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+    limitInputPixels: false,
+  })
+    .png({ compressionLevel: 6 })
+    .toBuffer();
 }
 
 async function ensurePdftoppm() {
@@ -311,9 +384,14 @@ async function buildGenplanTiles(pngPath, meta) {
 async function writeOutputs(pngBuf, meta) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(OUT_PNG, pngBuf);
+  if (GENPLAN_OUT) {
+    fs.mkdirSync(path.dirname(GENPLAN_OUT), { recursive: true });
+    fs.writeFileSync(GENPLAN_OUT, pngBuf);
+    console.log("extra out", GENPLAN_OUT);
+  }
   const sharp = (await import("sharp")).default;
   await sharp(pngBuf, { limitInputPixels: false })
-    .flatten({ background: "#ffffff" })
+    .flatten({ background: "#ffffff" }) // JPG — белый фон; PNG остаётся прозрачным
     .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
     .toFile(OUT_JPG);
   const useFile = meta.source_dwg
@@ -343,7 +421,7 @@ async function writeOutputs(pngBuf, meta) {
 
   fs.writeFileSync(OUT_META, JSON.stringify(meta, null, 2));
   const imgPath = path.join(OUT_DIR, useFile);
-  const dim = await sharp(imgPath).metadata();
+  const dim = await sharp(imgPath, { limitInputPixels: false }).metadata();
   console.log("bounds", meta.southWest, meta.northEast);
   console.log("image", useFile, dim.width, "×", dim.height, "bytes", fs.statSync(imgPath).size);
   console.log("meta", OUT_META);
