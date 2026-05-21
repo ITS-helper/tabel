@@ -182,10 +182,8 @@ body {
 }
 
 .map-tools-menu {
-  position: absolute;
-  top: calc(100% + 4px);
   left: 0;
-  z-index: 2500;
+  right: auto;
   min-width: 168px;
   padding: 4px;
   border-radius: 10px;
@@ -1149,7 +1147,8 @@ body.ble-map-layer-menu-open .fs-compact-bar {
   padding: 4px 8px;
 }
 
-.map-layer-menu {
+.map-layer-menu,
+.map-tools-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -1530,7 +1529,12 @@ body.ble-map--edit .map-toolbar::-webkit-scrollbar {
 body.ble-map--edit .map-toolbar-row--fields,
 body.ble-map--edit .map-toolbar-row--actions,
 body.ble-map--edit .map-toolbar-row--edit {
-  display: contents;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 body.ble-map--edit .map-ww-logo-btn {

@@ -2600,10 +2600,7 @@
       const btn = picker.querySelector(".map-layer-mode-btn");
       const menu = picker.querySelector(".map-layer-menu");
       picker.classList.remove("map-layer-picker--open");
-      if (menu) {
-        menu.hidden = true;
-        resetLayerMenuPosition(menu);
-      }
+      hideMapDropdownMenu(menu);
       if (btn) btn.setAttribute("aria-expanded", "false");
     });
   }
@@ -2624,10 +2621,7 @@
       const btn = picker.querySelector(".map-tools-mode-btn");
       const menu = picker.querySelector(".map-tools-menu");
       picker.classList.remove("map-tools-picker--open");
-      if (menu) {
-        menu.hidden = true;
-        resetToolsMenuPosition(menu);
-      }
+      hideMapDropdownMenu(menu);
       if (btn) btn.setAttribute("aria-expanded", "false");
     });
   }
@@ -2655,16 +2649,32 @@
     menu.style.bottom = "auto";
   }
 
+  function revealMapDropdownMenu(menu) {
+    if (!menu) return;
+    menu.hidden = false;
+    menu.style.display = "block";
+    menu.style.visibility = "visible";
+  }
+
+  function hideMapDropdownMenu(menu) {
+    if (!menu) return;
+    menu.hidden = true;
+    menu.style.display = "";
+    menu.style.visibility = "";
+    if (menu.classList.contains("map-layer-menu")) resetLayerMenuPosition(menu);
+    else resetToolsMenuPosition(menu);
+  }
+
   function openToolsMenu(picker) {
     const btn = picker.querySelector(".map-tools-mode-btn");
     const menu = picker.querySelector(".map-tools-menu");
     if (!btn || !menu) return;
     closeAllMapDropdowns();
-    menu.hidden = false;
+    revealMapDropdownMenu(menu);
     btn.setAttribute("aria-expanded", "true");
     picker.classList.add("map-tools-picker--open");
     document.body.classList.add("ble-map-tools-menu-open");
-    positionToolsMenu(picker);
+    requestAnimationFrame(() => positionToolsMenu(picker));
   }
 
   function toggleToolsMenu(picker) {
@@ -2677,28 +2687,85 @@
     openToolsMenu(picker);
   }
 
-  function wireMapToolsPicker(picker) {
-    if (!picker || picker.dataset.toolsPickerWired === "1") return;
-    picker.dataset.toolsPickerWired = "1";
-    const btn = picker.querySelector(".map-tools-mode-btn");
-    const menu = picker.querySelector(".map-tools-menu");
-    if (!btn || !menu) return;
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!bleEditMode) return;
-      toggleToolsMenu(picker);
-    });
-    btn.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      if (!bleEditMode) return;
-      toggleToolsMenu(picker);
-    });
+  function wireMapToolsPickers() {
+    /* кнопки обрабатываются в wireMapDropdownUi */
   }
 
-  function wireMapToolsPickers() {
-    document.querySelectorAll("[data-tools-picker]").forEach(wireMapToolsPicker);
+  function wireMapDropdownUi() {
+    if (document.body.dataset.mapDropdownUiWired === "1") return;
+    document.body.dataset.mapDropdownUiWired = "1";
+
+    const onDropdownActivate = (e) => {
+      const scope = e.target.closest("#mapFloatDock, .map-fullscreen-overlay");
+      if (!scope) return;
+
+      const layerItem = e.target.closest(".map-layer-menu__item");
+      if (layerItem && scope.contains(layerItem)) {
+        e.preventDefault();
+        if (BLE_BASE_LAYERS.includes(layerItem.dataset.layer)) {
+          setBleBaseLayer(layerItem.dataset.layer);
+        }
+        closeAllLayerMenus();
+        return;
+      }
+
+      const toolsItem = e.target.closest(".map-tools-menu__item");
+      if (toolsItem && scope.contains(toolsItem)) {
+        e.preventDefault();
+        if (toolsItem.dataset.drawTool && bleEditMode) {
+          setBleDrawTool(toolsItem.dataset.drawTool);
+          closeAllToolsMenus();
+        }
+        return;
+      }
+
+      const layerBtn = e.target.closest(".map-layer-mode-btn");
+      if (layerBtn && scope.contains(layerBtn)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const picker = layerBtn.closest(".map-layer-picker");
+        if (picker) toggleLayerMenu(picker);
+        return;
+      }
+
+      const toolsBtn = e.target.closest(".map-tools-mode-btn");
+      if (toolsBtn && scope.contains(toolsBtn)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!bleEditMode) return;
+        const picker = toolsBtn.closest("[data-tools-picker]");
+        if (picker) toggleToolsMenu(picker);
+      }
+    };
+
+    document.addEventListener("click", onDropdownActivate);
+
+    document.addEventListener("click", (e) => {
+      if (e.target.closest(".map-layer-picker") || e.target.closest("[data-tools-picker]")) return;
+      closeAllMapDropdowns();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      const layerBtn = e.target.closest?.(".map-layer-mode-btn");
+      if (layerBtn && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        const picker = layerBtn.closest(".map-layer-picker");
+        if (picker) toggleLayerMenu(picker);
+        return;
+      }
+      const toolsBtn = e.target.closest?.(".map-tools-mode-btn");
+      if (toolsBtn && (e.key === "Enter" || e.key === " ") && bleEditMode) {
+        e.preventDefault();
+        const picker = toolsBtn.closest("[data-tools-picker]");
+        if (picker) toggleToolsMenu(picker);
+      }
+    });
+
+    window.addEventListener("resize", closeAllMapDropdowns, { passive: true });
+    window.visualViewport?.addEventListener("resize", closeAllMapDropdowns, { passive: true });
+    window.visualViewport?.addEventListener("resize", () => {
+      if (bleGenplanCalibMode) positionGenplanPanel();
+    }, { passive: true });
   }
 
   function openLayerMenu(picker) {
@@ -2706,11 +2773,11 @@
     const menu = picker.querySelector(".map-layer-menu");
     if (!btn || !menu) return;
     closeAllMapDropdowns();
-    menu.hidden = false;
+    revealMapDropdownMenu(menu);
     btn.setAttribute("aria-expanded", "true");
     picker.classList.add("map-layer-picker--open");
     document.body.classList.add("ble-map-layer-menu-open");
-    positionLayerMenu(picker);
+    requestAnimationFrame(() => positionLayerMenu(picker));
   }
 
   function toggleLayerMenu(picker) {
@@ -2734,47 +2801,12 @@
   }
 
   function wireMapLayerPicker(picker) {
-    if (!picker || picker.dataset.layerPickerWired === "1") return;
+    if (!picker) return;
     picker.dataset.layerPickerWired = "1";
-    const btn = picker.querySelector(".map-layer-mode-btn");
-    const menu = picker.querySelector(".map-layer-menu");
-    if (!btn || !menu) return;
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleLayerMenu(picker);
-    });
-    btn.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      toggleLayerMenu(picker);
-    });
-    menu.querySelectorAll(".map-layer-menu__item").forEach((item) => {
-      item.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (BLE_BASE_LAYERS.includes(item.dataset.layer)) {
-          setBleBaseLayer(item.dataset.layer);
-        }
-        closeAllLayerMenus();
-      });
-    });
   }
 
   function wireBaseLayerPickers() {
-    if (!document.body.dataset.layerMenuCloseWired) {
-      document.body.dataset.layerMenuCloseWired = "1";
-      document.addEventListener(
-        "pointerdown",
-        (e) => {
-          if (e.target.closest(".map-layer-picker") || e.target.closest("[data-tools-picker]")) return;
-          closeAllMapDropdowns();
-        },
-        true
-      );
-      window.addEventListener("resize", closeAllMapDropdowns, { passive: true });
-      window.visualViewport?.addEventListener("resize", closeAllMapDropdowns, { passive: true });
-    }
+    wireMapDropdownUi();
     document.querySelectorAll(".map-layer-picker").forEach(wireMapLayerPicker);
     wireMapToolsPickers();
   }
@@ -4682,10 +4714,10 @@
   function bindUi() {
     document.body.classList.remove("ble-map--genplan-calib", "ble-map--genplan-calib-expanded");
     document.getElementById("mapGenplanMaskPanel")?.setAttribute("hidden", "");
+    wireMapDropdownUi();
     wireBaseLayerPickers();
     wireGenplanCalibUi();
     wireBleDrawUi();
-    wireMapToolsPickers();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
