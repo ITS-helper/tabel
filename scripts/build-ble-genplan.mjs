@@ -14,6 +14,11 @@ import { execFileSync, spawnSync } from "child_process";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
+import {
+  exportDwgMinJson,
+  filterAndCropGenplanSvg,
+  loadObjectLabels,
+} from "./genplan-svg-post.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -189,39 +194,33 @@ function dwgToSvg(dwg2svgExe, dwgPath) {
   return svgPath;
 }
 
-function styleGenplanSvg(svg) {
-  let out = svg;
-  out = out.replace(
-    /(<text\b[^>]*?\s)fill="(?:black|#000000|#000)"/gi,
-    `$1fill="${GENPLAN_TEXT_COLOR}"`
-  );
-  out = out.replace(
-    /(<text\b[^>]*?)style="([^"]*)"/gi,
-    (_, open, style) =>
-      `${open}style="${style
-        .replace(/\bfill\s*:\s*(?:black|#000000|#000)\b/gi, `fill:${GENPLAN_TEXT_COLOR}`)
-        .replace(/\bstroke\s*:\s*[^;"]+/gi, (m) =>
-          /none/i.test(m) ? m : `stroke:${GENPLAN_LINE_COLOR}`
-        )}"`
-  );
-  out = out.replace(/stroke:\s*black\b/gi, `stroke:${GENPLAN_LINE_COLOR}`);
-  out = out.replace(/stroke-width:\s*0(?:\.0+)?px/gi, "stroke-width:0.1px");
-  out = out.replace(/fill:\s*black\b/gi, (m, offset) => {
-    const before = out.slice(Math.max(0, offset - 80), offset);
-    return /<text\b/i.test(before) ? `fill:${GENPLAN_TEXT_COLOR}` : `fill:${GENPLAN_LINE_COLOR}`;
-  });
-  return out;
-}
-
 async function renderDwg(dwgPath) {
   const dwg2svg = await ensureLibreDwg();
+  const dwgread = findInTree(LIBREDWG_TOOLS, "dwgread.exe");
+  const jsonPath = path.join(LIBREDWG_TOOLS, "tmp", "genplan.min.json");
+
   console.log("[ble-genplan] DWG → SVG…");
   const svgPath = dwgToSvg(dwg2svg, dwgPath);
+
+  if (dwgread) {
+    console.log("[ble-genplan] DWG → JSON (подписи)…");
+    exportDwgMinJson(dwgPath, dwgread, jsonPath);
+  }
+  const labels = loadObjectLabels(jsonPath);
+  console.log("[ble-genplan] подписи объектов:", labels.length);
+
+  let svgRaw = fs.readFileSync(svgPath, "utf8");
+  const { svg: svgStyled, bbox } = filterAndCropGenplanSvg(svgRaw, labels, {
+    textColor: GENPLAN_TEXT_COLOR,
+    lineColor: GENPLAN_LINE_COLOR,
+  });
+  console.log(
+    "[ble-genplan] обрезка:",
+    bbox ? `${Math.round(bbox.maxX - bbox.minX)}×${Math.round(bbox.maxY - bbox.minY)}` : "—"
+  );
   console.log("[ble-genplan] стили: линии", GENPLAN_LINE_COLOR, "текст", GENPLAN_TEXT_COLOR);
   console.log("[ble-genplan] SVG → PNG, width", RENDER_WIDTH, GENPLAN_TRANSPARENT ? "(прозрачный фон)" : "");
   const { Resvg } = await import("@resvg/resvg-js");
-  const svgRaw = fs.readFileSync(svgPath, "utf8");
-  const svgStyled = styleGenplanSvg(svgRaw);
   fs.writeFileSync(svgPath.replace(/\.svg$/i, ".styled.svg"), svgStyled, "utf8");
   const resvg = new Resvg(Buffer.from(svgStyled, "utf8"), {
     fitTo: { mode: "width", value: RENDER_WIDTH },
