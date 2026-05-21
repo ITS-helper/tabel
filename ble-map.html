@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260520d" />
+  <link rel="stylesheet" href="ble-map.css?v=20260520e" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -131,7 +131,7 @@
                   type="button"
                   class="map-genplan-calib-btn"
                   id="mapGenplanCalibBtn"
-                  title="Подогнать генплан: поворот и сдвиг"
+                  title="Подогнать генплан: перетаскивание, углы, поворот"
                   hidden
                 >
                   <span class="map-toolbar-text map-toolbar-text--long">Подогнать генплан</span>
@@ -156,50 +156,43 @@
     <img id="photoViewerImg" src="" alt="" />
   </div>
 
-  <div class="map-genplan-calib-panel" id="mapGenplanCalibPanel" hidden>
-    <header class="map-genplan-calib-panel__head">
-      <h2 class="map-genplan-calib-panel__title">Подгонка генплана</h2>
-      <p class="map-genplan-calib-panel__hint">Сверьте оси с метками. Подложка — спутник, генплан полупрозрачный.</p>
-    </header>
-    <label class="map-genplan-calib-field">
-      <span class="map-genplan-calib-field__label">Поворот</span>
-      <input type="range" id="mapGenplanRot" min="-90" max="90" step="0.2" value="0" />
-      <output id="mapGenplanRotOut" class="map-genplan-calib-field__val">0°</output>
-    </label>
-    <div class="map-genplan-calib-nudge map-genplan-calib-nudge--rot">
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="-5">−5°</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="-0.5">−0.5°</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="0.5">+0.5°</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="rot" data-delta="5">+5°</button>
+  <div class="mask-controls" id="mapGenplanMaskPanel" hidden>
+    <div class="mask-controls__head">
+      <span class="mask-controls__title">Подгонка генплана</span>
+      <button type="button" class="mask-controls__toggle-mode" id="mapGenplanMaskCompactToggle" title="Компактная панель" aria-label="Компактная панель">▾</button>
     </div>
-    <label class="map-genplan-calib-field">
-      <span class="map-genplan-calib-field__label">Север–юг, м</span>
-      <input type="range" id="mapGenplanNorth" min="-400" max="400" step="1" value="0" />
-      <output id="mapGenplanNorthOut" class="map-genplan-calib-field__val">0</output>
-    </label>
-    <label class="map-genplan-calib-field">
-      <span class="map-genplan-calib-field__label">Запад–восток, м</span>
-      <input type="range" id="mapGenplanEast" min="-400" max="400" step="1" value="0" />
-      <output id="mapGenplanEastOut" class="map-genplan-calib-field__val">0</output>
-    </label>
-    <div class="map-genplan-calib-nudge map-genplan-calib-nudge--move">
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="-10">↑10</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="-1">↑1</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="east" data-delta="-1">←1</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="east" data-delta="1">1→</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="1">↓1</button>
-      <button type="button" class="map-genplan-calib-nudge-btn" data-genplan-nudge="north" data-delta="10">↓10</button>
+    <p class="mask-controls__hint">Сверьте разбивочник с метками на спутнике. Перетаскивание, углы — размер, кружок сверху — поворот.</p>
+    <p class="mask-controls__file" id="mapGenplanMaskFile"></p>
+    <p class="mask-controls__msg" id="mapGenplanMaskMsg" hidden></p>
+    <div id="mapGenplanMaskFull">
+      <input id="mapGenplanMaskFileInput" accept="image/*" type="file" hidden />
+      <label class="mask-controls__btn mask-controls__btn--outline" for="mapGenplanMaskFileInput">Загрузить изображение</label>
+      <div class="mask-controls__row">
+        <button type="button" class="mask-controls__btn" id="mapGenplanMaskShowBtn">Скрыть / показать</button>
+        <button type="button" class="mask-controls__btn" id="mapGenplanMaskEditBtn">Редактировать</button>
+      </div>
+      <div class="mask-controls__row">
+        <button type="button" class="mask-controls__btn mask-controls__btn--outline" id="mapGenplanMaskResetImgBtn">Сбросить файл</button>
+        <button type="button" class="mask-controls__btn mask-controls__btn--outline" id="mapGenplanMaskResetBtn">Сбросить положение</button>
+      </div>
+      <label class="mask-controls__field">
+        <span class="mask-controls__field-label">Прозрачность</span>
+        <input type="range" id="mapGenplanMaskOpacity" min="0.05" max="1" step="0.05" value="0.55" />
+      </label>
+      <label class="mask-controls__field">
+        <span class="mask-controls__field-label">Угол, °</span>
+        <input type="number" id="mapGenplanMaskAngle" step="1" value="0" />
+      </label>
+      <label class="mask-controls__field">
+        <span class="mask-controls__field-label">Режим наложения</span>
+        <select id="mapGenplanMaskBlend"></select>
+      </label>
+      <div class="mask-controls__row mask-controls__row--actions">
+        <button type="button" class="mask-controls__btn mask-controls__btn--primary" id="mapGenplanMaskSaveBtn">Сохранить</button>
+        <button type="button" class="mask-controls__btn mask-controls__btn--ghost" id="mapGenplanMaskCancelBtn">Закрыть</button>
+      </div>
     </div>
-    <label class="map-genplan-calib-field">
-      <span class="map-genplan-calib-field__label">Масштаб</span>
-      <input type="range" id="mapGenplanScale" min="50" max="150" step="0.5" value="100" />
-      <output id="mapGenplanScaleOut" class="map-genplan-calib-field__val">100%</output>
-    </label>
-    <div class="map-genplan-calib-actions">
-      <button type="button" class="map-genplan-calib-save" id="mapGenplanCalibSave">Сохранить</button>
-      <button type="button" class="map-genplan-calib-reset" id="mapGenplanCalibReset">Сброс</button>
-      <button type="button" class="map-genplan-calib-cancel" id="mapGenplanCalibCancel">Отмена</button>
-    </div>
+    <div id="mapGenplanMaskShort" hidden></div>
   </div>
 
   <div class="map-fullscreen-overlay" id="mapFullscreenOverlay">
@@ -248,7 +241,8 @@
   <script src="https://unpkg.com/leaflet-imageoverlay-rotated@0.2.0/ImageOverlay.Rotated.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-map.js?v=20260520d"></script>
+  <script src="ble-genplan-mask.js?v=20260520e"></script>
+  <script src="ble-map.js?v=20260520e"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

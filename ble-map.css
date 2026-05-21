@@ -161,134 +161,251 @@ body {
   border-color: transparent;
 }
 
-.map-genplan-calib-panel {
+/* Редактор подложки генплана (mask overlay) */
+.leaflet-map-pane {
+  isolation: isolate;
+}
+
+.mask-image {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  transform-origin: center center;
+  user-select: none;
+  z-index: 450;
+}
+
+.mask-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border: 2px solid rgba(0, 78, 207, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  box-sizing: border-box;
+  cursor: move;
+  transform-origin: center center;
+  user-select: none;
+  z-index: 451;
+}
+
+.mask-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: #ffffff;
+  border: 2px solid #004ecf;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+}
+
+.mask-handle--top-left {
+  top: -8px;
+  left: -8px;
+  cursor: nwse-resize;
+}
+
+.mask-handle--top-right {
+  top: -8px;
+  right: -8px;
+  cursor: nesw-resize;
+}
+
+.mask-handle--bottom-left {
+  bottom: -8px;
+  left: -8px;
+  cursor: nesw-resize;
+}
+
+.mask-handle--bottom-right {
+  right: -8px;
+  bottom: -8px;
+  cursor: nwse-resize;
+}
+
+.mask-rotate-handle {
+  position: absolute;
+  top: -46px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: #004ecf;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(0, 78, 207, 0.85),
+    0 2px 6px rgba(0, 0, 0, 0.32);
+  cursor: grab;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.mask-rotate-handle::before {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: 2px;
+  height: 27px;
+  background: rgba(0, 78, 207, 0.85);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.mask-rotate-handle:active {
+  cursor: grabbing;
+}
+
+.mask-controls {
   position: fixed;
   z-index: 100010;
   right: 12px;
   bottom: 12px;
-  width: min(100vw - 24px, 340px);
-  max-height: min(72vh, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100vw - 24px, 260px);
+  max-height: min(80vh, 560px);
   overflow: auto;
-  padding: 14px 14px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 12px 40px rgba(21, 101, 192, 0.18);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
   -webkit-overflow-scrolling: touch;
 }
 
-body.ble-map--genplan-calib .map-genplan-calib-panel {
-  display: block;
+.mask-controls--short {
+  width: auto;
+  max-width: min(100vw - 24px, 320px);
 }
 
-.map-genplan-calib-panel__title {
-  margin: 0 0 4px;
+.mask-controls__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mask-controls__title {
   font-family: Oswald, sans-serif;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--primary);
 }
 
-.map-genplan-calib-panel__hint {
-  margin: 0 0 12px;
-  font-size: 0.82rem;
-  line-height: 1.4;
+.mask-controls__toggle-mode {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f5f7fa;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.mask-controls__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
   color: var(--muted);
 }
 
-.map-genplan-calib-field {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 8px;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 0.85rem;
+.mask-controls__file {
+  margin: 0;
+  color: #37474f;
+  word-break: break-all;
 }
 
-.map-genplan-calib-field__label {
-  grid-column: 1 / -1;
-  color: #546e7a;
-  font-weight: 600;
+.mask-controls__msg {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-size: 0.8rem;
 }
 
-.map-genplan-calib-field input[type="range"] {
-  grid-column: 1;
-  width: 100%;
+.mask-controls__msg--err {
+  background: #ffebee;
+  color: #c62828;
 }
 
-.map-genplan-calib-field__val {
-  grid-column: 2;
-  min-width: 3.2em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--primary);
-  font-weight: 600;
-}
-
-.map-genplan-calib-nudge {
+.mask-controls__field {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 4px;
-  margin: 0 0 10px;
 }
 
-.map-genplan-calib-nudge-btn {
-  flex: 1 1 auto;
-  min-width: 2.8em;
-  padding: 5px 6px;
-  font-size: 0.72rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #f5f7fa;
-  cursor: pointer;
+.mask-controls__field-label {
+  font-weight: 600;
+  color: #546e7a;
+  font-size: 0.8rem;
 }
 
-.map-genplan-calib-nudge-btn:active {
-  background: #e3f2fd;
+.mask-controls__field input[type="range"],
+.mask-controls__field input[type="number"],
+.mask-controls__field select {
+  width: 100%;
+  font: inherit;
 }
 
-.map-genplan-calib-actions {
+.mask-controls__row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
 }
 
-.map-genplan-calib-save,
-.map-genplan-calib-reset,
-.map-genplan-calib-cancel {
+.mask-controls__row--actions {
+  margin-top: 4px;
+}
+
+.mask-controls__btn {
   flex: 1 1 auto;
   padding: 8px 10px;
   font-family: Oswald, sans-serif;
-  font-size: 0.78em;
+  font-size: 0.75em;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-radius: 8px;
   border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
   cursor: pointer;
 }
 
-.map-genplan-calib-save {
-  background: var(--success);
-  color: #fff;
-}
-
-.map-genplan-calib-reset {
-  background: #eceff1;
-  color: #455a64;
-}
-
-.map-genplan-calib-cancel {
+.mask-controls__btn--outline {
   background: #fff;
   color: var(--primary);
   border: 1px solid var(--border);
 }
 
+.mask-controls__btn--primary {
+  background: var(--success);
+}
+
+.mask-controls__btn--ghost {
+  background: #eceff1;
+  color: #455a64;
+}
+
+.mask-controls__btn:disabled,
+.mask-controls__btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 @media (max-width: 768px) {
-  .map-genplan-calib-panel {
+  .mask-controls {
     right: 8px;
     left: 8px;
     width: auto;

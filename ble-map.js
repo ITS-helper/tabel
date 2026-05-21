@@ -26,7 +26,6 @@
   const BLE_MARKER_HOLD_MS = 1000;
   const BLE_MAP_BUILD = "20260520d";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
-  const BLE_GENPLAN_CALIB_KEY = "ww-ble-genplan-calibration";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
@@ -404,11 +403,9 @@
   let bleMapFSInitialized = false;
   let bleTileLayers = null;
   let bleGenplanMeta = null;
-  let bleGenplanCalib = null;
+  let bleGenplanMask = null;
   let bleGenplanCalibMode = false;
   let bleGenplanCalibSavedLayer = null;
-  let bleGenplanCalibOverlay = null;
-  let bleGenplanCalibOverlayFs = null;
   let bleDrawTool = null;
   const bleDrawGroupByMap = new WeakMap();
   const BLE_DRAW_SNAP_DEG = 15;
@@ -2322,254 +2319,77 @@
     }
   }
 
-  function defaultGenplanCalib() {
-    return { version: 1, rotation: 0, offsetNorthM: 0, offsetEastM: 0, scale: 1 };
+  function buildGenplanOverlay() {
+    return L.layerGroup();
   }
 
-  function readBleGenplanCalib() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(BLE_GENPLAN_CALIB_KEY));
-      if (raw && typeof raw === "object") {
-        return {
-          ...defaultGenplanCalib(),
-          rotation: Number(raw.rotation) || 0,
-          offsetNorthM: Number(raw.offsetNorthM) || 0,
-          offsetEastM: Number(raw.offsetEastM) || 0,
-          scale: Number(raw.scale) > 0 ? Number(raw.scale) : 1,
-        };
-      }
-    } catch {
-      /* ignore */
-    }
-    return defaultGenplanCalib();
-  }
-
-  function writeBleGenplanCalib(cal) {
-    bleGenplanCalib = {
-      ...defaultGenplanCalib(),
-      ...cal,
-      rotation: Number(cal.rotation) || 0,
-      offsetNorthM: Number(cal.offsetNorthM) || 0,
-      offsetEastM: Number(cal.offsetEastM) || 0,
-      scale: Number(cal.scale) > 0 ? Number(cal.scale) : 1,
-    };
-    try {
-      localStorage.setItem(BLE_GENPLAN_CALIB_KEY, JSON.stringify(bleGenplanCalib));
-    } catch {
-      /* ignore */
-    }
-  }
-
-  function metersToLatOffset(m) {
-    return m / M_PER_DEG_LAT;
-  }
-
-  function metersToLngOffset(m, lat) {
-    return m / (M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180));
-  }
-
-  function computeGenplanRotatedCorners(meta, cal) {
-    const sw = meta.southWest;
-    const ne = meta.northEast;
-    const refLat = (sw[0] + ne[0]) / 2 + metersToLatOffset(cal.offsetNorthM || 0);
-    const refLng = (sw[1] + ne[1]) / 2 + metersToLngOffset(cal.offsetEastM || 0, refLat);
-    const scale = cal.scale > 0 ? cal.scale : 1;
-    const halfNorthM = (((ne[0] - sw[0]) / 2) * scale * M_PER_DEG_LAT);
-    const halfEastM = (((ne[1] - sw[1]) / 2) * scale * M_PER_DEG_LAT * Math.cos((refLat * Math.PI) / 180));
-    const rad = ((cal.rotation || 0) * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-    const rotateLocal = (x, y) => ({
-      x: x * cos - y * sin,
-      y: x * sin + y * cos,
+  function ensureBleGenplanMask() {
+    if (bleGenplanMask || !bleGenplanMeta || !window.BleGenplanMask) return;
+    bleGenplanMask = window.BleGenplanMask.create({
+      getMap: () => bleMap,
+      getMapFs: () => bleMapFS,
+      getMeta: () => bleGenplanMeta,
+      getBuild: () => BLE_MAP_BUILD,
+      onSaved: () => updateGenplanMaskVisibility(),
+      onCancel: () => finishGenplanCalibMode({ save: false }),
     });
-    const localToLatLng = (x, y) =>
-      L.latLng(refLat + y / M_PER_DEG_LAT, refLng + x / (M_PER_DEG_LAT * Math.cos((refLat * Math.PI) / 180)));
-    const tl = rotateLocal(-halfEastM, halfNorthM);
-    const tr = rotateLocal(halfEastM, halfNorthM);
-    const bl = rotateLocal(-halfEastM, -halfNorthM);
-    return {
-      topleft: localToLatLng(tl.x, tl.y),
-      topright: localToLatLng(tr.x, tr.y),
-      bottomleft: localToLatLng(bl.x, bl.y),
-    };
+    bleGenplanMask.init();
   }
 
-  function genplanHasCalibAdjust(cal) {
-    if (!cal) return false;
-    return (
-      Math.abs(cal.rotation || 0) > 0.05 ||
-      Math.abs(cal.offsetNorthM || 0) > 0.05 ||
-      Math.abs(cal.offsetEastM || 0) > 0.05 ||
-      Math.abs((cal.scale || 1) - 1) > 0.001
-    );
-  }
-
-  function buildGenplanOverlay(meta, opts = {}) {
-    const cal = opts.cal || bleGenplanCalib || readBleGenplanCalib();
-    const layerOpts = {
-      attribution: meta.attribution || "Генплан",
-      opacity: opts.opacity ?? (bleGenplanCalibMode ? 0.84 : 0.97),
-      interactive: false,
-    };
-    if (meta.tiles && meta.tileUrl && !genplanHasCalibAdjust(cal)) {
-      const bounds = L.latLngBounds(meta.southWest, meta.northEast);
-      return L.tileLayer(`${meta.tileUrl}?v=${BLE_MAP_BUILD}`, {
-        ...layerOpts,
-        minZoom: meta.tileMinZoom ?? BLE_MAP_MIN_ZOOM,
-        maxZoom: meta.tileMaxZoom ?? BLE_MAP_EDIT_MAX_ZOOM,
-        bounds,
-        noWrap: true,
-      });
-    }
-    const file = meta.image || "ble-genplan.jpg";
-    const url = `data/${file}?v=${BLE_MAP_BUILD}`;
-    const corners = computeGenplanRotatedCorners(meta, cal);
-    if (typeof L.imageOverlay?.rotated === "function") {
-      return L.imageOverlay.rotated(url, corners.topleft, corners.topright, corners.bottomleft, layerOpts);
-    }
-    const bounds = L.latLngBounds([corners.topleft, corners.topright, corners.bottomleft]);
-    return L.imageOverlay(url, bounds, layerOpts);
-  }
-
-  function detachGenplanCalibPreview() {
-    if (bleGenplanCalibOverlay && bleMap) {
-      try {
-        bleMap.removeLayer(bleGenplanCalibOverlay);
-      } catch {
-        /* ignore */
-      }
-    }
-    if (bleGenplanCalibOverlayFs && bleMapFS) {
-      try {
-        bleMapFS.removeLayer(bleGenplanCalibOverlayFs);
-      } catch {
-        /* ignore */
-      }
-    }
-    bleGenplanCalibOverlay = null;
-    bleGenplanCalibOverlayFs = null;
-  }
-
-  function attachGenplanCalibPreview() {
-    detachGenplanCalibPreview();
-    if (!bleGenplanMeta) return;
-    const cal = readCalibFromUi();
+  function updateGenplanMaskVisibility() {
+    if (!bleGenplanMask) return;
     if (bleMap) {
-      bleGenplanCalibOverlay = buildGenplanOverlay(bleGenplanMeta, { cal, opacity: 0.84 });
-      bleGenplanCalibOverlay.addTo(bleMap);
+      bleGenplanMask.attachMap(bleMap);
+      const show = bleGenplanCalibMode || bleBaseLayerCurrent === "genplan";
+      bleGenplanMask.setVisibleOnMap(bleMap, show);
     }
     if (bleMapFS) {
-      bleGenplanCalibOverlayFs = buildGenplanOverlay(bleGenplanMeta, { cal, opacity: 0.84 });
-      bleGenplanCalibOverlayFs.addTo(bleMapFS);
+      bleGenplanMask.attachMap(bleMapFS);
+      const show = bleGenplanCalibMode || fsTileLayerCurrent === "genplan";
+      bleGenplanMask.setVisibleOnMap(bleMapFS, show);
     }
+    bleGenplanMask.renderAll();
   }
 
   function remountGenplanLayers() {
     if (!bleGenplanMeta) return;
-    if (bleMap && bleTileLayers?.genplan) {
-      try {
-        if (bleMap.hasLayer(bleTileLayers.genplan)) bleMap.removeLayer(bleTileLayers.genplan);
-      } catch {
-        /* ignore */
-      }
+    if (bleTileLayers) bleTileLayers.genplan = buildGenplanOverlay();
+    if (fsTileLayers) fsTileLayers.genplan = buildGenplanOverlay();
+    updateGenplanMaskVisibility();
+    if (bleBaseLayerCurrent === "genplan" && bleMap) {
+      applyBleBaseLayerToMap(bleMap, bleTileLayers, "genplan", "");
     }
-    if (bleMapFS && fsTileLayers?.genplan) {
-      try {
-        if (bleMapFS.hasLayer(fsTileLayers.genplan)) bleMapFS.removeLayer(fsTileLayers.genplan);
-      } catch {
-        /* ignore */
-      }
-    }
-    if (bleTileLayers) bleTileLayers.genplan = buildGenplanOverlay(bleGenplanMeta);
-    if (fsTileLayers) fsTileLayers.genplan = buildGenplanOverlay(bleGenplanMeta);
-    if (bleBaseLayerCurrent === "genplan" && bleMap && bleTileLayers?.genplan) {
-      bleTileLayers.genplan.addTo(bleMap);
-    }
-    if (fsTileLayerCurrent === "genplan" && bleMapFS && fsTileLayers?.genplan) {
-      fsTileLayers.genplan.addTo(bleMapFS);
+    if (fsTileLayerCurrent === "genplan" && bleMapFS) {
+      applyBleBaseLayerToMap(bleMapFS, fsTileLayers, "genplan", "");
     }
   }
 
-  function readCalibFromUi() {
-    const rot = Number(document.getElementById("mapGenplanRot")?.value) || 0;
-    const north = Number(document.getElementById("mapGenplanNorth")?.value) || 0;
-    const east = Number(document.getElementById("mapGenplanEast")?.value) || 0;
-    const scalePct = Number(document.getElementById("mapGenplanScale")?.value) || 100;
-    return {
-      rotation: rot,
-      offsetNorthM: north,
-      offsetEastM: east,
-      scale: scalePct / 100,
-    };
-  }
-
-  function syncGenplanCalibUi() {
-    const cal = bleGenplanCalib || readBleGenplanCalib();
-    const rot = document.getElementById("mapGenplanRot");
-    const north = document.getElementById("mapGenplanNorth");
-    const east = document.getElementById("mapGenplanEast");
-    const scale = document.getElementById("mapGenplanScale");
-    if (rot) rot.value = String(cal.rotation);
-    if (north) north.value = String(cal.offsetNorthM);
-    if (east) east.value = String(cal.offsetEastM);
-    if (scale) scale.value = String((cal.scale || 1) * 100);
-    updateGenplanCalibOutputs();
-  }
-
-  function updateGenplanCalibOutputs() {
-    const cal = readCalibFromUi();
-    const rotOut = document.getElementById("mapGenplanRotOut");
-    const northOut = document.getElementById("mapGenplanNorthOut");
-    const eastOut = document.getElementById("mapGenplanEastOut");
-    const scaleOut = document.getElementById("mapGenplanScaleOut");
-    if (rotOut) rotOut.textContent = `${cal.rotation.toFixed(1)}°`;
-    if (northOut) northOut.textContent = `${cal.offsetNorthM} м`;
-    if (eastOut) eastOut.textContent = `${cal.offsetEastM} м`;
-    if (scaleOut) scaleOut.textContent = `${Math.round(cal.scale * 100)}%`;
-  }
-
-  function onGenplanCalibInput() {
-    updateGenplanCalibOutputs();
-    attachGenplanCalibPreview();
-  }
-
-  function applyGenplanCalibNudge(kind, delta) {
-    const cal = readCalibFromUi();
-    if (kind === "rot") cal.rotation += Number(delta);
-    else if (kind === "north") cal.offsetNorthM += Number(delta);
-    else if (kind === "east") cal.offsetEastM += Number(delta);
-    bleGenplanCalib = cal;
-    syncGenplanCalibUi();
-    attachGenplanCalibPreview();
+  function finishGenplanCalibMode(opts = {}) {
+    if (!bleGenplanMeta || !bleGenplanMask) return;
+    if (opts.save) bleGenplanMask.save();
+    setGenplanCalibMode(false, { save: false, restoreLayer: opts.restoreLayer !== false });
   }
 
   function setGenplanCalibMode(on, opts = {}) {
-    const panel = document.getElementById("mapGenplanCalibPanel");
     if (!bleGenplanMeta) return;
+    ensureBleGenplanMask();
+    if (!bleGenplanMask) return;
+    const btn = document.getElementById("mapGenplanCalibBtn");
     if (on) {
-      bleGenplanCalib = readBleGenplanCalib();
       bleGenplanCalibMode = true;
       bleGenplanCalibSavedLayer = bleBaseLayerCurrent;
-      document.body.classList.add("ble-map--genplan-calib");
-      panel?.removeAttribute("hidden");
-      syncGenplanCalibUi();
       setBleBaseLayer("hybrid", { syncUi: opts.syncUi !== false });
-      attachGenplanCalibPreview();
-      document.getElementById("mapGenplanCalibBtn")?.setAttribute("aria-pressed", "true");
+      bleGenplanMask.setSettingsOpen(true);
+      bleGenplanMask.setEditMode(true);
+      updateGenplanMaskVisibility();
+      btn?.setAttribute("aria-pressed", "true");
       return;
     }
     bleGenplanCalibMode = false;
-    document.body.classList.remove("ble-map--genplan-calib");
-    panel?.setAttribute("hidden", "");
-    detachGenplanCalibPreview();
-    document.getElementById("mapGenplanCalibBtn")?.setAttribute("aria-pressed", "false");
-    if (opts.save) {
-      writeBleGenplanCalib(readCalibFromUi());
-      remountGenplanLayers();
-    } else {
-      bleGenplanCalib = readBleGenplanCalib();
-    }
+    bleGenplanMask.setSettingsOpen(false);
+    bleGenplanMask.setEditMode(false);
+    btn?.setAttribute("aria-pressed", "false");
+    updateGenplanMaskVisibility();
     const restore = bleGenplanCalibSavedLayer || "genplan";
     bleGenplanCalibSavedLayer = null;
     if (opts.restoreLayer !== false) {
@@ -2586,29 +2406,22 @@
   function wireGenplanCalibUi() {
     if (document.body.dataset.genplanCalibWired === "1") return;
     document.body.dataset.genplanCalibWired = "1";
-    ["mapGenplanRot", "mapGenplanNorth", "mapGenplanEast", "mapGenplanScale"].forEach((id) => {
-      document.getElementById(id)?.addEventListener("input", onGenplanCalibInput);
-    });
     document.getElementById("mapGenplanCalibBtn")?.addEventListener("click", () => {
-      if (bleGenplanCalibMode) setGenplanCalibMode(false, { save: false, restoreLayer: true });
+      if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
       else setGenplanCalibMode(true);
     });
-    document.getElementById("mapGenplanCalibSave")?.addEventListener("click", () => {
-      setGenplanCalibMode(false, { save: true });
+    document.getElementById("mapGenplanMaskSaveBtn")?.addEventListener("click", () => {
+      if (!bleGenplanMask) return;
+      if (bleGenplanMask.save()) {
+        bleGenplanMask.showMsg("Настройки генплана сохранены");
+        finishGenplanCalibMode({ save: false });
+      } else {
+        bleGenplanMask.showMsg("Не удалось сохранить", "err");
+      }
     });
-    document.getElementById("mapGenplanCalibCancel")?.addEventListener("click", () => {
-      bleGenplanCalib = readBleGenplanCalib();
-      setGenplanCalibMode(false, { save: false });
-    });
-    document.getElementById("mapGenplanCalibReset")?.addEventListener("click", () => {
-      bleGenplanCalib = defaultGenplanCalib();
-      syncGenplanCalibUi();
-      attachGenplanCalibPreview();
-    });
-    document.querySelectorAll("[data-genplan-nudge]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        applyGenplanCalibNudge(btn.dataset.genplanNudge, btn.dataset.delta);
-      });
+    document.getElementById("mapGenplanMaskCancelBtn")?.addEventListener("click", () => {
+      bleGenplanMask?.reloadFromStorage();
+      finishGenplanCalibMode({ save: false });
     });
   }
 
@@ -2653,8 +2466,7 @@
     });
     const layers = { satellite, street, hybrid: satellite, satelliteUnderlay: null };
     if (bleGenplanMeta) {
-      const genplan = buildGenplanOverlay(bleGenplanMeta);
-      if (genplan) layers.genplan = genplan;
+      layers.genplan = buildGenplanOverlay();
     }
     return layers;
   }
@@ -2865,7 +2677,8 @@
       }
       map._bleGenplanUnderlay = tileLayers.satelliteUnderlay;
       map._bleGenplanUnderlay.addTo(map);
-      tileLayers.genplan.addTo(map);
+      ensureBleGenplanMask();
+      updateGenplanMaskVisibility();
     } else if (tileLayers[nextId]) {
       tileLayers[nextId].addTo(map);
     }
@@ -2882,8 +2695,8 @@
       layerId = "hybrid";
     }
     if (layerId === "genplan" && bleGenplanMeta) {
-      if (bleTileLayers) bleTileLayers.genplan = buildGenplanOverlay(bleGenplanMeta);
-      if (fsTileLayers) fsTileLayers.genplan = buildGenplanOverlay(bleGenplanMeta);
+      if (bleTileLayers) bleTileLayers.genplan = buildGenplanOverlay();
+      if (fsTileLayers) fsTileLayers.genplan = buildGenplanOverlay();
     }
 
     bleBaseLayerCurrent = layerId;
@@ -2903,6 +2716,7 @@
     } catch {
       /* ignore */
     }
+    updateGenplanMaskVisibility();
     if (layerId !== prevMain || layerId !== prevFs) {
       redrawMapLayers({ markers: false });
     }
@@ -4515,12 +4329,13 @@
         }
       }
       bleGenplanMeta = await fetchBleGenplanMeta();
-      bleGenplanCalib = readBleGenplanCalib();
       syncGenplanLayerMenuVisibility();
 
       let center = [59.6603, 28.3967];
       let zoom = 16;
       initBleMap(center, zoom);
+      ensureBleGenplanMask();
+      remountGenplanLayers();
 
       const companyId = await resolveCompanyId();
       bleCompanyId = companyId;
@@ -4710,12 +4525,15 @@
       }
       drawZones(bleMapFS);
       bleMapFSInitialized = true;
+      ensureBleGenplanMask();
+      updateGenplanMaskVisibility();
     }
     attachDrawMapListeners();
     renderBleDrawOnAllMaps();
     syncFsStats();
     renderFsMarkers();
     if (bleEditMode && bleMapFS) drawZones(bleMapFS);
+    updateGenplanMaskVisibility();
     setTimeout(() => bleMapFS?.invalidateSize(), 150);
   };
 
