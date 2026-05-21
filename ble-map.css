@@ -338,6 +338,12 @@ body.ble-map-tools-menu-open .fs-compact-bar {
   cursor: grabbing;
 }
 
+body:not(.ble-map--edit) #mapGenplanMaskPanel {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .mask-controls {
   position: fixed;
   z-index: 100010;

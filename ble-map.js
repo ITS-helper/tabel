@@ -1954,6 +1954,7 @@
     const toolsRow = document.getElementById("mapEditToolsRow");
     if (toolsRow) toolsRow.hidden = !bleEditMode;
     syncGenplanCalibMenuVisibility();
+    syncGenplanPanelForEditMode();
     const editBtn = document.getElementById("mapEditModeBtn");
     if (editBtn) {
       editBtn.classList.toggle("active", bleEditMode);
@@ -2343,10 +2344,24 @@
       getMapFs: () => bleMapFS,
       getMeta: () => bleGenplanMeta,
       getBuild: () => BLE_MAP_BUILD,
+      getEditMode: () => bleEditMode,
       onSaved: () => updateGenplanMaskVisibility(),
       onCancel: () => finishGenplanCalibMode({ save: false }),
     });
     bleGenplanMask.init();
+    syncGenplanPanelForEditMode();
+  }
+
+  function syncGenplanPanelForEditMode() {
+    if (!bleGenplanMask) return;
+    if (!bleEditMode || !bleGenplanCalibMode) {
+      if (bleGenplanCalibMode) {
+        finishGenplanCalibMode({ save: false, restoreLayer: true });
+        return;
+      }
+      bleGenplanMask.setSettingsOpen(false);
+      bleGenplanMask.setEditMode(false);
+    }
   }
 
   function updateGenplanMaskVisibility() {

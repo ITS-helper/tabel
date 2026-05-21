@@ -335,6 +335,7 @@
     this.getMapFs = options.getMapFs;
     this.getMeta = options.getMeta;
     this.getBuild = options.getBuild || (() => "");
+    this.getEditMode = options.getEditMode || (() => false);
     this.onSaved = options.onSaved || (() => {});
     this.panel = document.getElementById("mapGenplanMaskPanel");
     this.state = null;
@@ -356,6 +357,7 @@
     this.reloadFromStorage();
     const map = this.getMap();
     if (map) this.attachMap(map);
+    this.setSettingsOpen(false);
     this.syncUi();
   };
 
@@ -455,6 +457,9 @@
   };
 
   GenplanMaskController.prototype.setSettingsOpen = function (open) {
+    if (open && !this.getEditMode()) {
+      open = false;
+    }
     this.settingsOpen = !!open;
     if (this.panel) {
       this.panel.hidden = !open;
@@ -475,7 +480,7 @@
     document.body.classList.toggle("ble-map--genplan-calib", open);
     if (!open) {
       document.body.classList.remove("ble-map--genplan-calib-expanded");
-      this.state.isEditMode = false;
+      if (this.state) this.state.isEditMode = false;
       this.restoreMapHandlers();
     }
     this.syncUi();
