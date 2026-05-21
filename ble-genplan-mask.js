@@ -456,9 +456,25 @@
 
   GenplanMaskController.prototype.setSettingsOpen = function (open) {
     this.settingsOpen = !!open;
-    if (this.panel) this.panel.hidden = !open;
+    if (this.panel) {
+      this.panel.hidden = !open;
+      if (open) {
+        this.isFullMode = false;
+        this.panel.classList.add("mask-controls--short");
+        document.getElementById("mapGenplanMaskFull")?.removeAttribute("hidden");
+        document.getElementById("mapGenplanMaskShort")?.setAttribute("hidden", "");
+        document.body.classList.remove("ble-map--genplan-calib-expanded");
+      } else {
+        this.panel.style.top = "";
+        this.panel.style.left = "";
+        this.panel.style.right = "";
+        this.panel.style.bottom = "";
+        this.panel.style.position = "";
+      }
+    }
     document.body.classList.toggle("ble-map--genplan-calib", open);
     if (!open) {
+      document.body.classList.remove("ble-map--genplan-calib-expanded");
       this.state.isEditMode = false;
       this.restoreMapHandlers();
     }
@@ -660,6 +676,7 @@
       this.panel.classList.toggle("mask-controls--short", !this.isFullMode);
       document.getElementById("mapGenplanMaskFull")?.toggleAttribute("hidden", !this.isFullMode);
       document.getElementById("mapGenplanMaskShort")?.toggleAttribute("hidden", this.isFullMode);
+      document.body.classList.toggle("ble-map--genplan-calib-expanded", this.isFullMode);
     });
 
     document.getElementById("mapGenplanMaskOpacity")?.addEventListener("input", (e) => {

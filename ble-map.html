@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260520e" />
+  <link rel="stylesheet" href="ble-map.css?v=20260520f" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -114,29 +114,47 @@
             </div>
             <div class="map-toolbar-row map-toolbar-row--edit" id="mapEditToolsRow" hidden>
               <div id="mapEditTools" class="map-edit-tools map-edit-tools--dock">
-                <div id="mapZoneDrawTools" class="map-zone-draw-tools" role="group" aria-label="Чертёж зон">
-                  <button type="button" class="map-zone-draw-btn" data-draw-tool="ruler" title="Линейка — расстояние в метрах">Линейка</button>
-                  <button type="button" class="map-zone-draw-btn" data-draw-tool="line" title="Прямая линия; Shift — ровный угол">Линия</button>
-                  <button type="button" class="map-zone-draw-btn" data-draw-tool="parallel" title="Параллельные: 2 клика — ось, далее линии через точки">∥</button>
-                  <button type="button" class="map-zone-draw-btn" id="mapDrawToZoneBtn" title="Добавить последнюю точку в выбранную зону" hidden>В зону</button>
-                  <button type="button" class="map-zone-draw-btn map-zone-draw-btn--ghost" id="mapDrawFinishBtn" title="Завершить ломаную">Готово</button>
-                  <button type="button" class="map-zone-draw-btn map-zone-draw-btn--ghost" id="mapDrawClearBtn" title="Удалить чертёж">Очистить</button>
+                <div class="map-tools-picker" id="mapToolsPicker" data-tools-picker>
+                  <button
+                    type="button"
+                    class="map-tools-mode-btn"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    aria-label="Инструменты редактирования"
+                    title="Инструменты: чертёж, подгонка генплана"
+                  >
+                    <svg class="map-tools-mode-btn__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                      <path d="M3 21l3.5-3.5"/>
+                      <path d="M12 3v4M12 17v4M3 12h4M17 12h4"/>
+                    </svg>
+                  </button>
+                  <div class="map-tools-menu" role="menu" hidden>
+                    <button type="button" class="map-tools-menu__item" role="menuitem" data-draw-tool="ruler" title="Линейка — расстояние в метрах">Линейка</button>
+                    <button type="button" class="map-tools-menu__item" role="menuitem" data-draw-tool="line" title="Прямая линия; Shift — ровный угол">Линия</button>
+                    <button type="button" class="map-tools-menu__item" role="menuitem" data-draw-tool="parallel" title="Параллельные: 2 клика — ось, далее линии">Параллельные</button>
+                    <div class="map-tools-menu__sep" role="separator" aria-hidden="true"></div>
+                    <button type="button" class="map-tools-menu__item map-tools-menu__item--context" id="mapDrawToZoneBtn" role="menuitem" title="Добавить последнюю точку в выбранную зону" hidden>В зону</button>
+                    <button type="button" class="map-tools-menu__item map-tools-menu__item--context" id="mapDrawFinishBtn" role="menuitem" title="Завершить ломаную">Готово</button>
+                    <button type="button" class="map-tools-menu__item map-tools-menu__item--context" id="mapDrawClearBtn" role="menuitem" title="Удалить чертёж">Очистить</button>
+                    <div class="map-tools-menu__sep map-tools-menu__sep--genplan" role="separator" aria-hidden="true" hidden></div>
+                    <button
+                      type="button"
+                      class="map-tools-menu__item map-tools-menu__item--genplan"
+                      id="mapGenplanCalibMenuBtn"
+                      role="menuitem"
+                      data-tool-action="genplan-calib"
+                      title="Подогнать генплан: перетаскивание, углы, поворот"
+                      hidden
+                    >
+                      Подогнать генплан
+                    </button>
+                  </div>
                 </div>
                 <div class="map-edit-tools__save">
                   <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
                   <button type="button" class="map-edit-cancel" id="mapCancelEditBtn">Отмена</button>
                 </div>
-                <span class="map-toolbar__sep map-toolbar__sep--edit-extras" aria-hidden="true"></span>
-                <button
-                  type="button"
-                  class="map-genplan-calib-btn"
-                  id="mapGenplanCalibBtn"
-                  title="Подогнать генплан: перетаскивание, углы, поворот"
-                  hidden
-                >
-                  <span class="map-toolbar-text map-toolbar-text--long">Подогнать генплан</span>
-                  <span class="map-toolbar-text map-toolbar-text--short">Генплан</span>
-                </button>
               </div>
             </div>
           </div>
@@ -156,12 +174,12 @@
     <img id="photoViewerImg" src="" alt="" />
   </div>
 
-  <div class="mask-controls" id="mapGenplanMaskPanel" hidden>
+  <div class="mask-controls mask-controls--dock" id="mapGenplanMaskPanel" hidden>
     <div class="mask-controls__head">
-      <span class="mask-controls__title">Подгонка генплана</span>
-      <button type="button" class="mask-controls__toggle-mode" id="mapGenplanMaskCompactToggle" title="Компактная панель" aria-label="Компактная панель">▾</button>
+      <span class="mask-controls__title">Генплан</span>
+      <button type="button" class="mask-controls__toggle-mode" id="mapGenplanMaskCompactToggle" title="Развернуть настройки" aria-label="Развернуть настройки">▾</button>
     </div>
-    <p class="mask-controls__hint">Сверьте разбивочник с метками на спутнике. Перетаскивание, углы — размер, кружок сверху — поворот.</p>
+    <p class="mask-controls__hint">Сверьте разбивочник с метками. Перетаскивание, углы — размер, кружок сверху — поворот.</p>
     <p class="mask-controls__file" id="mapGenplanMaskFile"></p>
     <p class="mask-controls__msg" id="mapGenplanMaskMsg" hidden></p>
     <div id="mapGenplanMaskFull">
@@ -241,8 +259,8 @@
   <script src="https://unpkg.com/leaflet-imageoverlay-rotated@0.2.0/ImageOverlay.Rotated.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-genplan-mask.js?v=20260520e"></script>
-  <script src="ble-map.js?v=20260520e"></script>
+  <script src="ble-genplan-mask.js?v=20260520f"></script>
+  <script src="ble-map.js?v=20260520f"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

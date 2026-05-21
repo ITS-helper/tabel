@@ -1475,19 +1475,28 @@
       const on = btn.dataset.drawTool === bleDrawTool;
       btn.classList.toggle("active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.setAttribute("aria-checked", on ? "true" : "false");
     });
     document.body.classList.toggle("ble-map--draw-active", !!bleDrawTool);
     document.body.classList.toggle("ble-map--draw-ruler", bleDrawTool === "ruler");
     document.body.classList.toggle("ble-map--draw-line", bleDrawTool === "line");
     document.body.classList.toggle("ble-map--draw-parallel", bleDrawTool === "parallel");
     const toZone = document.getElementById("mapDrawToZoneBtn");
-    if (toZone) {
-      toZone.hidden = !(
-        bleDrawTool === "line" &&
-        bleSelectedZoneId != null &&
-        bleDrawSession.linePts.length > 0
-      );
+    const showToZone =
+      bleDrawTool === "line" && bleSelectedZoneId != null && bleDrawSession.linePts.length > 0;
+    if (toZone) toZone.hidden = !showToZone;
+    const finishBtn = document.getElementById("mapDrawFinishBtn");
+    const clearBtn = document.getElementById("mapDrawClearBtn");
+    if (finishBtn) finishBtn.hidden = bleDrawTool !== "line";
+    if (clearBtn) clearBtn.hidden = !bleDrawTool;
+    const ctxSep = document.querySelector(".map-tools-menu__sep:not(.map-tools-menu__sep--genplan)");
+    if (ctxSep) ctxSep.hidden = !(showToZone || bleDrawTool === "line" || bleDrawTool);
+    const toolsBtn = document.querySelector(".map-tools-mode-btn");
+    if (toolsBtn) {
+      toolsBtn.classList.toggle("map-tools-mode-btn--active", !!bleDrawTool || bleGenplanCalibMode);
     }
+    const genplanItem = document.getElementById("mapGenplanCalibMenuBtn");
+    if (genplanItem) genplanItem.classList.toggle("active", bleGenplanCalibMode);
   }
 
   function updateDrawHint() {
@@ -1668,6 +1677,7 @@
         e.stopPropagation();
         if (!bleEditMode) return;
         setBleDrawTool(btn.dataset.drawTool);
+        closeAllToolsMenus();
       });
     });
     document.getElementById("mapDrawFinishBtn")?.addEventListener("click", (e) => {
@@ -1943,6 +1953,7 @@
     if (toggle) toggle.classList.toggle("active", bleEditMode);
     const toolsRow = document.getElementById("mapEditToolsRow");
     if (toolsRow) toolsRow.hidden = !bleEditMode;
+    syncGenplanCalibMenuVisibility();
     const editBtn = document.getElementById("mapEditModeBtn");
     if (editBtn) {
       editBtn.classList.toggle("active", bleEditMode);
@@ -2151,7 +2162,9 @@
           : "Офлайн: метки можно двигать; «Сохранить локально» — в очередь на отправку.";
       hideMapMsg();
     } else {
+      if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
       stopBleDrawTools();
+      closeAllToolsMenus();
       clearBleDrawArtifacts();
       disableAllZonePm();
       bleSelectedZoneId = null;
@@ -2370,26 +2383,49 @@
     setGenplanCalibMode(false, { save: false, restoreLayer: opts.restoreLayer !== false });
   }
 
+  function positionGenplanPanel() {
+    const panel = document.getElementById("mapGenplanMaskPanel");
+    const anchor = document.getElementById("mapToolsPicker") || document.getElementById("mapEditTools");
+    if (!panel || !anchor || panel.hidden) return;
+    const r = anchor.getBoundingClientRect();
+    const panelH = panel.offsetHeight || 220;
+    const gap = 6;
+    let top = r.bottom + gap;
+    if (top + panelH > window.innerHeight - 8) {
+      top = Math.max(8, r.top - panelH - gap);
+    }
+    panel.style.position = "fixed";
+    panel.style.zIndex = "100010";
+    panel.style.top = `${top}px`;
+    panel.style.left = `${Math.max(8, r.left)}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+  }
+
   function setGenplanCalibMode(on, opts = {}) {
     if (!bleGenplanMeta) return;
     ensureBleGenplanMask();
     if (!bleGenplanMask) return;
-    const btn = document.getElementById("mapGenplanCalibBtn");
+    const menuBtn = document.getElementById("mapGenplanCalibMenuBtn");
     if (on) {
+      if (!bleEditMode) return;
       bleGenplanCalibMode = true;
       bleGenplanCalibSavedLayer = bleBaseLayerCurrent;
       setBleBaseLayer("hybrid", { syncUi: opts.syncUi !== false });
       bleGenplanMask.setSettingsOpen(true);
       bleGenplanMask.setEditMode(true);
       updateGenplanMaskVisibility();
-      btn?.setAttribute("aria-pressed", "true");
+      menuBtn?.setAttribute("aria-pressed", "true");
+      updateDrawToolButtons();
+      requestAnimationFrame(positionGenplanPanel);
       return;
     }
     bleGenplanCalibMode = false;
     bleGenplanMask.setSettingsOpen(false);
     bleGenplanMask.setEditMode(false);
-    btn?.setAttribute("aria-pressed", "false");
+    menuBtn?.setAttribute("aria-pressed", "false");
     updateGenplanMaskVisibility();
+    updateDrawToolButtons();
     const restore = bleGenplanCalibSavedLayer || "genplan";
     bleGenplanCalibSavedLayer = null;
     if (opts.restoreLayer !== false) {
@@ -2397,18 +2433,24 @@
     }
   }
 
-  function syncGenplanCalibBtnVisibility() {
-    const show = isGenplanLayerAvailable();
-    const btn = document.getElementById("mapGenplanCalibBtn");
-    if (btn) btn.hidden = !show;
+  function syncGenplanCalibMenuVisibility() {
+    const show = isGenplanLayerAvailable() && bleEditMode;
+    const item = document.getElementById("mapGenplanCalibMenuBtn");
+    const sep = document.querySelector(".map-tools-menu__sep--genplan");
+    if (item) item.hidden = !show;
+    if (sep) sep.hidden = !show;
   }
 
   function wireGenplanCalibUi() {
     if (document.body.dataset.genplanCalibWired === "1") return;
     document.body.dataset.genplanCalibWired = "1";
-    document.getElementById("mapGenplanCalibBtn")?.addEventListener("click", () => {
+    document.getElementById("mapGenplanCalibMenuBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!bleEditMode) return;
       if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
       else setGenplanCalibMode(true);
+      closeAllToolsMenus();
     });
     document.getElementById("mapGenplanMaskSaveBtn")?.addEventListener("click", () => {
       if (!bleGenplanMask) return;
@@ -2486,7 +2528,7 @@
     document.querySelectorAll('.map-layer-menu__item[data-layer="genplan"]').forEach((el) => {
       el.hidden = !show;
     });
-    syncGenplanCalibBtnVisibility();
+    syncGenplanCalibMenuVisibility();
   }
 
   function readStoredBaseLayer() {
@@ -2545,11 +2587,138 @@
     });
   }
 
+  function resetToolsMenuPosition(menu) {
+    if (!menu) return;
+    menu.style.position = "";
+    menu.style.top = "";
+    menu.style.right = "";
+    menu.style.left = "";
+    menu.style.bottom = "";
+    menu.style.zIndex = "";
+  }
+
+  function closeAllToolsMenus() {
+    document.body.classList.remove("ble-map-tools-menu-open");
+    document.querySelectorAll("[data-tools-picker]").forEach((picker) => {
+      const btn = picker.querySelector(".map-tools-mode-btn");
+      const menu = picker.querySelector(".map-tools-menu");
+      picker.classList.remove("map-tools-picker--open");
+      if (menu) {
+        menu.hidden = true;
+        resetToolsMenuPosition(menu);
+      }
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function closeAllMapDropdowns() {
+    closeAllLayerMenus();
+    closeAllToolsMenus();
+  }
+
+  function positionToolsMenu(picker) {
+    const btn = picker.querySelector(".map-tools-mode-btn");
+    const menu = picker.querySelector(".map-tools-menu");
+    if (!btn || !menu || !usesFixedLayerMenu()) return;
+    const r = btn.getBoundingClientRect();
+    const menuH = menu.offsetHeight || 200;
+    const gap = 4;
+    const below = r.bottom + gap;
+    const above = r.top - menuH - gap;
+    const openUp = below + menuH > window.innerHeight - 8 && above > 8;
+    menu.style.position = "fixed";
+    menu.style.zIndex = "12000";
+    menu.style.top = `${openUp ? above : below}px`;
+    menu.style.left = `${Math.max(8, r.left)}px`;
+    menu.style.right = "auto";
+    menu.style.bottom = "auto";
+  }
+
+  function openToolsMenu(picker) {
+    const btn = picker.querySelector(".map-tools-mode-btn");
+    const menu = picker.querySelector(".map-tools-menu");
+    if (!btn || !menu) return;
+    closeAllMapDropdowns();
+    menu.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    picker.classList.add("map-tools-picker--open");
+    document.body.classList.add("ble-map-tools-menu-open");
+    positionToolsMenu(picker);
+  }
+
+  function toggleToolsMenu(picker) {
+    const btn = picker.querySelector(".map-tools-mode-btn");
+    if (!btn) return;
+    if (btn.getAttribute("aria-expanded") === "true") {
+      closeAllToolsMenus();
+      return;
+    }
+    openToolsMenu(picker);
+  }
+
+  function wireMapToolsPicker(picker) {
+    if (!picker || picker.dataset.toolsPickerWired === "1") return;
+    picker.dataset.toolsPickerWired = "1";
+    const btn = picker.querySelector(".map-tools-mode-btn");
+    const menu = picker.querySelector(".map-tools-menu");
+    if (!btn || !menu) return;
+    let suppressBtnClick = false;
+    const onBtnActivate = (e) => {
+      if (e.type === "click" && suppressBtnClick) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.type === "pointerup" && e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!bleEditMode) return;
+      if (e.type === "pointerup") {
+        suppressBtnClick = true;
+        setTimeout(() => {
+          suppressBtnClick = false;
+        }, 400);
+      }
+      toggleToolsMenu(picker);
+    };
+    btn.addEventListener("pointerup", onBtnActivate);
+    btn.addEventListener("click", onBtnActivate);
+    btn.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      if (!bleEditMode) return;
+      toggleToolsMenu(picker);
+    });
+  }
+
+  function wireMapToolsPickers() {
+    if (!document.body.dataset.toolsMenuCloseWired) {
+      document.body.dataset.toolsMenuCloseWired = "1";
+      document.addEventListener(
+        "pointerdown",
+        (e) => {
+          if (e.target.closest("[data-tools-picker]")) return;
+          closeAllToolsMenus();
+        },
+        true
+      );
+      window.addEventListener("resize", () => {
+        closeAllToolsMenus();
+        if (bleGenplanCalibMode) positionGenplanPanel();
+      }, { passive: true });
+      window.visualViewport?.addEventListener("resize", () => {
+        closeAllToolsMenus();
+        if (bleGenplanCalibMode) positionGenplanPanel();
+      }, { passive: true });
+    }
+    document.querySelectorAll("[data-tools-picker]").forEach(wireMapToolsPicker);
+  }
+
   function openLayerMenu(picker) {
     const btn = picker.querySelector(".map-layer-mode-btn");
     const menu = picker.querySelector(".map-layer-menu");
     if (!btn || !menu) return;
-    closeAllLayerMenus();
+    closeAllMapDropdowns();
     menu.hidden = false;
     btn.setAttribute("aria-expanded", "true");
     picker.classList.add("map-layer-picker--open");
@@ -2641,15 +2810,16 @@
       document.addEventListener(
         "pointerdown",
         (e) => {
-          if (e.target.closest(".map-layer-picker")) return;
-          closeAllLayerMenus();
+          if (e.target.closest(".map-layer-picker") || e.target.closest("[data-tools-picker]")) return;
+          closeAllMapDropdowns();
         },
         true
       );
-      window.addEventListener("resize", closeAllLayerMenus, { passive: true });
-      window.visualViewport?.addEventListener("resize", closeAllLayerMenus, { passive: true });
+      window.addEventListener("resize", closeAllMapDropdowns, { passive: true });
+      window.visualViewport?.addEventListener("resize", closeAllMapDropdowns, { passive: true });
     }
     document.querySelectorAll(".map-layer-picker").forEach(wireMapLayerPicker);
+    wireMapToolsPickers();
   }
   window.wireMapLayerPicker = wireMapLayerPicker;
   window.syncBaseLayerPickers = syncBaseLayerPickers;
@@ -4556,6 +4726,7 @@
     wireBaseLayerPickers();
     wireGenplanCalibUi();
     wireBleDrawUi();
+    wireMapToolsPickers();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
@@ -4625,6 +4796,11 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (bleGenplanCalibMode) {
+        finishGenplanCalibMode({ save: false });
+        return;
+      }
+      closeAllMapDropdowns();
       if (bleDrawTool) {
         setBleDrawTool(bleDrawTool);
         return;

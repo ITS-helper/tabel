@@ -136,29 +136,107 @@ body {
   transform: translateY(1px);
 }
 
-.map-genplan-calib-btn {
-  font-family: Oswald, sans-serif;
-  font-size: 0.72em;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 6px 10px;
+.map-tools-picker {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 2;
+}
+
+.map-tools-picker--open {
+  z-index: 12001;
+}
+
+.map-tools-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--map-toolbar-control-h, 32px);
+  min-width: var(--map-toolbar-control-h, 32px);
+  height: var(--map-toolbar-control-h, 32px);
+  padding: 0;
   border-radius: 999px;
   border: 1px solid #90caf9;
   background: #e3f2fd;
   color: var(--primary);
   cursor: pointer;
-  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.map-genplan-calib-btn:hover {
+.map-tools-mode-btn:hover {
   background: #bbdefb;
 }
 
-.map-genplan-calib-btn[aria-pressed="true"] {
+.map-tools-mode-btn[aria-expanded="true"],
+.map-tools-mode-btn--active {
   background: var(--primary);
   color: #fff;
   border-color: transparent;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.35);
+}
+
+.map-tools-mode-btn__icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.map-tools-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2500;
+  min-width: 168px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(21, 101, 192, 0.16);
+}
+
+.map-tools-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: Oswald, sans-serif;
+  font-size: 0.68em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #37474f;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.map-tools-menu__item:hover {
+  background: #e3f2fd;
+  color: var(--primary);
+}
+
+.map-tools-menu__item.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.map-tools-menu__item--context[hidden],
+.map-tools-menu__sep[hidden] {
+  display: none !important;
+}
+
+.map-tools-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+body.ble-map-tools-menu-open .map-float-dock,
+body.ble-map-tools-menu-open .fs-compact-bar {
+  z-index: 1200;
 }
 
 /* Редактор подложки генплана (mask overlay) */
@@ -267,17 +345,35 @@ body {
   bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: min(100vw - 24px, 260px);
-  max-height: min(80vh, 560px);
+  gap: 8px;
+  width: min(100vw - 24px, 240px);
+  max-height: min(72vh, 480px);
   overflow: auto;
-  padding: 12px;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 10px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   -webkit-overflow-scrolling: touch;
+}
+
+body.ble-map--genplan-calib .mask-controls--dock {
+  right: auto;
+  bottom: auto;
+  left: 8px;
+  top: auto;
+  width: min(100vw - 16px, 220px);
+  max-height: min(60vh, 420px);
+}
+
+body.ble-map--genplan-calib .mask-controls--short {
+  width: min(100vw - 16px, 200px);
+}
+
+body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) .mask-controls__hint,
+body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMaskFull .mask-controls__row:not(.mask-controls__row--actions) {
+  display: none;
 }
 
 .mask-controls--short {
@@ -1472,15 +1568,8 @@ body.ble-map--edit .map-edit-tools--dock {
   min-width: 0;
 }
 
-body.ble-map--edit .map-zone-draw-tools {
-  flex-wrap: nowrap;
-  gap: 2px;
-  padding: 1px 3px;
-}
-
-body.ble-map--edit .map-zone-draw-btn {
-  padding: 3px 6px;
-  font-size: 0.56em;
+body.ble-map--edit .map-tools-mode-btn {
+  min-height: var(--map-toolbar-control-h);
 }
 
 body.ble-map--edit .map-edit-save,
@@ -1492,7 +1581,6 @@ body.ble-map--edit .map-edit-cancel {
 
 body.ble-map--edit .map-filter-btn,
 body.ble-map--edit .map-edit-mode-btn,
-body.ble-map--edit .map-genplan-calib-btn,
 body.ble-map--edit .map-layer-mode-btn {
   min-height: var(--map-toolbar-control-h);
   padding: 4px 8px;
@@ -1507,14 +1595,6 @@ body.ble-map--edit .map-filter-label--long {
 body.ble-map--edit .map-toolbar-text--short,
 body.ble-map--edit .map-filter-label--short {
   display: inline;
-}
-
-body.ble-map--edit .map-toolbar__sep--edit-extras {
-  display: none;
-}
-
-body.ble-map--edit .map-toolbar__sep--edit-extras:has(+ .map-genplan-calib-btn:not([hidden])) {
-  display: block;
 }
 
 body.ble-map--edit .map-float-dock .map-zone-edit-hint:not([hidden]) {
