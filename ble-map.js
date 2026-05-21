@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260520d";
+  const BLE_MAP_BUILD = "20260520j";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -1671,15 +1671,6 @@
   function wireBleDrawUi() {
     if (document.body.dataset.bleDrawWired === "1") return;
     document.body.dataset.bleDrawWired = "1";
-    document.querySelectorAll("[data-draw-tool]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!bleEditMode) return;
-        setBleDrawTool(btn.dataset.drawTool);
-        closeAllToolsMenus();
-      });
-    });
     document.getElementById("mapDrawFinishBtn")?.addEventListener("click", (e) => {
       e.preventDefault();
       finishBleDrawPolyline();
@@ -2180,6 +2171,7 @@
     }
     redrawMapLayers();
     updateEditBarState();
+    if (bleEditMode) bindMapDropdownButtons();
   }
 
   function drawZones(targetMap, opts = {}) {
@@ -2687,78 +2679,87 @@
     openToolsMenu(picker);
   }
 
-  function wireMapToolsPickers() {
-    /* кнопки обрабатываются в wireMapDropdownUi */
+  function bindMapDropdownButtons() {
+    document.querySelectorAll(".map-layer-picker").forEach((picker) => {
+      const btn = picker.querySelector(".map-layer-mode-btn");
+      const menu = picker.querySelector(".map-layer-menu");
+      if (!btn || !menu) return;
+
+      if (btn.dataset.dropdownBound !== "1") {
+        btn.dataset.dropdownBound = "1";
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleLayerMenu(picker);
+        });
+        btn.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          toggleLayerMenu(picker);
+        });
+      }
+
+      menu.querySelectorAll(".map-layer-menu__item").forEach((item) => {
+        if (item.dataset.dropdownBound === "1") return;
+        item.dataset.dropdownBound = "1";
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (BLE_BASE_LAYERS.includes(item.dataset.layer)) {
+            setBleBaseLayer(item.dataset.layer);
+          }
+          closeAllLayerMenus();
+        });
+      });
+    });
+
+    document.querySelectorAll("[data-tools-picker]").forEach((picker) => {
+      const btn = picker.querySelector(".map-tools-mode-btn");
+      const menu = picker.querySelector(".map-tools-menu");
+      if (!btn || !menu) return;
+
+      if (btn.dataset.dropdownBound !== "1") {
+        btn.dataset.dropdownBound = "1";
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!bleEditMode) return;
+          toggleToolsMenu(picker);
+        });
+        btn.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          if (!bleEditMode) return;
+          toggleToolsMenu(picker);
+        });
+      }
+
+      menu.querySelectorAll(".map-tools-menu__item[data-draw-tool]").forEach((item) => {
+        if (item.dataset.dropdownBound === "1") return;
+        item.dataset.dropdownBound = "1";
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!bleEditMode) return;
+          setBleDrawTool(item.dataset.drawTool);
+          closeAllToolsMenus();
+        });
+      });
+    });
   }
 
   function wireMapDropdownUi() {
-    if (document.body.dataset.mapDropdownUiWired === "1") return;
+    if (document.body.dataset.mapDropdownUiWired === "1") {
+      bindMapDropdownButtons();
+      return;
+    }
     document.body.dataset.mapDropdownUiWired = "1";
+    bindMapDropdownButtons();
 
-    const onDropdownActivate = (e) => {
-      const scope = e.target.closest("#mapFloatDock, .map-fullscreen-overlay");
-      if (!scope) return;
-
-      const layerItem = e.target.closest(".map-layer-menu__item");
-      if (layerItem && scope.contains(layerItem)) {
-        e.preventDefault();
-        if (BLE_BASE_LAYERS.includes(layerItem.dataset.layer)) {
-          setBleBaseLayer(layerItem.dataset.layer);
-        }
-        closeAllLayerMenus();
-        return;
-      }
-
-      const toolsItem = e.target.closest(".map-tools-menu__item");
-      if (toolsItem && scope.contains(toolsItem)) {
-        e.preventDefault();
-        if (toolsItem.dataset.drawTool && bleEditMode) {
-          setBleDrawTool(toolsItem.dataset.drawTool);
-          closeAllToolsMenus();
-        }
-        return;
-      }
-
-      const layerBtn = e.target.closest(".map-layer-mode-btn");
-      if (layerBtn && scope.contains(layerBtn)) {
-        e.preventDefault();
-        e.stopPropagation();
-        const picker = layerBtn.closest(".map-layer-picker");
-        if (picker) toggleLayerMenu(picker);
-        return;
-      }
-
-      const toolsBtn = e.target.closest(".map-tools-mode-btn");
-      if (toolsBtn && scope.contains(toolsBtn)) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!bleEditMode) return;
-        const picker = toolsBtn.closest("[data-tools-picker]");
-        if (picker) toggleToolsMenu(picker);
-      }
-    };
-
-    document.addEventListener("click", onDropdownActivate);
-
-    document.addEventListener("click", (e) => {
-      if (e.target.closest(".map-layer-picker") || e.target.closest("[data-tools-picker]")) return;
-      closeAllMapDropdowns();
-    });
-
-    document.addEventListener("keydown", (e) => {
-      const layerBtn = e.target.closest?.(".map-layer-mode-btn");
-      if (layerBtn && (e.key === "Enter" || e.key === " ")) {
-        e.preventDefault();
-        const picker = layerBtn.closest(".map-layer-picker");
-        if (picker) toggleLayerMenu(picker);
-        return;
-      }
-      const toolsBtn = e.target.closest?.(".map-tools-mode-btn");
-      if (toolsBtn && (e.key === "Enter" || e.key === " ") && bleEditMode) {
-        e.preventDefault();
-        const picker = toolsBtn.closest("[data-tools-picker]");
-        if (picker) toggleToolsMenu(picker);
-      }
+    document.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".map-layer-mode-btn, .map-tools-mode-btn")) return;
+      if (e.target.closest(".map-layer-menu, .map-tools-menu")) return;
+      window.setTimeout(() => closeAllMapDropdowns(), 0);
     });
 
     window.addEventListener("resize", closeAllMapDropdowns, { passive: true });
@@ -2766,6 +2767,10 @@
     window.visualViewport?.addEventListener("resize", () => {
       if (bleGenplanCalibMode) positionGenplanPanel();
     }, { passive: true });
+  }
+
+  function wireMapToolsPickers() {
+    bindMapDropdownButtons();
   }
 
   function openLayerMenu(picker) {
