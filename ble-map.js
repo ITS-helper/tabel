@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260520j";
+  const BLE_MAP_BUILD = "20260520k";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -1489,14 +1489,8 @@
     const clearBtn = document.getElementById("mapDrawClearBtn");
     if (finishBtn) finishBtn.hidden = bleDrawTool !== "line";
     if (clearBtn) clearBtn.hidden = !bleDrawTool;
-    const ctxSep = document.querySelector(".map-tools-menu__sep:not(.map-tools-menu__sep--genplan)");
-    if (ctxSep) ctxSep.hidden = !(showToZone || bleDrawTool === "line" || bleDrawTool);
-    const toolsBtn = document.querySelector(".map-tools-mode-btn");
-    if (toolsBtn) {
-      toolsBtn.classList.toggle("map-tools-mode-btn--active", !!bleDrawTool || bleGenplanCalibMode);
-    }
-    const genplanItem = document.getElementById("mapGenplanCalibMenuBtn");
-    if (genplanItem) genplanItem.classList.toggle("active", bleGenplanCalibMode);
+    const extras = document.getElementById("mapDrawExtras");
+    if (extras) extras.hidden = !bleDrawTool;
   }
 
   function updateDrawHint() {
@@ -1946,6 +1940,7 @@
     if (toolsRow) toolsRow.hidden = !bleEditMode;
     syncGenplanCalibMenuVisibility();
     syncGenplanPanelForEditMode();
+    updateNativeToolbarForEdit();
     const editBtn = document.getElementById("mapEditModeBtn");
     if (editBtn) {
       editBtn.classList.toggle("active", bleEditMode);
@@ -2171,7 +2166,7 @@
     }
     redrawMapLayers();
     updateEditBarState();
-    if (bleEditMode) bindMapDropdownButtons();
+    if (bleEditMode) updateNativeToolbarForEdit();
   }
 
   function drawZones(targetMap, opts = {}) {
@@ -2444,23 +2439,19 @@
 
   function syncGenplanCalibMenuVisibility() {
     const show = isGenplanLayerAvailable() && bleEditMode;
-    const item = document.getElementById("mapGenplanCalibMenuBtn");
-    const sep = document.querySelector(".map-tools-menu__sep--genplan");
-    if (item) item.hidden = !show;
-    if (sep) sep.hidden = !show;
+    const opt = document.getElementById("mapEditToolsGenplanOpt");
+    if (opt) opt.hidden = !show;
+  }
+
+  function updateNativeToolbarForEdit() {
+    const toolsSel = document.getElementById("mapEditToolsSelect");
+    if (toolsSel) toolsSel.hidden = !bleEditMode;
+    syncGenplanCalibMenuVisibility();
   }
 
   function wireGenplanCalibUi() {
     if (document.body.dataset.genplanCalibWired === "1") return;
     document.body.dataset.genplanCalibWired = "1";
-    document.getElementById("mapGenplanCalibMenuBtn")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!bleEditMode) return;
-      if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
-      else setGenplanCalibMode(true);
-      closeAllToolsMenus();
-    });
     document.getElementById("mapGenplanMaskSaveBtn")?.addEventListener("click", () => {
       if (!bleGenplanMask) return;
       if (bleGenplanMask.save()) {
@@ -2534,9 +2525,11 @@
 
   function syncGenplanLayerMenuVisibility() {
     const show = isGenplanLayerAvailable();
-    document.querySelectorAll('.map-layer-menu__item[data-layer="genplan"]').forEach((el) => {
-      el.hidden = !show;
-    });
+    document
+      .querySelectorAll("#mapBaseLayerGenplanOpt, #mapFsBaseLayerGenplanOpt")
+      .forEach((opt) => {
+        opt.hidden = !show;
+      });
     syncGenplanCalibMenuVisibility();
   }
 
@@ -2679,98 +2672,41 @@
     openToolsMenu(picker);
   }
 
-  function bindMapDropdownButtons() {
-    document.querySelectorAll(".map-layer-picker").forEach((picker) => {
-      const btn = picker.querySelector(".map-layer-mode-btn");
-      const menu = picker.querySelector(".map-layer-menu");
-      if (!btn || !menu) return;
-
-      if (btn.dataset.dropdownBound !== "1") {
-        btn.dataset.dropdownBound = "1";
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleLayerMenu(picker);
-        });
-        btn.addEventListener("keydown", (e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          toggleLayerMenu(picker);
-        });
-      }
-
-      menu.querySelectorAll(".map-layer-menu__item").forEach((item) => {
-        if (item.dataset.dropdownBound === "1") return;
-        item.dataset.dropdownBound = "1";
-        item.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (BLE_BASE_LAYERS.includes(item.dataset.layer)) {
-            setBleBaseLayer(item.dataset.layer);
-          }
-          closeAllLayerMenus();
-        });
+  function wireNativeToolbarControls() {
+    document.querySelectorAll(".map-toolbar-select--layer").forEach((sel) => {
+      if (sel.dataset.nativeWired === "1") return;
+      sel.dataset.nativeWired = "1";
+      sel.addEventListener("change", () => {
+        const layerId = normalizeBaseLayerId(sel.value);
+        if (BLE_BASE_LAYERS.includes(layerId)) setBleBaseLayer(layerId);
       });
     });
 
-    document.querySelectorAll("[data-tools-picker]").forEach((picker) => {
-      const btn = picker.querySelector(".map-tools-mode-btn");
-      const menu = picker.querySelector(".map-tools-menu");
-      if (!btn || !menu) return;
-
-      if (btn.dataset.dropdownBound !== "1") {
-        btn.dataset.dropdownBound = "1";
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+    const toolsSel = document.getElementById("mapEditToolsSelect");
+    if (toolsSel && toolsSel.dataset.nativeWired !== "1") {
+      toolsSel.dataset.nativeWired = "1";
+      toolsSel.addEventListener("change", () => {
+        const action = toolsSel.value;
+        toolsSel.value = "";
+        if (!action) return;
+        if (action === "genplan-calib") {
           if (!bleEditMode) return;
-          toggleToolsMenu(picker);
-        });
-        btn.addEventListener("keydown", (e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          if (!bleEditMode) return;
-          toggleToolsMenu(picker);
-        });
-      }
-
-      menu.querySelectorAll(".map-tools-menu__item[data-draw-tool]").forEach((item) => {
-        if (item.dataset.dropdownBound === "1") return;
-        item.dataset.dropdownBound = "1";
-        item.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!bleEditMode) return;
-          setBleDrawTool(item.dataset.drawTool);
-          closeAllToolsMenus();
-        });
+          if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
+          else setGenplanCalibMode(true);
+          return;
+        }
+        if (!bleEditMode) return;
+        setBleDrawTool(action);
       });
-    });
+    }
   }
 
   function wireMapDropdownUi() {
-    if (document.body.dataset.mapDropdownUiWired === "1") {
-      bindMapDropdownButtons();
-      return;
-    }
-    document.body.dataset.mapDropdownUiWired = "1";
-    bindMapDropdownButtons();
-
-    document.addEventListener("mousedown", (e) => {
-      if (e.target.closest(".map-layer-mode-btn, .map-tools-mode-btn")) return;
-      if (e.target.closest(".map-layer-menu, .map-tools-menu")) return;
-      window.setTimeout(() => closeAllMapDropdowns(), 0);
-    });
-
-    window.addEventListener("resize", closeAllMapDropdowns, { passive: true });
-    window.visualViewport?.addEventListener("resize", closeAllMapDropdowns, { passive: true });
-    window.visualViewport?.addEventListener("resize", () => {
-      if (bleGenplanCalibMode) positionGenplanPanel();
-    }, { passive: true });
+    wireNativeToolbarControls();
   }
 
   function wireMapToolsPickers() {
-    bindMapDropdownButtons();
+    wireNativeToolbarControls();
   }
 
   function openLayerMenu(picker) {
@@ -2796,12 +2732,10 @@
   }
 
   function syncBaseLayerPickers(layerId) {
-    document.querySelectorAll(".map-layer-picker").forEach((picker) => {
-      picker.querySelectorAll(".map-layer-menu__item").forEach((item) => {
-        const active = item.dataset.layer === layerId;
-        item.classList.toggle("active", active);
-        item.setAttribute("aria-selected", active ? "true" : "false");
-      });
+    layerId = normalizeBaseLayerId(layerId);
+    document.querySelectorAll(".map-toolbar-select--layer").forEach((sel) => {
+      const opt = sel.querySelector(`option[value="${layerId}"]`);
+      if (opt && !opt.hidden) sel.value = layerId;
     });
   }
 

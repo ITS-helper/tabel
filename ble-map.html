@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260520j" />
+  <link rel="stylesheet" href="ble-map.css?v=20260520k" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -87,13 +87,12 @@
             </button>
             <span class="map-toolbar__sep map-toolbar__sep--before-layers" aria-hidden="true"></span>
             <div class="map-layer-picker" id="mapLayerPicker" data-layer-picker>
-              <button type="button" class="map-layer-mode-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Подложка карты">Карта</button>
-              <div class="map-layer-menu" role="listbox" hidden>
-                <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
-                <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
-                <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
-                <button type="button" class="map-layer-menu__item" role="option" data-layer="genplan" hidden>Генплан</button>
-              </div>
+              <select id="mapBaseLayerSelect" class="map-toolbar-select map-toolbar-select--layer" aria-label="Подложка карты">
+                <option value="street">Схема</option>
+                <option value="satellite">Спутник</option>
+                <option value="hybrid">Гибрид</option>
+                <option value="genplan" id="mapBaseLayerGenplanOpt" hidden>Генплан</option>
+              </select>
             </div>
             <input
               type="file"
@@ -114,42 +113,17 @@
             </div>
             <div class="map-toolbar-row map-toolbar-row--edit" id="mapEditToolsRow" hidden>
               <div id="mapEditTools" class="map-edit-tools map-edit-tools--dock">
-                <div class="map-tools-picker" id="mapToolsPicker" data-tools-picker>
-                  <button
-                    type="button"
-                    class="map-tools-mode-btn"
-                    aria-haspopup="menu"
-                    aria-expanded="false"
-                    aria-label="Инструменты редактирования"
-                    title="Инструменты: чертёж, подгонка генплана"
-                  >
-                    <svg class="map-tools-mode-btn__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                      <path d="M3 21l3.5-3.5"/>
-                      <path d="M12 3v4M12 17v4M3 12h4M17 12h4"/>
-                    </svg>
-                  </button>
-                  <div class="map-tools-menu" role="menu" hidden>
-                    <button type="button" class="map-tools-menu__item" role="menuitem" data-draw-tool="ruler" title="Линейка — расстояние в метрах">Линейка</button>
-                    <button type="button" class="map-tools-menu__item" role="menuitem" data-draw-tool="line" title="Прямая линия; Shift — ровный угол">Линия</button>
-                    <button type="button" class="map-tools-menu__item" role="menuitem" data-draw-tool="parallel" title="Параллельные: 2 клика — ось, далее линии">Параллельные</button>
-                    <div class="map-tools-menu__sep" role="separator" aria-hidden="true"></div>
-                    <button type="button" class="map-tools-menu__item map-tools-menu__item--context" id="mapDrawToZoneBtn" role="menuitem" title="Добавить последнюю точку в выбранную зону" hidden>В зону</button>
-                    <button type="button" class="map-tools-menu__item map-tools-menu__item--context" id="mapDrawFinishBtn" role="menuitem" title="Завершить ломаную">Готово</button>
-                    <button type="button" class="map-tools-menu__item map-tools-menu__item--context" id="mapDrawClearBtn" role="menuitem" title="Удалить чертёж">Очистить</button>
-                    <div class="map-tools-menu__sep map-tools-menu__sep--genplan" role="separator" aria-hidden="true" hidden></div>
-                    <button
-                      type="button"
-                      class="map-tools-menu__item map-tools-menu__item--genplan"
-                      id="mapGenplanCalibMenuBtn"
-                      role="menuitem"
-                      data-tool-action="genplan-calib"
-                      title="Подогнать генплан: перетаскивание, углы, поворот"
-                      hidden
-                    >
-                      Подогнать генплан
-                    </button>
-                  </div>
+                <select id="mapEditToolsSelect" class="map-toolbar-select map-toolbar-select--tools" aria-label="Инструменты" hidden>
+                  <option value="">Инструменты…</option>
+                  <option value="ruler">Линейка</option>
+                  <option value="line">Линия</option>
+                  <option value="parallel">Параллельные</option>
+                  <option value="genplan-calib" id="mapEditToolsGenplanOpt" hidden>Подогнать генплан</option>
+                </select>
+                <div class="map-draw-extras" id="mapDrawExtras" hidden>
+                  <button type="button" class="map-zone-draw-btn map-zone-draw-btn--mini" id="mapDrawToZoneBtn" title="Добавить последнюю точку в выбранную зону" hidden>В зону</button>
+                  <button type="button" class="map-zone-draw-btn map-zone-draw-btn--mini" id="mapDrawFinishBtn" title="Завершить ломаную">Готово</button>
+                  <button type="button" class="map-zone-draw-btn map-zone-draw-btn--mini map-zone-draw-btn--ghost" id="mapDrawClearBtn" title="Удалить чертёж">Очистить</button>
                 </div>
                 <div class="map-edit-tools__save">
                   <button type="button" class="map-edit-save" id="mapSaveBtn" disabled>Сохранить</button>
@@ -227,13 +201,12 @@
     </div>
     <div class="map-fullscreen-layer">
       <div class="map-layer-picker map-layer-picker--fs" data-layer-picker>
-        <button type="button" class="map-layer-mode-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Подложка карты">Карта</button>
-        <div class="map-layer-menu" role="listbox" hidden>
-          <button type="button" class="map-layer-menu__item" role="option" data-layer="street">Схема</button>
-          <button type="button" class="map-layer-menu__item" role="option" data-layer="satellite">Спутник</button>
-          <button type="button" class="map-layer-menu__item" role="option" data-layer="hybrid">Гибрид</button>
-          <button type="button" class="map-layer-menu__item" role="option" data-layer="genplan" hidden>Генплан</button>
-        </div>
+        <select id="mapFsBaseLayerSelect" class="map-toolbar-select map-toolbar-select--layer" aria-label="Подложка карты">
+          <option value="street">Схема</option>
+          <option value="satellite">Спутник</option>
+          <option value="hybrid">Гибрид</option>
+          <option value="genplan" id="mapFsBaseLayerGenplanOpt" hidden>Генплан</option>
+        </select>
       </div>
       <div class="map-fullscreen-search">
         <input type="text" id="mapFsSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" />
@@ -259,8 +232,8 @@
   <script src="https://unpkg.com/leaflet-imageoverlay-rotated@0.2.0/ImageOverlay.Rotated.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-genplan-mask.js?v=20260520j"></script>
-  <script src="ble-map.js?v=20260520j"></script>
+  <script src="ble-genplan-mask.js?v=20260520k"></script>
+  <script src="ble-map.js?v=20260520k"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>
