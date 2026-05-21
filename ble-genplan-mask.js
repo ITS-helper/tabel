@@ -462,7 +462,11 @@
     }
     this.settingsOpen = !!open;
     if (this.panel) {
-      this.panel.hidden = !open;
+      if (open) {
+        this.panel.removeAttribute("hidden");
+      } else {
+        this.panel.setAttribute("hidden", "");
+      }
       if (open) {
         this.isFullMode = false;
         this.panel.classList.add("mask-controls--short");

@@ -2353,12 +2353,14 @@
   }
 
   function syncGenplanPanelForEditMode() {
+    if (!bleEditMode || !bleGenplanCalibMode) {
+      bleGenplanCalibMode = false;
+      document.body.classList.remove("ble-map--genplan-calib", "ble-map--genplan-calib-expanded");
+      const panel = document.getElementById("mapGenplanMaskPanel");
+      if (panel) panel.setAttribute("hidden", "");
+    }
     if (!bleGenplanMask) return;
     if (!bleEditMode || !bleGenplanCalibMode) {
-      if (bleGenplanCalibMode) {
-        finishGenplanCalibMode({ save: false, restoreLayer: true });
-        return;
-      }
       bleGenplanMask.setSettingsOpen(false);
       bleGenplanMask.setEditMode(false);
     }
@@ -2557,7 +2559,11 @@
   }
 
   function usesFixedLayerMenu() {
-    return isCoarseMobile() || window.matchMedia("(max-width: 768px)").matches;
+    return (
+      document.body.classList.contains("ble-map--edit") ||
+      isCoarseMobile() ||
+      window.matchMedia("(max-width: 768px)").matches
+    );
   }
 
   function resetLayerMenuPosition(menu) {
@@ -2677,27 +2683,12 @@
     const btn = picker.querySelector(".map-tools-mode-btn");
     const menu = picker.querySelector(".map-tools-menu");
     if (!btn || !menu) return;
-    let suppressBtnClick = false;
-    const onBtnActivate = (e) => {
-      if (e.type === "click" && suppressBtnClick) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (e.type === "pointerup" && e.pointerType === "mouse" && e.button !== 0) return;
+    btn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (!bleEditMode) return;
-      if (e.type === "pointerup") {
-        suppressBtnClick = true;
-        setTimeout(() => {
-          suppressBtnClick = false;
-        }, 400);
-      }
       toggleToolsMenu(picker);
-    };
-    btn.addEventListener("pointerup", onBtnActivate);
-    btn.addEventListener("click", onBtnActivate);
+    });
     btn.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
@@ -2707,25 +2698,6 @@
   }
 
   function wireMapToolsPickers() {
-    if (!document.body.dataset.toolsMenuCloseWired) {
-      document.body.dataset.toolsMenuCloseWired = "1";
-      document.addEventListener(
-        "pointerdown",
-        (e) => {
-          if (e.target.closest("[data-tools-picker]")) return;
-          closeAllToolsMenus();
-        },
-        true
-      );
-      window.addEventListener("resize", () => {
-        closeAllToolsMenus();
-        if (bleGenplanCalibMode) positionGenplanPanel();
-      }, { passive: true });
-      window.visualViewport?.addEventListener("resize", () => {
-        closeAllToolsMenus();
-        if (bleGenplanCalibMode) positionGenplanPanel();
-      }, { passive: true });
-    }
     document.querySelectorAll("[data-tools-picker]").forEach(wireMapToolsPicker);
   }
 
@@ -2767,55 +2739,25 @@
     const btn = picker.querySelector(".map-layer-mode-btn");
     const menu = picker.querySelector(".map-layer-menu");
     if (!btn || !menu) return;
-    let suppressBtnClick = false;
-    const onBtnActivate = (e) => {
-      if (e.type === "click" && suppressBtnClick) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (e.type === "pointerup" && e.pointerType === "mouse" && e.button !== 0) return;
+    btn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.type === "pointerup") {
-        suppressBtnClick = true;
-        setTimeout(() => {
-          suppressBtnClick = false;
-        }, 400);
-      }
       toggleLayerMenu(picker);
-    };
-    btn.addEventListener("pointerup", onBtnActivate);
-    btn.addEventListener("click", onBtnActivate);
+    });
     btn.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
       toggleLayerMenu(picker);
     });
     menu.querySelectorAll(".map-layer-menu__item").forEach((item) => {
-      let suppressItemClick = false;
-      const onItemActivate = (e) => {
-        if (e.type === "click" && suppressItemClick) {
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        if (e.type === "pointerup" && e.pointerType === "mouse" && e.button !== 0) return;
+      item.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (e.type === "pointerup") {
-          suppressItemClick = true;
-          setTimeout(() => {
-            suppressItemClick = false;
-          }, 400);
-        }
         if (BLE_BASE_LAYERS.includes(item.dataset.layer)) {
           setBleBaseLayer(item.dataset.layer);
         }
         closeAllLayerMenus();
-      };
-      item.addEventListener("pointerup", onItemActivate);
-      item.addEventListener("click", onItemActivate);
+      });
     });
   }
 
@@ -4738,6 +4680,8 @@
   };
 
   function bindUi() {
+    document.body.classList.remove("ble-map--genplan-calib", "ble-map--genplan-calib-expanded");
+    document.getElementById("mapGenplanMaskPanel")?.setAttribute("hidden", "");
     wireBaseLayerPickers();
     wireGenplanCalibUi();
     wireBleDrawUi();

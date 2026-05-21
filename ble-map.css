@@ -235,8 +235,14 @@ body {
 }
 
 body.ble-map-tools-menu-open .map-float-dock,
-body.ble-map-tools-menu-open .fs-compact-bar {
+body.ble-map-tools-menu-open .fs-compact-bar,
+body.ble-map-layer-menu-open .map-float-dock {
   z-index: 1200;
+}
+
+body.ble-map-layer-menu-open .map-toolbar,
+body.ble-map-tools-menu-open .map-toolbar {
+  overflow: visible;
 }
 
 /* Редактор подложки генплана (mask overlay) */
@@ -338,10 +344,16 @@ body.ble-map-tools-menu-open .fs-compact-bar {
   cursor: grabbing;
 }
 
-body:not(.ble-map--edit) #mapGenplanMaskPanel {
+#mapGenplanMaskPanel {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+body.ble-map--edit.ble-map--genplan-calib #mapGenplanMaskPanel:not([hidden]) {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 .mask-controls {
@@ -349,7 +361,7 @@ body:not(.ble-map--edit) #mapGenplanMaskPanel {
   z-index: 100010;
   right: 12px;
   bottom: 12px;
-  display: flex;
+  flex-direction: column;
   flex-direction: column;
   gap: 8px;
   width: min(100vw - 24px, 240px);
