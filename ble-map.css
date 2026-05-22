@@ -1619,7 +1619,9 @@ body.ble-map--edit .map-toolbar-row--edit {
 }
 
 body.ble-map--edit .map-ww-logo-btn,
-body.ble-map--edit .map-field-pack-btn {
+body.ble-map--edit .map-field-pack-btn,
+body.ble-map--edit .map-edit-mode-btn,
+body.ble-map--edit .map-toolbar__sep--before-edit {
   display: none !important;
 }
 
