@@ -29,6 +29,7 @@
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
+  const BLE_FIELD_SYNC_STATE_KEY = "ww-ble-field-sync-state";
   const BLE_FIELD_PACK_FETCH_TIMEOUT_MS = 25 * 60 * 1000;
   const BLE_DOT_PX = 20;
   const BLE_FIELD_DB = "ww-ble-field-v1";
@@ -225,9 +226,9 @@
       setRetryVisible(!navigator.onLine);
       await refreshFieldPackChrome();
       alert(
-        `Пакет загружен.\n\nМеток: ${slimRaw.length}\nФото: ${idbMeta.photosOk}` +
+        `Импорт zip завершён.\n\nМеток: ${slimRaw.length}\nФото: ${idbMeta.photosOk}` +
           (idbMeta.photosFail ? ` (${idbMeta.photosFail} не попали в архив)` : "") +
-          `\n\nВ поле откройте карту без связи — метки и фото будут из пакета.`
+          `\n\nВ поле без связи откройте карту — данные из памяти телефона.`
       );
     } catch (e) {
       const msg = String(e?.message || e || "");
@@ -352,49 +353,215 @@
     }
   }
 
+  function loadFieldSyncState() {
+    try {
+      const raw = localStorage.getItem(BLE_FIELD_SYNC_STATE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      return s && typeof s === "object" ? s : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveFieldSyncState(state) {
+    try {
+      localStorage.setItem(BLE_FIELD_SYNC_STATE_KEY, JSON.stringify(state));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearFieldSyncState() {
+    try {
+      localStorage.removeItem(BLE_FIELD_SYNC_STATE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function getFieldPhotoKeysSet() {
+    try {
+      const db = await openFieldDb();
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readonly");
+      const keys = await idbGetAllKeys(tx.objectStore(BLE_FIELD_PHOTOS_STORE));
+      db.close();
+      return new Set(keys.map(String));
+    } catch {
+      return new Set();
+    }
+  }
+
+  async function countFieldPhotosInDb() {
+    try {
+      const db = await openFieldDb();
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readonly");
+      const n = await new Promise((resolve, reject) => {
+        const req = tx.objectStore(BLE_FIELD_PHOTOS_STORE).count();
+        req.onsuccess = () => resolve(req.result || 0);
+        req.onerror = () => reject(req.error);
+      });
+      db.close();
+      return n;
+    } catch {
+      return 0;
+    }
+  }
+
+  function rawPointRouteId(p) {
+    const r = p?.bleRoute;
+    if (r?.id == null) return null;
+    return String(r.id);
+  }
+
+  function filterRawByRoute(raw, routeId) {
+    if (!routeId || !Array.isArray(raw)) return raw || [];
+    const rid = String(routeId);
+    return raw.filter((p) => rawPointRouteId(p) === rid);
+  }
+
+  function getActiveRouteForFieldSync() {
+    const routeId = bleMapRouteFilter ? String(bleMapRouteFilter) : "";
+    if (!routeId) return null;
+    const route = bleRoutes.find((r) => String(r.id) === routeId);
+    return {
+      routeId,
+      routeTitle: route ? routeOptionLabel(route) : `Маршрут ${routeId}`,
+    };
+  }
+
+  function estimateMarkersOnRoute(routeId) {
+    if (!routeId) return 0;
+    const prev = bleMapRouteFilter;
+    bleMapRouteFilter = String(routeId);
+    const n = bleMapData.filter((pt) => pointPassesRouteFilter(pt)).length;
+    bleMapRouteFilter = prev;
+    return n;
+  }
+
+  async function pruneFieldPhotosNotInUrls(keepUrls) {
+    const keep = new Set(keepUrls || []);
+    const keys = await getFieldPhotoKeysSet();
+    const drop = [...keys].filter((k) => !keep.has(k));
+    if (!drop.length) return 0;
+    revokeFieldPhotoBlobUrls();
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readwrite");
+      const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
+      for (const key of drop) {
+        if (fieldPhotoBlobUrls.has(key)) {
+          try {
+            URL.revokeObjectURL(fieldPhotoBlobUrls.get(key));
+          } catch {
+            /* ignore */
+          }
+          fieldPhotoBlobUrls.delete(key);
+        }
+        store.delete(key);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    return drop.length;
+  }
+
+  async function fieldSyncSummaryLine() {
+    const meta = await loadFieldPackMeta();
+    const inDb = await countFieldPhotosInDb();
+    const markers = meta?.markerCount || 0;
+    const photos = Math.max(meta?.photosOk || 0, inDb);
+    if (!markers && !photos) return "";
+    const routeBit = meta?.routeTitle ? `${meta.routeTitle} · ` : "";
+    const need = meta?.photoCount ? meta.photoCount - photos : 0;
+    if (need > 0) return `${routeBit}${markers} меток · ${photos} фото (ещё ~${need})`;
+    return `${routeBit}${markers} меток · ${photos} фото`;
+  }
+
   async function onFieldPackPrimaryClick() {
     if (fieldPackDownloadActive) return;
-    const hosted = await fetchHostedFieldPackMeta();
 
-    if (isCoarseMobile()) {
-      if (hosted && navigator.onLine) {
-        const mb = (hosted.bytesTotal / (1024 * 1024)).toFixed(0);
-        const ok = confirm(
-          `Скачать готовый пакет с сайта (~${mb} МБ)?\n\nРекомендуется для телефона: один файл вместо сотен загрузок.\n\nОК — скачать\nОтмена — другие способы`
-        );
-        if (ok) {
-          void downloadHostedFieldPack();
-          return;
-        }
-      }
-      const pickFile = confirm(
-        "Загрузить .zip с телефона?\n\nСоберите пакет на ПК (npm run ble-field-pack), перекиньте файл (AirDrop, USB, Telegram).\n\nОК — выбрать файл\nОтмена — медленная загрузка в браузере"
+    const route = getActiveRouteForFieldSync();
+    if (!route) {
+      alert(
+        "Сначала выберите маршрут в списке «Маршрут» (не «Все маршруты»), затем нажмите «Подготовка к полю»."
       );
-      if (pickFile) {
-        openFieldPackFilePicker();
-        return;
-      }
-      if (
-        confirm(
-          "Скачивание в браузере на телефоне часто обрывается.\n\nВсё равно попробовать?"
-        )
-      ) {
-        void downloadFieldPack();
-      }
       return;
     }
 
-    if (hosted && navigator.onLine) {
-      const mb = (hosted.bytesTotal / (1024 * 1024)).toFixed(0);
-      const ok = confirm(
-        `Скачать готовый пакет с сайта (~${mb} МБ)?\n\nОК — один файл с сайта\nОтмена — собрать пакет в браузере (как раньше)`
+    const summary = await fieldSyncSummaryLine();
+    const est = estimateMarkersOnRoute(route.routeId);
+    const estLine = est > 0 ? `~${est} меток` : "метки маршрута";
+    const mobile = isCoarseMobile();
+    let intro =
+      `Подготовка к полю — только выбранный маршрут:\n\n«${route.routeTitle}»\n${estLine}, координаты и фото (метка + место).\n\n`;
+    if (summary) intro += `Сейчас в памяти: ${summary}\nДокачаем только недостающее по этому маршруту.\n\n`;
+    intro += mobile
+      ? "Нужен Wi‑Fi/VPN. Можно остановить и продолжить позже (Safari).\n\nНачать синхронизацию?"
+      : "Нужен интернет (Wi‑Fi/VPN). Можно прервать и продолжить позже.\n\nНачать синхронизацию?";
+
+    if (!confirm(intro)) {
+      const more = confirm(
+        "Другие способы:\n\nОК — импорт .zip (если есть архив с ПК)\nОтмена — закрыть"
       );
-      if (ok) {
-        void downloadHostedFieldPack();
+      if (more) openFieldPackFilePicker();
+      return;
+    }
+
+    void syncFieldDataBeforeWork({ resume: true, routeId: route.routeId, routeTitle: route.routeTitle });
+  }
+
+  async function onFieldPackAdvancedMenu() {
+    if (fieldPackDownloadActive) return;
+    const hosted = await fetchHostedFieldPackMeta();
+    const choice = prompt(
+      "Дополнительно (обычно не нужно):\n\n" +
+        "1 — импорт .zip с телефона\n" +
+        (hosted?.packUrl ? "2 — скачать готовый zip с сайта (~146 МБ)\n" : "") +
+        "3 — очистить и скачать всё заново\n" +
+        "4 — только координаты (без фото)\n\n" +
+        "Введите номер или Отмена:",
+      ""
+    );
+    if (!choice) return;
+    if (choice.trim() === "1") {
+      openFieldPackFilePicker();
+      return;
+    }
+    if (choice.trim() === "2" && hosted?.packUrl && navigator.onLine) {
+      void downloadHostedFieldPack();
+      return;
+    }
+    if (choice.trim() === "3") {
+      const route = getActiveRouteForFieldSync();
+      if (!route) {
+        alert("Выберите маршрут в списке «Маршрут».");
         return;
       }
+      if (confirm(`Удалить данные и скачать заново маршрут «${route.routeTitle}»?`)) {
+        void syncFieldDataBeforeWork({
+          fullReset: true,
+          resume: false,
+          routeId: route.routeId,
+          routeTitle: route.routeTitle,
+        });
+      }
+      return;
     }
-    void downloadFieldPack();
+    if (choice.trim() === "4") {
+      const route = getActiveRouteForFieldSync();
+      if (!route) {
+        alert("Выберите маршрут в списке «Маршрут».");
+        return;
+      }
+      void syncFieldDataBeforeWork({
+        markersOnly: true,
+        resume: true,
+        routeId: route.routeId,
+        routeTitle: route.routeTitle,
+      });
+    }
   }
   let bleClusterGroup = null;
 
@@ -3352,41 +3519,82 @@
   async function refreshFieldPackChrome() {
     const meta = await loadFieldPackMeta();
     const btn = document.getElementById("mapFieldPackBtn");
+    const syncHint = "Shift+клик — zip и другие опции";
     if (!meta?.markerCount && !meta?.raw?.length) {
-      setFieldPackStatus("");
+      const syncState = loadFieldSyncState();
+      if (syncState?.photosOk) {
+        setFieldPackStatus("Синхронизация прервана — нажмите «Подготовка к полю»", "busy");
+      } else {
+        setFieldPackStatus("");
+      }
       if (btn) {
-        btn.title =
-          "Скачать фото меток для работы без интернета (нужен Wi‑Fi или VPN)";
+        btn.title = `Синхронизация выбранного маршрута перед выездом (Wi‑Fi/VPN). ${syncHint}`;
       }
       return;
     }
-    if (!meta.photosOk) {
+    const markerN = meta.markerCount || meta.raw?.length || 0;
+    const photoTotal = meta.photoCount || 0;
+    const photoOk = meta.photosOk || 0;
+    const routeShort = meta.routeTitle
+      ? meta.routeTitle.length > 28
+        ? `${meta.routeTitle.slice(0, 26)}…`
+        : meta.routeTitle
+      : "";
+    const routePrefix = routeShort ? `${routeShort} · ` : "";
+    if (!photoOk && markerN) {
       setFieldPackStatus(
-        "Пакет без фото (устарел) — скачайте заново по Wi‑Fi с VPN",
+        `${routePrefix}${markerN} меток, фото нет — синхронизируйте по Wi‑Fi/VPN`,
         "busy"
       );
-      if (btn) btn.title = "Пересоздать пакет для поля (нужен VPN и API меток)";
+      if (btn) btn.title = `Докачать фото маршрута. ${syncHint}`;
+      return;
+    }
+    if (photoTotal && photoOk < photoTotal) {
+      const when = formatCacheAge(meta.savedAt);
+      setFieldPackStatus(
+        `${routePrefix}${markerN} меток · фото ${photoOk}/${photoTotal}${when ? ` · ${when}` : ""}`,
+        "ready"
+      );
+      if (btn) btn.title = `Продолжить синхронизацию маршрута (${photoOk}/${photoTotal} фото). ${syncHint}`;
       return;
     }
     const when = formatCacheAge(meta.savedAt);
     const mb = meta.bytesTotal ? ` · ~${(meta.bytesTotal / (1024 * 1024)).toFixed(0)} МБ` : "";
     const photos =
       meta.photosOk != null
-        ? `${meta.photosOk}${meta.photosFail ? `/${meta.photosOk + meta.photosFail}` : ""} фото`
+        ? `${meta.photosOk}${meta.photosFail ? ` (+${meta.photosFail} ошибок)` : ""} фото`
         : `${meta.photoCount || 0} фото`;
-    const modeHint = meta.tagOnly ? " · 1 фото/метка" : " · 2 фото/метка";
+    const modeHint = meta.tagOnly ? " · 1 фото/метка" : "";
+    const src = meta.packSource === "sync" ? "синхр." : meta.packSource === "zip" ? "zip" : "";
     setFieldPackStatus(
-      `Пакет для поля: ${meta.markerCount || meta.raw?.length || 0} меток, ${photos}${modeHint}${mb}${when ? ` · ${when}` : ""}`,
+      `${routePrefix}${markerN} меток, ${photos}${modeHint}${mb}${src ? ` · ${src}` : ""}${when ? ` · ${when}` : ""}`,
       "ready"
     );
     if (btn) {
-      btn.title = `Обновить пакет для поля (сейчас ${meta.markerCount || meta.raw.length} меток, ${photos})`;
+      btn.title = `Обновить данные для поля (${markerN} меток, ${photos}). ${syncHint}`;
     }
   }
 
-  async function downloadFieldPack() {
+  /**
+   * Пошаговая подготовка к полю: метки сразу, фото по одному, с докачкой (без zip).
+   */
+  async function syncFieldDataBeforeWork(opts = {}) {
     if (fieldPackDownloadActive) return;
     const btn = document.getElementById("mapFieldPackBtn");
+    const tagOnly = !!opts.tagOnly;
+    const markersOnly = !!opts.markersOnly;
+    const fullReset = !!opts.fullReset;
+    const route =
+      opts.routeId != null
+        ? {
+            routeId: String(opts.routeId),
+            routeTitle: opts.routeTitle || `Маршрут ${opts.routeId}`,
+          }
+        : getActiveRouteForFieldSync();
+    if (!route?.routeId) {
+      alert("Выберите маршрут в списке «Маршрут» (не «Все маршруты»).");
+      return;
+    }
     fieldPackDownloadActive = true;
     fieldPackAbort = new AbortController();
     if (btn) btn.disabled = true;
@@ -3394,37 +3602,108 @@
     setFieldPackStatus("Подготовка…", "busy");
     try {
       if (!navigator.onLine) {
-        alert("Нужен интернет, чтобы скачать пакет. Подключитесь к Wi‑Fi или VPN и повторите.");
+        alert("Нужен интернет для синхронизации. Подключитесь к Wi‑Fi или VPN и повторите.");
         return;
       }
       const cid = bleCompanyId || (await resolveCompanyId());
       await yieldToMain();
-      const raw = await resolveRawForFieldPackDownload(cid);
-      if (!raw?.length) {
+      const rawAll = await resolveRawForFieldPackDownload(cid);
+      if (!rawAll?.length) {
         alert(
           "Не удалось получить список меток. Откройте карту по Wi‑Fi/VPN, дождитесь загрузки меток и повторите."
         );
         return;
       }
-      await yieldToMain();
-      const photoUrls = collectPhotoUrlsFromRaw(raw, { tagOnly: false });
-      if (!photoUrls.length) {
+      const raw = filterRawByRoute(rawAll, route.routeId);
+      if (!raw.length) {
         alert(
-          "В ответе API нет актуальных ссылок на фото. Повторите позже или проверьте VPN. Пакет не сохранён — иначе в поле фото не откроются."
+          `В маршруте «${route.routeTitle}» нет меток.\n\nВыберите другой маршрут или обновите карту (↺).`
         );
         return;
       }
-      if (isCoarseMobile()) {
-        const go = confirm(
-          `Скачать пакет для телефона:\n\n• ${raw.length} меток\n• ${photoUrls.length} фото (метка + место, сжатие)\n\nЭто может занять 20–40 минут. Не сворачивайте вкладку.\n\nПродолжить?`
-        );
-        if (!go) return;
+      const slimRaw = slimBleRawForFieldPack(raw);
+      const photoUrls = markersOnly ? [] : collectPhotoUrlsFromRaw(raw, { tagOnly });
+
+      if (fullReset) {
+        revokeFieldPhotoBlobUrls();
+        await resetFieldPackStorage();
+        clearFieldSyncState();
       }
-      let photosOk = 0;
+
+      const prevMeta = await loadFieldPackMeta();
+      const routeChanged =
+        prevMeta?.routeId && String(prevMeta.routeId) !== String(route.routeId);
+      if (routeChanged && !fullReset) {
+        await pruneFieldPhotosNotInUrls(photoUrls);
+      }
+
+      const existingKeys = opts.resume !== false ? await getFieldPhotoKeysSet() : new Set();
+      const toFetch = photoUrls.filter((u) => !existingKeys.has(u));
+      let photosOk = photoUrls.filter((u) => existingKeys.has(u)).length;
       let photosFail = 0;
       let bytesTotal = 0;
+
+      const partialMeta = {
+        version: BLE_FIELD_PACK_VERSION,
+        companyId: cid,
+        savedAt: new Date().toISOString(),
+        markerCount: slimRaw.length,
+        photoCount: photoUrls.length,
+        photosOk,
+        photosFail: 0,
+        bytesTotal: 0,
+        tagOnly,
+        packSource: "sync",
+        routeId: route.routeId,
+        routeTitle: route.routeTitle,
+      };
+      setFieldPackStatus(`Метки: ${slimRaw.length} (${route.routeTitle})…`, "busy");
+      await yieldToMain();
+      await commitFieldPackMarkers(slimRaw);
+      await commitFieldPackMeta(partialMeta);
+      if (!bleMap) initBleMap([53.038, 39.011], 15);
+      bleCompanyId = cid;
+      await applyBleListToMap(slimRaw, "");
+      try {
+        sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+
+      if (!photoUrls.length && !markersOnly) {
+        alert(
+          "В ответе API нет ссылок на фото. Координаты сохранены — фото попробуйте позже с VPN."
+        );
+        await refreshFieldPackChrome();
+        return;
+      }
+
+      if (markersOnly || !toFetch.length) {
+        partialMeta.photosOk = photosOk;
+        partialMeta.photosFail = photosFail;
+        await commitFieldPackMeta(partialMeta);
+        clearFieldSyncState();
+        await refreshFieldPackChrome();
+        alert(
+          markersOnly
+            ? `Координаты сохранены: ${slimRaw.length} меток.\nМаршрут: ${route.routeTitle}\n\nФото не скачивались.`
+            : `Готово к полю.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\nФото в памяти: ${photosOk} из ${photoUrls.length}`
+        );
+        return;
+      }
+
+      saveFieldSyncState({
+        startedAt: new Date().toISOString(),
+        companyId: cid,
+        routeId: route.routeId,
+        routeTitle: route.routeTitle,
+        markerCount: slimRaw.length,
+        photoCount: photoUrls.length,
+        pending: toFetch.length,
+      });
+
       let done = 0;
-      const total = photoUrls.length;
+      const total = toFetch.length;
       const pendingBatch = [];
       let flushChain = Promise.resolve();
       const flushPendingBatch = () => {
@@ -3433,11 +3712,14 @@
         flushChain = flushChain.then(() => appendFieldPackPhotosBatch(chunk));
         return flushChain;
       };
-      revokeFieldPhotoBlobUrls();
-      await resetFieldPackStorage();
-      setFieldPackStatus(`Скачивание: 0 / ${total} · 0 МБ`, "busy");
+
+      setFieldPackStatus(
+        `Фото: 0 / ${total} (всего ${photosOk}/${photoUrls.length}) · 0 МБ`,
+        "busy"
+      );
       await yieldToMain();
-      const queue = [...photoUrls];
+
+      const queue = [...toFetch];
       const workers = Array.from({ length: fieldPackConcurrency() }, async () => {
         while (queue.length) {
           if (fieldPackAbort?.signal.aborted) break;
@@ -3447,7 +3729,6 @@
             let blob = await fetchPhotoBlobForField(url);
             if (fieldPackAbort?.signal.aborted) break;
             if (blob.size > BLE_FIELD_PHOTO_MAX_BYTES) {
-              console.warn("[ble-map] field photo skipped (too large)", blob.size);
               photosFail++;
               done++;
               continue;
@@ -3462,27 +3743,49 @@
             bytesTotal += blob.size || 0;
           } catch (e) {
             photosFail++;
-            console.warn("[ble-map] field photo", url.slice(0, 60), e?.message || e);
+            console.warn("[ble-map] field sync photo", url.slice(0, 60), e?.message || e);
           }
           done++;
           if (done % BLE_FIELD_YIELD_EVERY === 0 || done === total) {
             setFieldPackStatus(
-              `Скачивание: ${done} / ${total} · ${formatFieldPackMb(bytesTotal)}`,
+              `Фото: ${done} / ${total} (всего ${photosOk}/${photoUrls.length}) · ${formatFieldPackMb(bytesTotal)}`,
               "busy"
             );
+            partialMeta.photosOk = photosOk;
+            partialMeta.photosFail = photosFail;
+            partialMeta.bytesTotal = bytesTotal;
+            await commitFieldPackMeta(partialMeta);
             await yieldToMain();
           }
         }
       });
       await Promise.all(workers);
+
       if (fieldPackAbort?.signal.aborted) {
-        await resetFieldPackStorage();
-        setFieldPackStatus("Скачивание отменено", "busy");
+        partialMeta.photosOk = photosOk;
+        partialMeta.photosFail = photosFail;
+        partialMeta.bytesTotal = bytesTotal;
+        await commitFieldPackMeta(partialMeta);
+        saveFieldSyncState({
+          ...loadFieldSyncState(),
+          pausedAt: new Date().toISOString(),
+          photosOk,
+          pending: total - done,
+        });
+        setFieldPackStatus(
+          `Остановлено · ${route.routeTitle} · ${photosOk}/${photoUrls.length} фото`,
+          "busy"
+        );
+        alert(
+          `Синхронизация остановлена.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\nФото: ${photosOk} из ${photoUrls.length}\n\nВыберите тот же маршрут и нажмите «Подготовка к полю» — докачаются недостающие.`
+        );
+        await refreshFieldPackChrome();
         return;
       }
+
       await flushPendingBatch();
-      await flushChain;
-      const slimRaw = slimBleRawForFieldPack(raw);
+      await flushChain();
+
       const meta = {
         version: BLE_FIELD_PACK_VERSION,
         companyId: cid,
@@ -3492,37 +3795,36 @@
         photosOk,
         photosFail,
         bytesTotal,
-        tagOnly: false,
+        tagOnly,
+        packSource: "sync",
       };
-      if (photosOk < 1) {
-        await resetFieldPackStorage();
-        alert(
-          `Не удалось скачать ни одного фото (${photosFail} ошибок). Пакет не сохранён — проверьте VPN и повторите.`
-        );
-        return;
-      }
-      setFieldPackStatus("Запись пакета…", "busy");
-      await yieldToMain();
-      await commitFieldPackMarkers(slimRaw);
-      await yieldToMain();
       await commitFieldPackMeta(meta);
+      clearFieldSyncState();
       setBleMapData(mergeBleMapDataFromRaw(raw));
       updateMapStats();
       renderBleMarkers();
       await refreshFieldPackChrome();
+
+      if (photosOk < 1 && !markersOnly) {
+        alert(
+          `Координаты сохранены (${slimRaw.length} меток), но фото не скачались (${photosFail} ошибок). Проверьте VPN и повторите синхронизацию.`
+        );
+        return;
+      }
+
       alert(
-        `Пакет для поля сохранён.\n\nМеток: ${raw.length}\nФото: ${photosOk} из ${total}` +
-          (photosFail ? ` (${photosFail} не скачались)` : "") +
-          `\n\nВ поле без связи откройте карту — метки и скачанные фото будут доступны. Подложка спутника без интернета может не отображаться.`
+        `Готово к полю.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\nФото: ${photosOk} из ${photoUrls.length}` +
+          (photosFail ? ` (${photosFail} не скачались — повторите синхронизацию)` : "") +
+          `\n\nБез связи откройте карту — на карте только этот маршрут.`
       );
     } catch (e) {
       const msg = String(e?.message || e || "");
       if (msg.includes("QuotaExceeded") || msg.includes("quota")) {
         alert(
-          "Недостаточно места в браузере для всех фото. Освободите память или скачайте пакет с рабочего Wi‑Fi на другое устройство."
+          "Недостаточно места в браузере. Удалите данные сайта в настройках Safari или синхронизируйте частями (остановить → позже продолжить)."
         );
       } else {
-        alert(`Не удалось сохранить пакет для поля: ${msg.slice(0, 200)}`);
+        alert(`Синхронизация не завершена: ${msg.slice(0, 200)}`);
       }
       setFieldPackStatus("");
     } finally {
@@ -3533,18 +3835,23 @@
     }
   }
 
+  async function downloadFieldPack() {
+    await syncFieldDataBeforeWork({ fullReset: true, resume: false });
+  }
+
   async function tryLoadFieldPack(companyId) {
     const meta = await loadFieldPackMeta();
     if (!meta?.markerCount && !meta?.raw?.length) return false;
     if (companyId && meta.companyId && Number(meta.companyId) !== Number(companyId)) {
       return false;
     }
-    setFieldPackStatus("Загрузка пакета для поля…", "busy");
+    setFieldPackStatus("Загрузка данных для поля…", "busy");
     await yieldToMain();
     const raw = await loadFieldPackMarkers();
     if (!raw?.length) return false;
     if (!bleMap) initBleMap([53.038, 39.011], 15);
     bleCompanyId = meta.companyId || companyId;
+    if (meta.routeId) setBleMapRouteFilter(String(meta.routeId));
     await applyBleListToMap(raw, "");
     try {
       sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
@@ -3552,9 +3859,10 @@
       /* ignore */
     }
     setRetryVisible(!navigator.onLine);
+    const routeHint = meta.routeTitle ? ` · ${meta.routeTitle}` : "";
     if (!navigator.onLine) {
       showMapMsg(
-        "Нет сети — карта из пакета для поля. Фото скачанные открываются; спутник без интернета может не грузиться.",
+        `Нет сети — карта маршрута из памяти${routeHint}. Фото скачанные открываются; спутник без интернета может не грузиться.`,
         "error"
       );
     } else {
@@ -4731,7 +5039,13 @@
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
-    document.getElementById("mapFieldPackBtn")?.addEventListener("click", () => void onFieldPackPrimaryClick());
+    document.getElementById("mapFieldPackBtn")?.addEventListener("click", (e) => {
+      if (e.shiftKey) {
+        void onFieldPackAdvancedMenu();
+        return;
+      }
+      void onFieldPackPrimaryClick();
+    });
     document.getElementById("mapFieldPackFile")?.addEventListener("change", (e) => {
       const file = e.target.files?.[0];
       if (file) void importFieldPackZipBlob(file, { source: "file" });
