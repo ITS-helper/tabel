@@ -254,7 +254,7 @@
       } catch {
         /* ignore */
       }
-      setRetryVisible(!navigator.onLine);
+      setRetryVisible(true);
       await refreshFieldPackChrome();
       alert(
         `Импорт zip завершён.\n\nМеток: ${slimRaw.length}\nФото: ${idbMeta.photosOk}` +
