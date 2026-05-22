@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260522c";
+  const BLE_MAP_BUILD = "20260523a";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -79,11 +79,11 @@
   let fieldSyncPhotosSinceAuth = 0;
 
   function fieldPackConcurrency() {
-    return isCoarseMobile() ? 1 : 3;
+    return isCoarseMobile() ? 4 : 6;
   }
 
   function fieldSyncPhotoBatchSize() {
-    return isCoarseMobile() ? 1 : BLE_FIELD_PHOTO_BATCH;
+    return isCoarseMobile() ? 4 : BLE_FIELD_PHOTO_BATCH;
   }
 
   function resetFieldSyncIdbChain() {
@@ -2424,6 +2424,7 @@
     redrawMapLayers();
     updateEditBarState();
     if (bleEditMode) updateNativeToolbarForEdit();
+    requestAnimationFrame(updateMapFloatDockTopInset);
   }
 
   function drawZones(targetMap, opts = {}) {
@@ -2730,6 +2731,7 @@
 
   function tileLayerZoomOpts(mobile, nativeZoom) {
     return {
+      detectRetina: false,
       updateWhenIdle: mobile,
       updateWhenZooming: true,
       keepBuffer: 4,
@@ -3283,13 +3285,11 @@
 
   function toBlePhotoProxyUrl(url) {
     if (!url || !isYandexPhotoUrl(url)) return url;
-    return (
-      BLE_SUPABASE_BASE +
-      "?path=" +
-      encodeURIComponent("/ble-image") +
-      "&url=" +
-      encodeURIComponent(url)
-    );
+    const proxy = new URL(BLE_SUPABASE_BASE);
+    proxy.searchParams.set("path", "/ble-image");
+    proxy.searchParams.set("url", url);
+    proxy.searchParams.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+    return proxy.toString();
   }
 
   function isOfflineFirstMode() {
@@ -3304,7 +3304,6 @@
     if (!url) return "";
     const local = fieldPhotoBlobUrls.get(url);
     if (local) return local;
-    if (!navigator.onLine && isYandexPhotoUrl(url)) return toBlePhotoProxyUrl(url);
     return url;
   }
 
@@ -3636,17 +3635,18 @@
     }
   }
 
-  async function fetchPhotoBlobForField(url) {
-    const fetchUrl = isYandexPhotoUrl(url) ? toBlePhotoProxyUrl(url) : url;
-    const token = getBleToken();
-    const headers =
-      fetchUrl.includes("ble-map-proxy") || fetchUrl.includes("functions/v1")
-        ? mergeSupabaseHeaders({}, token)
-        : token
-          ? { Authorization: `Bearer ${token}` }
-          : {};
+  async function fetchPhotoBlobOnce(url, useProxy) {
+    const fetchUrl = useProxy && isYandexPhotoUrl(url) ? toBlePhotoProxyUrl(url) : url;
+    const viaEdge = fetchUrl.includes("ble-map-proxy") || fetchUrl.includes("functions/v1");
+    const headers = viaEdge ? mergeSupabaseHeaders({}, getBleToken()) : {};
     const ctrl = new AbortController();
-    const timeoutMs = isCoarseMobile() ? 90000 : 70000;
+    const timeoutMs = useProxy
+      ? isCoarseMobile()
+        ? 90000
+        : 70000
+      : isCoarseMobile()
+        ? 45000
+        : 35000;
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     if (fieldPackAbort?.signal?.aborted) {
       ctrl.abort();
@@ -3654,7 +3654,11 @@
       fieldPackAbort.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
     }
     try {
-      const res = await fetch(fetchUrl, { headers, signal: ctrl.signal });
+      const res = await fetch(fetchUrl, {
+        headers,
+        signal: ctrl.signal,
+        referrerPolicy: "no-referrer",
+      });
       if (!res.ok) throw new Error(`photo_http_${res.status}`);
       return res.blob();
     } finally {
@@ -3662,8 +3666,19 @@
     }
   }
 
+  async function fetchPhotoBlobForField(url) {
+    if (!isYandexPhotoUrl(url)) return fetchPhotoBlobOnce(url, false);
+    try {
+      return await fetchPhotoBlobOnce(url, false);
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (msg === "aborted") throw e;
+      return fetchPhotoBlobOnce(url, true);
+    }
+  }
+
   async function fetchPhotoBlobForFieldWithRetry(url) {
-    const maxAttempts = isCoarseMobile() ? 4 : 3;
+    const maxAttempts = isCoarseMobile() ? 2 : 3;
     let lastErr = null;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (fieldPackAbort?.signal.aborted) throw new Error("aborted");
@@ -3966,9 +3981,6 @@
           }
           done++;
           await updateSyncProgress(done === total);
-          if (isCoarseMobile()) {
-            await new Promise((r) => setTimeout(r, 180));
-          }
         }
         try {
           await flushBatch();
@@ -4083,7 +4095,7 @@
     } catch {
       /* ignore */
     }
-    setRetryVisible(!navigator.onLine);
+    setRetryVisible(true);
     const routeHint = meta.routeTitle ? ` · ${meta.routeTitle}` : "";
     if (!navigator.onLine) {
       showMapMsg(
@@ -4171,7 +4183,7 @@
     }
     const wrap = document.createElement("div");
     wrap.className = "ble-popup-photos";
-    urls.forEach((url) => {
+    urls.forEach((url, idx) => {
       const a = document.createElement("a");
       a.className = "ble-popup-photo-link";
       a.href = url;
@@ -4181,7 +4193,10 @@
       const img = document.createElement("img");
       img.className = "ble-popup-photo";
       img.alt = "";
-      img.loading = "lazy";
+      // первое фото — высокий приоритет и eager-загрузка, второе — обычное
+      img.loading = idx === 0 ? "eager" : "lazy";
+      img.decoding = "async";
+      try { img.fetchPriority = idx === 0 ? "high" : "auto"; } catch { /* ignore */ }
       img.referrerPolicy = "no-referrer";
       const direct = url;
       const proxied = toBlePhotoProxyUrl(url);
@@ -4191,19 +4206,23 @@
       } else {
         void (async () => {
           const fromPack = await loadFieldPhotoIntoImg(img, url);
-          if (!fromPack && img.isConnected) img.src = photoSrcForDisplay(url);
+          if (!fromPack && img.isConnected) img.src = direct;
         })();
       }
       img.addEventListener("error", function onImgErr() {
         if (this.dataset.blePhotoTried === "both") return;
-        if (this.src === proxied || this.dataset.blePhotoTried === "proxy") {
+        if (this.dataset.blePhotoTried === "direct") {
+          if (proxied && this.src !== proxied) {
+            this.dataset.blePhotoTried = "proxy";
+            this.src = proxied;
+            return;
+          }
           this.dataset.blePhotoTried = "both";
-          if (this.src !== direct) this.src = direct;
           return;
         }
-        if (proxied && this.src !== proxied) {
-          this.dataset.blePhotoTried = "proxy";
-          this.src = proxied;
+        if (direct && this.src !== direct) {
+          this.dataset.blePhotoTried = "direct";
+          this.src = direct;
           return;
         }
         this.dataset.blePhotoTried = "both";
@@ -4261,16 +4280,22 @@
         ?.getElement()
         ?.querySelector(".ble-popup-photos-slot");
       const mustRefresh = needsPhotoRefresh(current);
+      const hasPhotos = !!(current.photoTag || current.photoPlace);
       try {
-        if (!mustRefresh && (current.photoTag || current.photoPlace)) {
+        // Уже есть свежие фото — сразу показываем (мгновенный отклик)
+        if (hasPhotos && !mustRefresh) {
           renderPhotosInto(slot, current);
           return;
         }
-        if (slot) slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
-        current = await enrichPointPhotos(current, { forceFresh: true });
-        if (!current.photoTag && !current.photoPlace && navigator.onLine) {
-          current = await enrichPointPhotos(current, { forceFresh: true });
+        // Свежих фото нет / устарели — показываем скелетон и одно обновление в фоне
+        if (slot) {
+          if (hasPhotos) {
+            renderPhotosInto(slot, current); // показываем что есть, пока освежаем
+          } else {
+            slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
+          }
         }
+        current = await enrichPointPhotos(current, { forceFresh: navigator.onLine });
       } catch (e) {
         console.warn("[ble-map] popup photos", e?.message || e);
         current = getPointForPopup(pt);
@@ -4808,18 +4833,57 @@
     scheduleInvalidateSize(bleMap);
   }
 
+  function updateMapFloatDockTopInset() {
+    const root = document.documentElement;
+    const mobile = isCoarseMobile() || window.innerWidth <= 768;
+    const embedded = window.self !== window.top;
+    let topPx = 8;
+
+    if (mobile) {
+      if (embedded) {
+        /* В iframe safe-area и visualViewport ≈ 0; Safari (островок + адресная строка) над картой */
+        topPx = 140;
+      } else {
+        const vv = window.visualViewport;
+        const safeTop = parseFloat(
+          getComputedStyle(root).getPropertyValue("env(safe-area-inset-top)") || "0"
+        );
+        topPx = Math.max(28, safeTop + 20);
+        if (vv) topPx = Math.max(topPx, Math.round(vv.offsetTop) + 16);
+      }
+    }
+
+    root.style.setProperty("--map-float-dock-top", `${topPx}px`);
+
+    const dock = document.getElementById("mapFloatDock");
+    let dockH = mobile ? 52 : 44;
+    if (dock && !dock.hidden) {
+      const measured = dock.offsetHeight;
+      if (measured > 0) dockH = Math.min(measured, mobile && document.body.classList.contains("ble-map--edit") ? 64 : 140);
+    }
+    const scrollMargin = topPx + dockH + 8;
+    root.style.setProperty("--map-float-dock-scroll-margin", `${scrollMargin}px`);
+    root.style.setProperty("--map-leaflet-top-margin", `${scrollMargin}px`);
+  }
+
   function applyMapLayoutClasses() {
     const embedded = window.self !== window.top;
     document.documentElement.classList.toggle("ble-map-embedded", embedded);
     document.body.classList.toggle("ble-map-embedded", embedded);
     document.body.classList.toggle("ble-map-mobile", isCoarseMobile());
+    updateMapFloatDockTopInset();
   }
 
   function bindMapResizeHandlers() {
-    window.addEventListener("resize", scheduleMapResize, { passive: true });
-    window.addEventListener("orientationchange", scheduleMapResize, { passive: true });
+    const onLayoutChange = () => {
+      scheduleMapResize();
+      updateMapFloatDockTopInset();
+    };
+    window.addEventListener("resize", onLayoutChange, { passive: true });
+    window.addEventListener("orientationchange", onLayoutChange, { passive: true });
     if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", scheduleMapResize, { passive: true });
+      window.visualViewport.addEventListener("resize", onLayoutChange, { passive: true });
+      window.visualViewport.addEventListener("scroll", onLayoutChange, { passive: true });
     }
   }
 
@@ -4834,6 +4898,7 @@
     const dock = document.getElementById("mapFloatDock");
     if (dock) dock.hidden = false;
     setRetryVisible(true);
+    requestAnimationFrame(updateMapFloatDockTopInset);
   }
 
   async function resolveCompanyId() {

@@ -153,6 +153,8 @@ supabase functions deploy ble-map-proxy --no-verify-jwt
 
 Код: [`supabase/functions/ble-map-proxy/`](supabase/functions/ble-map-proxy/). В `ble-map.js` сначала пробуется Supabase, при ошибке — прямой Worker (как на портале обходов).
 
+**Фото меток без VPN:** снимки лежат в Yandex Object Storage; браузеру с мобильного интернета они часто недоступны. Edge Function отдаёт их по пути **`/ble-image`** (сервер Supabase качает файл с Yandex, клиент ходит только на `supabase.co`). В карте превью и просмотрщик используют этот прокси; «Подготовка к полю» — тоже. Нужен задеплоенный `ble-map-proxy` с `--no-verify-jwt`. Worker для **фото** не обязателен.
+
 ---
 
 ## Бэкапы базы в Supabase

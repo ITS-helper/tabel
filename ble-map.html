@@ -8,11 +8,15 @@
   <meta name="theme-color" content="#2196F3" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Ускоряем загрузку фото меток: DNS + TLS handshake к Yandex Storage делаются заранее -->
+  <link rel="preconnect" href="https://storage.yandexcloud.net" crossorigin />
+  <link rel="dns-prefetch" href="https://storage.yandexcloud.net" />
+  <link rel="preconnect" href="https://owcuvcshwtivqueftiuk.supabase.co" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260520m" />
+  <link rel="stylesheet" href="ble-map.css?v=20260523a" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -69,6 +73,15 @@
                 <option value="">Все</option>
               </select>
             </label>
+            <label class="map-route-field map-route-field--toolbar map-toolbar-field--layer-actions" id="mapLayerFieldActions">
+              <span class="map-route-field__label">Карта</span>
+              <select id="mapBaseLayerSelectActions" aria-label="Подложка карты">
+                <option value="street">Схема</option>
+                <option value="satellite">Спутник</option>
+                <option value="hybrid">Гибрид</option>
+                <option value="genplan" id="mapBaseLayerGenplanOptActions" hidden>Генплан</option>
+              </select>
+            </label>
             </div>
             <div class="map-toolbar-row map-toolbar-row--actions">
             <button type="button" class="map-filter-btn filter-all active" data-filter="all">
@@ -83,7 +96,7 @@
               type="button"
               class="map-retry-btn"
               id="mapRetryBtn"
-              title="Обновить метки и ссылки на фото с сервера (нужен VPN)"
+              title="Обновить метки и фото с сервера (API через Supabase; без VPN — кэш и прокси фото)"
               aria-label="Обновить данные карты"
             >
               <span class="map-toolbar-text map-toolbar-text--long">Обновить</span>
@@ -94,15 +107,6 @@
               <span class="map-toolbar-text map-toolbar-text--long">Редактировать</span>
               <span class="map-toolbar-text map-toolbar-text--short">Правка</span>
             </button>
-            <label class="map-route-field map-route-field--toolbar map-toolbar-field--layer-actions" id="mapLayerFieldActions">
-              <span class="map-route-field__label">Карта</span>
-              <select id="mapBaseLayerSelectActions" aria-label="Подложка карты">
-                <option value="street">Схема</option>
-                <option value="satellite">Спутник</option>
-                <option value="hybrid">Гибрид</option>
-                <option value="genplan" id="mapBaseLayerGenplanOptActions" hidden>Генплан</option>
-              </select>
-            </label>
             <input
               type="file"
               id="mapFieldPackFile"
@@ -255,7 +259,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
   <script src="ble-genplan-mask.js?v=20260520m"></script>
-  <script src="ble-map.js?v=20260522c"></script>
+  <script src="ble-map.js?v=20260523a"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

@@ -6,6 +6,9 @@
   --success: #43a047;
   --warning: #ffa726;
   --danger: #ef5350;
+  --map-float-dock-top: max(8px, env(safe-area-inset-top, 0px));
+  --map-float-dock-scroll-margin: calc(60px + var(--map-float-dock-top));
+  --map-leaflet-top-margin: calc(64px + var(--map-float-dock-top));
 }
 
 * {
@@ -244,8 +247,33 @@ body.ble-map-tools-menu-open .map-toolbar {
 }
 
 /* Редактор подложки генплана (mask overlay) */
-.leaflet-map-pane {
+.mask-image,
+.mask-overlay {
   isolation: isolate;
+}
+
+/* Убираем белую «сетку» — швы между тайлами Leaflet (фон #bleMap был светлым) */
+#bleMap.leaflet-container,
+#bleMapFS.leaflet-container {
+  background: #1a2430;
+}
+
+.leaflet-tile-pane {
+  background: #1a2430;
+}
+
+.leaflet-container img.leaflet-tile {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.leaflet-zoom-animated .leaflet-tile {
+  width: 257px !important;
+  height: 257px !important;
+  margin: -0.5px 0 0 -0.5px;
 }
 
 .mask-image {
@@ -867,7 +895,7 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   min-height: 280px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #e8ecf2;
+  background: #1a2430;
   position: relative;
   z-index: 1;
 }
@@ -2215,7 +2243,7 @@ html.ble-map-embedded .map-float-dock {
   position: absolute;
   left: 8px;
   right: 8px;
-  top: max(8px, env(safe-area-inset-top));
+  top: var(--map-float-dock-top);
   bottom: auto;
   z-index: 700;
   pointer-events: none;
@@ -2227,14 +2255,10 @@ html.ble-map-embedded .map-float-dock > * {
 
 html.ble-map-embedded .map-msg:not([hidden]) {
   position: absolute;
-  top: calc(52px + max(8px, env(safe-area-inset-top)));
+  top: var(--map-float-dock-scroll-margin);
   left: 8px;
   right: 8px;
   z-index: 800;
-}
-
-html.ble-map-embedded body.ble-map-mobile .map-msg:not([hidden]) {
-  top: calc(52px + max(6px, env(safe-area-inset-top)));
 }
 
 /* Отдельная страница ble-map.html — карта на всю высоту под шапкой */
@@ -2281,7 +2305,7 @@ body:not(.ble-map-embedded) .map-float-dock {
   position: absolute;
   left: 8px;
   right: 8px;
-  top: max(8px, env(safe-area-inset-top));
+  top: var(--map-float-dock-top);
   bottom: auto;
   z-index: 700;
   pointer-events: none;
@@ -2333,7 +2357,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 
   .map-msg:not([hidden]) {
     position: absolute;
-    top: max(8px, env(safe-area-inset-top));
+    top: var(--map-float-dock-scroll-margin);
     left: 8px;
     right: 8px;
     z-index: 800;
@@ -2349,21 +2373,122 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     padding: 5px 8px;
   }
 
+  :root {
+    --map-float-dock-top: max(80px, calc(env(safe-area-inset-top, 0px) + 32px));
+  }
+
+  html.ble-map-embedded {
+    --map-float-dock-top: 140px;
+  }
+
   .map-float-dock {
     position: absolute;
     left: 6px;
     right: 6px;
-    top: max(6px, env(safe-area-inset-top));
+    top: var(--map-float-dock-top);
     bottom: auto;
     z-index: 700;
     gap: 0;
     pointer-events: auto;
     min-width: 0;
+    padding-top: 4px;
+  }
+
+  /* iPhone: поиск/маршрут сверху, кнопки — отдельная прокручиваемая полоса */
+  body:not(.ble-map--edit) .map-toolbar {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 8px 6px;
+    overflow: visible;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--fields {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    scroll-padding-inline: 8px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--fields::-webkit-scrollbar {
+    display: none;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--fields > * {
+    flex-shrink: 0;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    scrollbar-width: none;
+    scroll-padding-inline: 10px;
+    padding: 2px 2px 4px;
+    margin: 0 -2px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--actions::-webkit-scrollbar {
+    display: none;
+    height: 0;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--actions > * {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+  }
+
+  body .map-ww-logo-btn {
+    display: none;
+  }
+
+  body:not(.ble-map--edit) #mapSearchBlock.map-search-bar--toolbar {
+    flex: 1 1 88px;
+    width: auto;
+    min-width: 72px;
+    max-width: none;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--fields .map-route-field--toolbar {
+    flex: 1 1 96px;
+    width: auto;
+    min-width: 88px;
+    max-width: 140px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--fields .map-toolbar-field--layer-actions {
+    flex: 0 0 96px;
+    width: 96px;
+    min-width: 88px;
+    max-width: 112px;
   }
 
   .map-toolbar {
-    gap: 4px;
-    padding: 6px;
+    gap: 8px;
+    padding: 8px;
     min-width: 0;
     max-width: 100%;
   }
@@ -2372,13 +2497,21 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     gap: 4px;
   }
 
-  .map-toolbar-row--fields .map-search-bar--toolbar {
+  body:not(.ble-map--edit) .map-toolbar-row--fields .map-search-bar--toolbar,
+  body:not(.ble-map--edit) .map-toolbar-row--fields .map-route-field--toolbar {
+    flex: 0 0 auto;
+    max-width: none;
+  }
+
+  body:not(.ble-map-mobile) .map-toolbar-row--fields .map-search-bar--toolbar,
+  body.ble-map--edit .map-toolbar-row--fields .map-search-bar--toolbar {
     flex: 1 1 calc(50% - 2px);
     min-width: 0;
     max-width: none;
   }
 
-  .map-toolbar-row--fields .map-route-field--toolbar {
+  body:not(.ble-map-mobile) .map-toolbar-row--fields .map-route-field--toolbar,
+  body.ble-map--edit .map-toolbar-row--fields .map-route-field--toolbar {
     flex: 1 1 calc(50% - 2px);
     min-width: 0;
     max-width: none;
@@ -2451,6 +2584,43 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     font-size: 0.65em;
   }
 
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-filter-btn,
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn,
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-edit-mode-btn,
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-filter-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-edit-mode-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn {
+    min-height: 48px !important;
+    padding: 10px 18px !important;
+    font-family: Oswald, sans-serif;
+    font-size: 13px !important;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    border-radius: 999px;
+  }
+
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn {
+    min-width: 48px !important;
+    padding: 10px 14px !important;
+    font-size: 18px !important;
+  }
+
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-filter-btn .filter-count,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-filter-btn .filter-count {
+    font-size: 12px;
+    margin-left: 4px;
+  }
+
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--fields .map-toolbar-field--layer-actions select,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--fields .map-toolbar-field--layer-actions select {
+    min-height: 40px !important;
+    padding: 8px 24px 6px 10px !important;
+    font-size: 12px !important;
+  }
+
   .map-route-field--toolbar .map-route-select {
     min-height: 34px;
     padding: 5px 22px 3px 8px;
@@ -2483,7 +2653,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   #bleMap .leaflet-control-zoom {
-    margin-top: calc(64px + max(6px, env(safe-area-inset-top))) !important;
+    margin-top: var(--map-leaflet-top-margin) !important;
     margin-bottom: max(8px, env(safe-area-inset-bottom)) !important;
     margin-right: max(8px, env(safe-area-inset-right)) !important;
   }
@@ -2543,5 +2713,456 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     box-shadow:
       0 2px 6px rgba(0, 0, 0, 0.3),
       0 0 0 4px rgba(33, 150, 243, 0.45);
+  }
+}
+
+/* =========================================================
+   BLE Map — Unified Controls (v3)
+   Единая система: высота, радиусы, шрифт, цвета у всех
+   контролов панели карты (поиск, селекты, кнопки).
+   Перебивает старые правила выше (порядок + специфичность).
+   ========================================================= */
+:root {
+  --ctl-h: 40px;                /* десктоп тач-таргет */
+  --ctl-h-mobile: 44px;         /* iOS HIG ≥ 44 */
+  --ctl-radius: 12px;           /* поля с лейблом */
+  --ctl-pill: 999px;            /* пилюли-кнопки */
+  --ctl-font: 12.5px;
+  --ctl-font-label: 10.5px;
+  --ctl-gap: 8px;
+  --ctl-pad-x: 14px;
+  --ctl-pad-x-pill: 16px;
+  --ctl-border: #e3eaf2;
+  --ctl-border-hover: rgba(33, 150, 243, 0.45);
+  --ctl-bg: #ffffff;
+  --ctl-bg-soft: #f3f7fb;
+  --ctl-text: #37474f;
+  --ctl-text-muted: #607382;
+  --ctl-shadow: 0 1px 3px rgba(21, 101, 192, 0.06);
+  --ctl-shadow-strong: 0 4px 14px rgba(21, 101, 192, 0.18);
+  --ctl-grad-primary: linear-gradient(135deg, #1565c0 0%, #2196f3 100%);
+  --ctl-grad-success: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);
+  --ctl-grad-warning: linear-gradient(135deg, #ef6c00 0%, #ffa726 100%);
+}
+
+/* --- Toolbar (десктоп) --- */
+.map-toolbar {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(21, 101, 192, 0.1);
+  box-shadow: 0 6px 24px rgba(21, 101, 192, 0.14);
+  border-radius: 16px;
+  padding: 10px 12px;
+  gap: var(--ctl-gap);
+}
+
+/* --- Базовая высота всех контролов --- */
+.map-toolbar .map-route-field--toolbar .map-route-select,
+.map-toolbar .map-toolbar-field--layer-actions select,
+.map-toolbar .map-toolbar-field--layer select,
+.map-toolbar .map-toolbar-field--tools select,
+.map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
+.map-toolbar .map-filter-btn,
+.map-toolbar .map-retry-btn,
+.map-toolbar .map-field-pack-btn,
+.map-toolbar .map-edit-mode-btn {
+  height: var(--ctl-h);
+  min-height: var(--ctl-h);
+  box-sizing: border-box;
+  font-family: Oswald, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+/* --- Поля с плавающим лейблом (поиск, маршрут, карта) --- */
+.map-toolbar .map-route-field--toolbar {
+  flex: 0 0 auto;
+  width: 148px;
+  min-width: 128px;
+  max-width: 180px;
+}
+
+.map-toolbar .map-route-field--toolbar .map-route-select,
+.map-toolbar .map-toolbar-field--layer-actions select,
+.map-toolbar .map-toolbar-field--layer select,
+.map-toolbar .map-toolbar-field--tools select,
+.map-toolbar #mapSearchBlock.map-search-bar--toolbar input {
+  width: 100%;
+  padding: 0 30px 0 var(--ctl-pad-x);
+  border-radius: var(--ctl-radius);
+  border: 1px solid var(--ctl-border);
+  background: var(--ctl-bg);
+  color: var(--ctl-text);
+  font-size: var(--ctl-font);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-family: "Source Sans 3", system-ui, sans-serif;
+  box-shadow: var(--ctl-shadow);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378909c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.map-toolbar #mapSearchBlock.map-search-bar--toolbar input {
+  background-image: none;
+  padding-right: 36px;
+}
+
+.map-toolbar .map-route-field--toolbar .map-route-select:hover,
+.map-toolbar .map-toolbar-field--layer-actions select:hover,
+.map-toolbar #mapSearchBlock.map-search-bar--toolbar input:hover {
+  border-color: var(--ctl-border-hover);
+}
+
+.map-toolbar .map-route-field--toolbar .map-route-select:focus,
+.map-toolbar .map-toolbar-field--layer-actions select:focus,
+.map-toolbar #mapSearchBlock.map-search-bar--toolbar input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.18);
+}
+
+.map-toolbar .map-route-field--toolbar .map-route-field__label {
+  position: absolute;
+  top: -6px;
+  left: 10px;
+  z-index: 1;
+  padding: 0 6px;
+  background: #fff;
+  color: var(--primary);
+  font-family: Oswald, sans-serif;
+  font-size: var(--ctl-font-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+}
+
+/* --- Search input --- */
+.map-toolbar #mapSearchBlock.map-search-bar--toolbar {
+  position: relative;
+  flex: 1 1 168px;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.map-toolbar .map-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--ctl-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.map-toolbar .map-search-clear:hover {
+  background: var(--ctl-bg-soft);
+  color: var(--primary);
+}
+
+/* --- Пилюли-кнопки: единая база --- */
+.map-toolbar .map-filter-btn,
+.map-toolbar .map-retry-btn,
+.map-toolbar .map-field-pack-btn,
+.map-toolbar .map-edit-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 var(--ctl-pad-x-pill);
+  font-size: var(--ctl-font);
+  text-transform: uppercase;
+  border-radius: var(--ctl-pill);
+  border: 1px solid var(--ctl-border);
+  background: var(--ctl-bg);
+  color: var(--ctl-text);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--ctl-shadow);
+  transition: background 0.18s ease, color 0.18s ease,
+              border-color 0.18s ease, box-shadow 0.18s ease,
+              transform 0.1s ease;
+  flex: 0 0 auto;
+  touch-action: manipulation;
+}
+
+.map-toolbar .map-filter-btn:hover,
+.map-toolbar .map-retry-btn:hover,
+.map-toolbar .map-field-pack-btn:hover,
+.map-toolbar .map-edit-mode-btn:hover {
+  border-color: var(--ctl-border-hover);
+  background: #f6fbff;
+  color: var(--primary);
+}
+
+.map-toolbar .map-filter-btn:active,
+.map-toolbar .map-retry-btn:active,
+.map-toolbar .map-field-pack-btn:active,
+.map-toolbar .map-edit-mode-btn:active {
+  transform: translateY(1px);
+}
+
+.map-toolbar .map-filter-btn:focus-visible,
+.map-toolbar .map-retry-btn:focus-visible,
+.map-toolbar .map-field-pack-btn:focus-visible,
+.map-toolbar .map-edit-mode-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.28);
+  border-color: var(--accent);
+}
+
+/* --- Active / акценты --- */
+.map-toolbar .map-filter-btn.filter-all.active,
+.map-toolbar .map-edit-mode-btn.active,
+body.ble-map--edit .map-toolbar .map-edit-mode-btn {
+  background: var(--ctl-grad-primary);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--ctl-shadow-strong);
+}
+
+.map-toolbar .map-filter-btn.filter-inspection.active {
+  background: var(--ctl-grad-warning);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(239, 108, 0, 0.32);
+}
+
+.map-toolbar .map-filter-btn.filter-ok.active {
+  background: var(--ctl-grad-success);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(46, 125, 50, 0.32);
+}
+
+/* «В поле» — акцентный success-стиль */
+.map-toolbar .map-field-pack-btn {
+  background: var(--ctl-grad-success);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 3px 12px rgba(46, 125, 50, 0.28);
+}
+
+.map-toolbar .map-field-pack-btn:hover {
+  background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+  color: #fff;
+}
+
+/* «↺ Обновить» — иконочная кнопка одинаковой высоты */
+.map-toolbar .map-retry-btn {
+  min-width: var(--ctl-h);
+}
+
+/* Счётчики в фильтрах */
+.map-toolbar .map-filter-btn .filter-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  border-radius: var(--ctl-pill);
+  padding: 0 8px;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.map-toolbar .map-filter-btn:not(.active) .filter-count {
+  background: var(--ctl-bg-soft);
+  color: var(--ctl-text-muted);
+}
+
+/* Сепаратор перед «Правка» — нежная вертикальная черта */
+.map-toolbar .map-toolbar__sep--before-edit {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: rgba(21, 101, 192, 0.16);
+  margin: 0 4px;
+  flex: 0 0 auto;
+}
+
+/* =========================================================
+   Мобильная адаптация (≤ 768px и iframe)
+   ========================================================= */
+@media (max-width: 768px), (pointer: coarse) {
+  :root {
+    --ctl-h: var(--ctl-h-mobile);
+    --ctl-font: 13px;
+    --ctl-pad-x: 14px;
+    --ctl-pad-x-pill: 18px;
+  }
+
+  .map-toolbar {
+    border-radius: 14px;
+    padding: 10px 10px 12px;
+    gap: 10px;
+  }
+
+  /* Поля 1-й строки — растягиваются */
+  body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar {
+    flex: 1 1 100px;
+    min-width: 100px;
+    max-width: none;
+    width: auto;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-route-field--toolbar {
+    flex: 1 1 110px;
+    width: auto;
+    min-width: 104px;
+    max-width: 160px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-toolbar-field--layer-actions {
+    flex: 0 0 108px;
+    width: 108px;
+    min-width: 100px;
+    max-width: 128px;
+  }
+
+  /* Кнопки 2-й строки на мобиле — однородный набор пилюль */
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-filter-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
+    height: var(--ctl-h-mobile);
+    min-height: var(--ctl-h-mobile);
+    padding: 0 18px;
+    font-size: 13px;
+    border-radius: var(--ctl-pill);
+  }
+
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn {
+    min-width: var(--ctl-h-mobile);
+    padding: 0 14px;
+    font-size: 18px;
+  }
+
+  /* Поля 1-й строки — увеличиваем высоту до тач-таргета */
+  body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-route-select,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-toolbar-field--layer-actions select {
+    height: var(--ctl-h-mobile);
+    min-height: var(--ctl-h-mobile);
+    font-size: 14px;
+    padding: 0 32px 0 14px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar input {
+    padding-right: 40px;
+    font-size: 16px; /* предотвращает зум iOS при фокусе */
+  }
+
+  /* Счётчики в фильтрах на мобиле — крупнее */
+  body:not(.ble-map--edit) .map-toolbar .map-filter-btn .filter-count {
+    height: 24px;
+    min-width: 26px;
+    font-size: 12px;
+  }
+
+  /* Чтобы кнопки во второй строке не «прилипали» к экрану */
+  body:not(.ble-map--edit) .map-toolbar-row--actions {
+    padding: 4px 4px 6px;
+    margin: 0 -4px;
+  }
+}
+
+/* =========================================================
+   Edit mode — компактная одна полоса, остальное скрыто
+   ========================================================= */
+body.ble-map--edit .map-toolbar {
+  padding: 6px 8px;
+  gap: 6px;
+  border-radius: 12px;
+}
+
+body.ble-map--edit .map-toolbar .map-route-field--toolbar,
+body.ble-map--edit .map-toolbar .map-toolbar-field--layer,
+body.ble-map--edit .map-toolbar .map-toolbar-field--tools {
+  width: 132px;
+  max-width: 148px;
+  min-width: 0;
+}
+
+body.ble-map--edit .map-toolbar .map-route-field--toolbar .map-route-select,
+body.ble-map--edit .map-toolbar .map-toolbar-field--layer select,
+body.ble-map--edit .map-toolbar .map-toolbar-field--tools select,
+body.ble-map--edit .map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
+body.ble-map--edit .map-toolbar .map-edit-save,
+body.ble-map--edit .map-toolbar .map-edit-cancel,
+body.ble-map--edit .map-toolbar .map-filter-btn,
+body.ble-map--edit .map-toolbar .map-edit-mode-btn {
+  height: 34px;
+  min-height: 34px;
+  font-size: 12px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+body.ble-map--edit .map-toolbar .map-route-field--toolbar .map-route-select,
+body.ble-map--edit .map-toolbar .map-toolbar-field--layer select,
+body.ble-map--edit .map-toolbar .map-toolbar-field--tools select {
+  border-radius: 10px;
+  padding: 0 26px 0 10px;
+}
+
+body.ble-map--edit .map-toolbar .map-edit-save {
+  background: var(--ctl-grad-success);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.32);
+}
+
+body.ble-map--edit .map-toolbar .map-edit-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+body.ble-map--edit .map-toolbar .map-edit-cancel {
+  background: #fff;
+  color: var(--ctl-text-muted);
+  border-color: var(--ctl-border);
+}
+
+/* =========================================================
+   Photo viewer / popup photos — гладкая загрузка
+   ========================================================= */
+.ble-popup-photo {
+  height: 132px;
+  background:
+    linear-gradient(110deg, #eceff1 30%, #f5f7fa 50%, #eceff1 70%) 0 0/200% 100%;
+  animation: ble-popup-photo-skeleton 1.4s ease-in-out infinite;
+}
+
+.ble-popup-photo[src]:not([src=""]) {
+  animation: none;
+  background: #eceff1;
+}
+
+@keyframes ble-popup-photo-skeleton {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (max-width: 768px) {
+  .ble-popup-photo {
+    height: 156px;
   }
 }
