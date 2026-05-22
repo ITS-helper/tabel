@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523b";
+  const BLE_MAP_BUILD = "20260523c";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -4837,14 +4837,16 @@
     const root = document.documentElement;
     const mobile = isCoarseMobile() || window.innerWidth <= 768;
     const embedded = window.self !== window.top;
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    root.classList.toggle("ble-map-ios", isIOS);
     let topPx = 8;
 
     if (mobile) {
-      if (embedded) {
-        /* В iframe safe-area и visualViewport ≈ 0; Safari (островок + адресная строка) над картой */
+      if (embedded && isIOS) {
+        /* iPhone Safari в iframe: Dynamic Island + адресная строка перекрывают верх */
         topPx = 140;
       } else {
-        /* Standalone — статус-бар уже над контентом, нужен минимальный отступ */
+        /* Android / десктоп в iframe / standalone — минимальный отступ от верха */
         const vv = window.visualViewport;
         const safeTop = parseFloat(
           getComputedStyle(root).getPropertyValue("env(safe-area-inset-top)") || "0"

@@ -2317,7 +2317,9 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     --map-float-dock-top: max(24px, calc(env(safe-area-inset-top, 0px) + 8px));
   }
 
-  html.ble-map-embedded {
+  /* В iframe большой отступ нужен только на iPhone (Dynamic Island + Safari address bar).
+     На Android в iframe адресной строки нет — оставляем минимальный. */
+  html.ble-map-embedded.ble-map-ios {
     --map-float-dock-top: 140px;
   }
 
