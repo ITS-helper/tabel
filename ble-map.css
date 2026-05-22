@@ -1587,17 +1587,17 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
 
 }
 
-/* Режим правки: одна компактная строка (прокрутка по горизонтали) */
+/* Режим правки: одна горизонтальная полоса (прокрутка по горизонтали).
+   Размеры/цвета/радиусы — из Unified Controls в конце файла. */
 body.ble-map--edit .map-toolbar {
-  --map-toolbar-control-h: 30px;
   display: flex !important;
   flex-direction: row !important;
   flex-wrap: nowrap !important;
   align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
+  gap: 8px;
+  padding: 8px 10px;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
@@ -1613,50 +1613,12 @@ body.ble-map--edit .map-toolbar-row--edit {
   flex: 0 0 auto;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
+  overflow: visible;
 }
 
-body.ble-map--edit .map-ww-logo-btn {
-  display: none;
-}
-
-body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar {
-  flex: 0 0 92px;
-  width: 92px;
-  min-width: 72px;
-  max-width: 120px;
-  order: unset;
-}
-
-body.ble-map--edit #mapSearchBlock.map-search-bar--toolbar input {
-  min-height: var(--map-toolbar-control-h);
-  height: var(--map-toolbar-control-h);
-  padding: 0 22px 0 8px;
-  font-size: 11px;
-}
-
-body.ble-map--edit .map-route-field--toolbar {
-  flex: 0 0 100px;
-  width: 100px;
-  min-width: 0;
-  max-width: 120px;
-  order: unset;
-}
-
-body.ble-map--edit .map-route-field--toolbar .map-route-select {
-  min-height: var(--map-toolbar-control-h);
-  height: var(--map-toolbar-control-h);
-  padding: 0 22px 0 8px;
-  font-size: 11px;
-}
-
-body.ble-map--edit .map-route-field--toolbar .map-route-field__label {
-  font-size: 9px;
-  top: -6px;
-  left: 6px;
-}
-
+body.ble-map--edit .map-ww-logo-btn,
 body.ble-map--edit .map-field-pack-btn {
   display: none !important;
 }
@@ -1666,38 +1628,16 @@ body.ble-map--edit .map-edit-tools--dock {
   flex: 0 0 auto;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
 body.ble-map--edit .map-toolbar-field--layer,
 body.ble-map--edit .map-toolbar-field--tools {
-  flex: 0 0 96px;
-  width: 96px;
-  max-width: 108px;
-}
-
-body.ble-map--edit .map-toolbar-field--layer select,
-body.ble-map--edit .map-toolbar-field--tools select {
-  min-height: var(--map-toolbar-control-h);
-  height: var(--map-toolbar-control-h);
-  font-size: 11px;
-  padding: 0 24px 0 8px;
-}
-
-body.ble-map--edit .map-edit-save,
-body.ble-map--edit .map-edit-cancel {
-  padding: 4px 8px;
-  font-size: 0.58em;
-  min-height: var(--map-toolbar-control-h);
-}
-
-body.ble-map--edit .map-filter-btn,
-body.ble-map--edit .map-edit-mode-btn,
-body.ble-map--edit .map-layer-mode-btn {
-  min-height: var(--map-toolbar-control-h);
-  padding: 4px 8px;
-  font-size: 0.62em;
+  flex: 0 0 132px;
+  width: 132px;
+  min-width: 0;
+  max-width: 148px;
 }
 
 body.ble-map--edit .map-toolbar-text--long,
@@ -1711,9 +1651,9 @@ body.ble-map--edit .map-filter-label--short {
 }
 
 body.ble-map--edit .map-float-dock .map-zone-edit-hint:not([hidden]) {
-  padding: 2px 8px 3px;
-  font-size: 10px;
-  line-height: 1.2;
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .map-toolbar-row--edit {
@@ -2374,7 +2314,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   :root {
-    --map-float-dock-top: max(80px, calc(env(safe-area-inset-top, 0px) + 32px));
+    --map-float-dock-top: max(24px, calc(env(safe-area-inset-top, 0px) + 8px));
   }
 
   html.ble-map-embedded {
@@ -2417,10 +2357,11 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     width: 100%;
     max-width: 100%;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: visible; /* лейблы «Маршрут»/«Карта» не должны обрезаться */
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     scroll-padding-inline: 8px;
+    padding-top: 6px; /* запас под выступающие лейблы */
   }
 
   body:not(.ble-map--edit) .map-toolbar-row--fields::-webkit-scrollbar {
@@ -3084,20 +3025,28 @@ body.ble-map--edit .map-toolbar .map-edit-mode-btn {
 }
 
 /* =========================================================
-   Edit mode — компактная одна полоса, остальное скрыто
+   Edit mode — одна полоса, тот же дизайн что у обычного режима
    ========================================================= */
 body.ble-map--edit .map-toolbar {
-  padding: 6px 8px;
-  gap: 6px;
-  border-radius: 12px;
+  padding: 10px 12px;
+  gap: 8px;
+  border-radius: 16px;
 }
 
 body.ble-map--edit .map-toolbar .map-route-field--toolbar,
 body.ble-map--edit .map-toolbar .map-toolbar-field--layer,
 body.ble-map--edit .map-toolbar .map-toolbar-field--tools {
-  width: 132px;
-  max-width: 148px;
+  flex: 0 0 auto;
+  width: 138px;
+  max-width: 160px;
   min-width: 0;
+}
+
+body.ble-map--edit .map-toolbar #mapSearchBlock.map-search-bar--toolbar {
+  flex: 0 0 auto;
+  width: 124px;
+  min-width: 108px;
+  max-width: 148px;
 }
 
 body.ble-map--edit .map-toolbar .map-route-field--toolbar .map-route-select,
@@ -3107,26 +3056,103 @@ body.ble-map--edit .map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
 body.ble-map--edit .map-toolbar .map-edit-save,
 body.ble-map--edit .map-toolbar .map-edit-cancel,
 body.ble-map--edit .map-toolbar .map-filter-btn,
-body.ble-map--edit .map-toolbar .map-edit-mode-btn {
-  height: 34px;
-  min-height: 34px;
-  font-size: 12px;
-  padding: 0 14px;
-  border-radius: 999px;
+body.ble-map--edit .map-toolbar .map-edit-mode-btn,
+body.ble-map--edit .map-toolbar .map-zone-draw-btn,
+body.ble-map--edit .map-toolbar .map-retry-btn {
+  height: var(--ctl-h);
+  min-height: var(--ctl-h);
+  font-size: var(--ctl-font);
+  font-family: Oswald, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+body.ble-map--edit .map-toolbar .map-filter-btn,
+body.ble-map--edit .map-toolbar .map-edit-mode-btn,
+body.ble-map--edit .map-toolbar .map-zone-draw-btn,
+body.ble-map--edit .map-toolbar .map-retry-btn,
+body.ble-map--edit .map-toolbar .map-edit-save,
+body.ble-map--edit .map-toolbar .map-edit-cancel {
+  padding: 0 var(--ctl-pad-x-pill);
+  border-radius: var(--ctl-pill);
+  border: 1px solid var(--ctl-border);
+  background: var(--ctl-bg);
+  color: var(--ctl-text);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: var(--ctl-shadow);
+  touch-action: manipulation;
+  transition: background 0.18s ease, color 0.18s ease,
+              border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 body.ble-map--edit .map-toolbar .map-route-field--toolbar .map-route-select,
 body.ble-map--edit .map-toolbar .map-toolbar-field--layer select,
 body.ble-map--edit .map-toolbar .map-toolbar-field--tools select {
-  border-radius: 10px;
-  padding: 0 26px 0 10px;
+  width: 100%;
+  border-radius: var(--ctl-radius);
+  padding: 0 32px 0 var(--ctl-pad-x);
+  border: 1px solid var(--ctl-border);
+  background: var(--ctl-bg);
+  color: var(--ctl-text);
+  font-family: "Source Sans 3", system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: var(--ctl-shadow);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378909c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
 }
 
+body.ble-map--edit .map-toolbar #mapSearchBlock.map-search-bar--toolbar input {
+  width: 100%;
+  border-radius: var(--ctl-radius);
+  padding: 0 36px 0 var(--ctl-pad-x);
+  border: 1px solid var(--ctl-border);
+  background: var(--ctl-bg);
+  font-family: "Source Sans 3", system-ui, sans-serif;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.ble-map--edit .map-toolbar .map-route-field--toolbar .map-route-field__label {
+  position: absolute;
+  top: -6px;
+  left: 10px;
+  padding: 0 6px;
+  font-family: Oswald, sans-serif;
+  font-size: var(--ctl-font-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: #fff;
+  border-radius: 4px;
+  z-index: 1;
+}
+
+/* «Сохранить» — зелёная пилюля */
 body.ble-map--edit .map-toolbar .map-edit-save {
   background: var(--ctl-grad-success);
   color: #fff;
   border-color: transparent;
-  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.32);
+  box-shadow: 0 3px 12px rgba(46, 125, 50, 0.28);
+}
+
+body.ble-map--edit .map-toolbar .map-edit-save:hover {
+  background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
 }
 
 body.ble-map--edit .map-toolbar .map-edit-save:disabled {
@@ -3135,10 +3161,45 @@ body.ble-map--edit .map-toolbar .map-edit-save:disabled {
   box-shadow: none;
 }
 
+/* «Отмена» — нейтральная пилюля */
 body.ble-map--edit .map-toolbar .map-edit-cancel {
   background: #fff;
   color: var(--ctl-text-muted);
   border-color: var(--ctl-border);
+}
+
+body.ble-map--edit .map-toolbar .map-edit-cancel:hover {
+  background: #fff5f5;
+  color: var(--danger);
+  border-color: rgba(239, 83, 80, 0.5);
+}
+
+/* «Правка» в активном режиме — синий градиент */
+body.ble-map--edit .map-toolbar .map-edit-mode-btn {
+  background: var(--ctl-grad-primary);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--ctl-shadow-strong);
+}
+
+/* Кнопки чертежа («Готово», «Очистить», «В зону») — единый стиль */
+body.ble-map--edit .map-toolbar .map-zone-draw-btn--mini {
+  font-size: var(--ctl-font);
+  padding: 0 16px;
+}
+
+body.ble-map--edit .map-toolbar .map-zone-draw-btn--ghost {
+  background: #f5f7fa;
+  color: var(--ctl-text-muted);
+}
+
+/* Дополнительный блок «Сохранить/Отмена» — обрамление и отступ */
+body.ble-map--edit .map-toolbar .map-edit-tools__save {
+  display: flex;
+  gap: 6px;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(21, 101, 192, 0.16);
 }
 
 /* =========================================================

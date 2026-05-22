@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523a";
+  const BLE_MAP_BUILD = "20260523b";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -4844,12 +4844,13 @@
         /* В iframe safe-area и visualViewport ≈ 0; Safari (островок + адресная строка) над картой */
         topPx = 140;
       } else {
+        /* Standalone — статус-бар уже над контентом, нужен минимальный отступ */
         const vv = window.visualViewport;
         const safeTop = parseFloat(
           getComputedStyle(root).getPropertyValue("env(safe-area-inset-top)") || "0"
         );
-        topPx = Math.max(28, safeTop + 20);
-        if (vv) topPx = Math.max(topPx, Math.round(vv.offsetTop) + 16);
+        topPx = Math.max(16, safeTop + 8);
+        if (vv) topPx = Math.max(topPx, Math.round(vv.offsetTop) + 8);
       }
     }
 
