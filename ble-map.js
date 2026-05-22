@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260520l";
+  const BLE_MAP_BUILD = "20260520m";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -4095,7 +4095,7 @@
   }
 
   function populateRouteSelect() {
-    document.querySelectorAll("select.map-route-select").forEach((sel) => {
+    document.querySelectorAll("select[data-ble-route-select]").forEach((sel) => {
       const cur = sel.value;
       sel.innerHTML = '<option value="">Все маршруты</option>';
       bleRoutes.forEach((r) => {
@@ -4136,7 +4136,7 @@
     if (next === bleMapRouteFilter) return;
     bleMapRouteFilter = next;
     bleRouteFilterApplying = true;
-    document.querySelectorAll("select.map-route-select").forEach((sel) => {
+    document.querySelectorAll("select[data-ble-route-select]").forEach((sel) => {
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
     });
     bleRouteFilterApplying = false;
@@ -4689,7 +4689,7 @@
 
     document.addEventListener("change", (e) => {
       if (bleRouteFilterApplying) return;
-      const sel = e.target.closest?.("select.map-route-select");
+      const sel = e.target.closest?.("select[data-ble-route-select]");
       if (!sel) return;
       setBleMapRouteFilter(sel.value);
     });

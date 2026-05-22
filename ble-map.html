@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260520l" />
+  <link rel="stylesheet" href="ble-map.css?v=20260520m" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -65,7 +65,7 @@
             </div>
             <label class="map-route-field map-route-field--toolbar" id="mapRouteFieldDock" hidden>
               <span class="map-route-field__label">Маршрут</span>
-              <select class="map-route-select" id="mapRouteSelectDock" aria-label="Маршрут">
+              <select class="map-route-select" id="mapRouteSelectDock" data-ble-route-select aria-label="Маршрут">
                 <option value="">Все</option>
               </select>
             </label>
@@ -87,7 +87,7 @@
             </button>
             <label class="map-route-field map-route-field--toolbar map-toolbar-field--layer-actions" id="mapLayerFieldActions">
               <span class="map-route-field__label">Карта</span>
-              <select id="mapBaseLayerSelectActions" class="map-route-select" aria-label="Подложка карты">
+              <select id="mapBaseLayerSelectActions" aria-label="Подложка карты">
                 <option value="street">Схема</option>
                 <option value="satellite">Спутник</option>
                 <option value="hybrid">Гибрид</option>
@@ -115,7 +115,7 @@
               <div id="mapEditTools" class="map-edit-tools map-edit-tools--dock">
                 <label class="map-route-field map-route-field--toolbar map-toolbar-field--layer" id="mapLayerFieldDock">
                   <span class="map-route-field__label">Карта</span>
-                  <select id="mapBaseLayerSelect" class="map-route-select" aria-label="Подложка карты">
+                  <select id="mapBaseLayerSelect" aria-label="Подложка карты">
                     <option value="street">Схема</option>
                     <option value="satellite">Спутник</option>
                     <option value="hybrid">Гибрид</option>
@@ -124,7 +124,7 @@
                 </label>
                 <label class="map-route-field map-route-field--toolbar map-toolbar-field--tools" id="mapToolsFieldDock">
                   <span class="map-route-field__label">Инструменты</span>
-                  <select id="mapEditToolsSelect" class="map-route-select" aria-label="Инструменты">
+                  <select id="mapEditToolsSelect" aria-label="Инструменты">
                     <option value="">—</option>
                     <option value="ruler">Линейка</option>
                     <option value="line">Линия</option>
@@ -214,7 +214,7 @@
     <div class="map-fullscreen-layer">
       <label class="map-route-field map-route-field--compact map-toolbar-field--layer">
         <span class="map-route-field__label">Карта</span>
-        <select id="mapFsBaseLayerSelect" class="map-route-select" aria-label="Подложка карты">
+        <select id="mapFsBaseLayerSelect" aria-label="Подложка карты">
           <option value="street">Схема</option>
           <option value="satellite">Спутник</option>
           <option value="hybrid">Гибрид</option>
@@ -229,7 +229,7 @@
     <div class="map-fs-chrome" id="mapFsChrome">
       <label class="map-route-field map-route-field--fs" id="mapRouteFieldFs" hidden>
         <span class="map-route-field__label">Маршрут</span>
-        <select class="map-route-select" id="mapRouteSelectFs" aria-label="Маршрут">
+        <select class="map-route-select" id="mapRouteSelectFs" data-ble-route-select aria-label="Маршрут">
           <option value="">Все маршруты</option>
         </select>
       </label>
@@ -245,8 +245,8 @@
   <script src="https://unpkg.com/leaflet-imageoverlay-rotated@0.2.0/ImageOverlay.Rotated.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-genplan-mask.js?v=20260520l"></script>
-  <script src="ble-map.js?v=20260520l"></script>
+  <script src="ble-genplan-mask.js?v=20260520m"></script>
+  <script src="ble-map.js?v=20260520m"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

@@ -307,7 +307,7 @@
             <div class="fs-route" id="mapRouteFieldCompact" hidden>
         <label class="map-route-field map-route-field--compact">
           <span class="map-route-field__label">Маршрут</span>
-          <select class="map-route-select" id="mapRouteSelectCompact" aria-label="Маршрут">
+          <select class="map-route-select" id="mapRouteSelectCompact" data-ble-route-select aria-label="Маршрут">
             <option value="">Все</option>
           </select>
         </label>

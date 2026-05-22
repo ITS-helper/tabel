@@ -1117,9 +1117,9 @@ body:not(.ble-map--edit) .map-toolbar-field--tools {
   display: none;
 }
 
-.map-toolbar-field--layer .map-route-select,
-.map-toolbar-field--tools .map-route-select,
-.map-toolbar-field--layer-actions .map-route-select {
+.map-toolbar-field--layer select,
+.map-toolbar-field--tools select,
+.map-toolbar-field--layer-actions select {
   width: 100%;
   box-sizing: border-box;
   min-height: var(--map-toolbar-control-h, 30px);
@@ -1649,8 +1649,8 @@ body.ble-map--edit .map-toolbar-field--tools {
   max-width: 108px;
 }
 
-body.ble-map--edit .map-toolbar-field--layer .map-route-select,
-body.ble-map--edit .map-toolbar-field--tools .map-route-select {
+body.ble-map--edit .map-toolbar-field--layer select,
+body.ble-map--edit .map-toolbar-field--tools select {
   min-height: var(--map-toolbar-control-h);
   height: var(--map-toolbar-control-h);
   font-size: 11px;
