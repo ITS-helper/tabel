@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260520k";
+  const BLE_MAP_BUILD = "20260520l";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -2444,8 +2444,12 @@
   }
 
   function updateNativeToolbarForEdit() {
-    const toolsSel = document.getElementById("mapEditToolsSelect");
-    if (toolsSel) toolsSel.hidden = !bleEditMode;
+    const layerActions = document.getElementById("mapLayerFieldActions");
+    const layerDock = document.getElementById("mapLayerFieldDock");
+    const toolsField = document.getElementById("mapToolsFieldDock");
+    if (layerActions) layerActions.hidden = bleEditMode;
+    if (layerDock) layerDock.hidden = !bleEditMode;
+    if (toolsField) toolsField.hidden = !bleEditMode;
     syncGenplanCalibMenuVisibility();
   }
 
@@ -2526,12 +2530,20 @@
   function syncGenplanLayerMenuVisibility() {
     const show = isGenplanLayerAvailable();
     document
-      .querySelectorAll("#mapBaseLayerGenplanOpt, #mapFsBaseLayerGenplanOpt")
+      .querySelectorAll(
+        "#mapBaseLayerGenplanOpt, #mapBaseLayerGenplanOptActions, #mapFsBaseLayerGenplanOpt"
+      )
       .forEach((opt) => {
         opt.hidden = !show;
       });
     syncGenplanCalibMenuVisibility();
   }
+
+  const MAP_LAYER_SELECT_IDS = [
+    "mapBaseLayerSelect",
+    "mapBaseLayerSelectActions",
+    "mapFsBaseLayerSelect",
+  ];
 
   function readStoredBaseLayer() {
     try {
@@ -2673,12 +2685,16 @@
   }
 
   function wireNativeToolbarControls() {
-    document.querySelectorAll(".map-toolbar-select--layer").forEach((sel) => {
-      if (sel.dataset.nativeWired === "1") return;
+    MAP_LAYER_SELECT_IDS.forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel || sel.dataset.nativeWired === "1") return;
       sel.dataset.nativeWired = "1";
       sel.addEventListener("change", () => {
         const layerId = normalizeBaseLayerId(sel.value);
-        if (BLE_BASE_LAYERS.includes(layerId)) setBleBaseLayer(layerId);
+        if (BLE_BASE_LAYERS.includes(layerId)) {
+          setBleBaseLayer(layerId);
+          syncBaseLayerPickers(layerId);
+        }
       });
     });
 
@@ -2733,7 +2749,9 @@
 
   function syncBaseLayerPickers(layerId) {
     layerId = normalizeBaseLayerId(layerId);
-    document.querySelectorAll(".map-toolbar-select--layer").forEach((sel) => {
+    MAP_LAYER_SELECT_IDS.forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
       const opt = sel.querySelector(`option[value="${layerId}"]`);
       if (opt && !opt.hidden) sel.value = layerId;
     });
