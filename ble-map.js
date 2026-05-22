@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260522a";
+  const BLE_MAP_BUILD = "20260522b";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -439,16 +439,68 @@
     }
   }
 
-  function rawPointRouteId(p) {
-    const r = p?.bleRoute;
-    if (r?.id == null) return null;
-    return String(r.id);
+  function normalizeRouteTitle(s) {
+    return String(s || "")
+      .replace(/\s*\d+\/\d+\s*$/i, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
   }
 
-  function filterRawByRoute(raw, routeId) {
-    if (!routeId || !Array.isArray(raw)) return raw || [];
-    const rid = String(routeId);
-    return raw.filter((p) => rawPointRouteId(p) === rid);
+  function rawPointRouteId(p) {
+    if (!p) return null;
+    const r = p.bleRoute ?? p.ble_route;
+    if (r != null && typeof r === "object" && r.id != null) return String(r.id);
+    if (p.ble_route_id != null) return String(p.ble_route_id);
+    if (typeof r === "number" || typeof r === "string") return String(r);
+    return null;
+  }
+
+  function rawPointRouteTitle(p) {
+    const r = p?.bleRoute ?? p?.ble_route;
+    if (r && typeof r === "object" && r.title) return String(r.title);
+    if (typeof p?.route_title === "string") return p.route_title;
+    return "";
+  }
+
+  function filterRawByRoute(raw, routeRef) {
+    if (!Array.isArray(raw)) return [];
+    const routeId =
+      routeRef != null && typeof routeRef === "object"
+        ? routeRef.routeId ?? routeRef.id
+        : routeRef;
+    const routeTitle =
+      routeRef != null && typeof routeRef === "object" ? routeRef.routeTitle || routeRef.title || "" : "";
+    if (!routeId && !routeTitle) return raw;
+
+    const rid = routeId != null ? String(routeId) : "";
+    let out = rid ? raw.filter((p) => rawPointRouteId(p) === rid) : [];
+    if (out.length) return out;
+
+    const titleNorm = normalizeRouteTitle(routeTitle);
+    if (titleNorm) {
+      out = raw.filter((p) => {
+        const t = normalizeRouteTitle(rawPointRouteTitle(p));
+        return t === titleNorm || t.includes(titleNorm) || titleNorm.includes(t);
+      });
+      if (out.length) return out;
+    }
+
+    const mapOnRoute = bleMapData.filter((pt) => {
+      if (rid && pt.routeId != null && String(pt.routeId) === rid) return true;
+      if (!titleNorm || !pt.routeTitle) return false;
+      const t = normalizeRouteTitle(pt.routeTitle);
+      return t === titleNorm || t.includes(titleNorm) || titleNorm.includes(t);
+    });
+    if (!mapOnRoute.length) return [];
+
+    const byId = new Set(mapOnRoute.map((pt) => Number(pt.id)).filter((id) => !Number.isNaN(id)));
+    const byBle = new Set(mapOnRoute.map((pt) => String(pt.ble || "").toLowerCase()).filter(Boolean));
+    return raw.filter((p) => {
+      if (p.id != null && byId.has(Number(p.id))) return true;
+      const bn = String(p.ble_number ?? p.bleNumber ?? "").toLowerCase();
+      return bn && byBle.has(bn);
+    });
   }
 
   function getActiveRouteForFieldSync() {
@@ -463,11 +515,18 @@
 
   function estimateMarkersOnRoute(routeId) {
     if (!routeId) return 0;
+    const route = getActiveRouteForFieldSync() || {
+      routeId: String(routeId),
+      routeTitle: "",
+    };
     const prev = bleMapRouteFilter;
     bleMapRouteFilter = String(routeId);
-    const n = bleMapData.filter((pt) => pointPassesRouteFilter(pt)).length;
+    const onMap = bleMapData.filter((pt) => pointPassesRouteFilter(pt)).length;
     bleMapRouteFilter = prev;
-    return n;
+    if (onMap > 0) return onMap;
+    const snap = bleListSnapshot?.raw;
+    if (snap?.length) return filterRawByRoute(snap, route).length;
+    return onMap;
   }
 
   async function pruneFieldPhotosNotInUrls(keepUrls) {
@@ -3373,16 +3432,20 @@
     db.close();
   }
 
-  async function resolveRawForFieldPackDownload(cid) {
+  async function resolveRawForFieldPackDownload(cid, opts = {}) {
     await yieldToMain();
-    const snap = bleListSnapshot;
-    if (snap?.raw?.length && Number(snap.companyId) === Number(cid)) {
-      const urls = collectPhotoUrlsFromRaw(snap.raw, { tagOnly: false });
-      const liveRecent = snap.live && Date.now() - snap.at < 25 * 60 * 1000;
-      if (urls.length >= 80 && (liveRecent || urls.length >= snap.raw.length * 0.15)) {
-        setFieldPackStatus(`Метки уже на карте (${snap.raw.length})…`, "busy");
-        await yieldToMain();
-        return snap.raw;
+    const forceFresh = !!opts.forceFresh;
+
+    if (!forceFresh) {
+      const snap = bleListSnapshot;
+      if (snap?.raw?.length && Number(snap.companyId) === Number(cid)) {
+        const urls = collectPhotoUrlsFromRaw(snap.raw, { tagOnly: false });
+        const liveRecent = snap.live && Date.now() - snap.at < 25 * 60 * 1000;
+        if (urls.length >= 80 && (liveRecent || urls.length >= snap.raw.length * 0.15)) {
+          setFieldPackStatus(`Метки уже на карте (${snap.raw.length})…`, "busy");
+          await yieldToMain();
+          return snap.raw;
+        }
       }
     }
 
@@ -3431,14 +3494,15 @@
 
   function collectPhotoUrlsFromRaw(raw, opts = {}) {
     const tagOnly = opts.tagOnly ?? false;
+    const allowExpired = !!opts.allowExpired;
     const urls = new Set();
     if (!Array.isArray(raw)) return [];
     for (const p of raw) {
       const tag = pickFirstUrl(p, ["ble_image_url", "bleImageUrl", "ble_image"]);
-      if (tag && !isPhotoUrlExpired(tag)) urls.add(tag);
+      if (tag && (allowExpired || !isPhotoUrlExpired(tag))) urls.add(tag);
       if (!tagOnly) {
         const place = pickFirstUrl(p, ["location_image_url", "locationImageUrl", "location_image"]);
-        if (place && !isPhotoUrlExpired(place)) urls.add(place);
+        if (place && (allowExpired || !isPhotoUrlExpired(place))) urls.add(place);
       }
     }
     return [...urls];
@@ -3675,22 +3739,24 @@
       }
       const cid = bleCompanyId || (await resolveCompanyId());
       await yieldToMain();
-      const rawAll = await resolveRawForFieldPackDownload(cid);
+      const rawAll = await resolveRawForFieldPackDownload(cid, { forceFresh: true });
       if (!rawAll?.length) {
         alert(
           "Не удалось получить список меток. Откройте карту по Wi‑Fi/VPN, дождитесь загрузки меток и повторите."
         );
         return;
       }
-      const raw = filterRawByRoute(rawAll, route.routeId);
+      const raw = filterRawByRoute(rawAll, route);
       if (!raw.length) {
         alert(
-          `В маршруте «${route.routeTitle}» нет меток.\n\nВыберите другой маршрут или обновите карту (↺).`
+          `В маршруте «${route.routeTitle}» не найдены метки в ответе API.\n\nНажмите ↺ на карте, убедитесь что выбран нужный маршрут, и повторите синхронизацию.`
         );
         return;
       }
       const slimRaw = slimBleRawForFieldPack(raw);
-      const photoUrls = markersOnly ? [] : collectPhotoUrlsFromRaw(raw, { tagOnly });
+      const photoUrls = markersOnly
+        ? []
+        : collectPhotoUrlsFromRaw(raw, { tagOnly, allowExpired: true });
 
       if (fullReset) {
         revokeFieldPhotoBlobUrls();
@@ -3739,10 +3805,10 @@
       }
 
       if (!photoUrls.length && !markersOnly) {
-        alert(
-          "В ответе API нет ссылок на фото. Координаты сохранены — фото попробуйте позже с VPN."
-        );
         await refreshFieldPackChrome();
+        alert(
+          `Маршрут «${route.routeTitle}»: ${slimRaw.length} меток сохранено, но у них нет ссылок на фото в API.\n\nНажмите ↺ при VPN — затем синхронизацию снова. В поле координаты будут, фото — только если появятся в API.`
+        );
         return;
       }
 
@@ -4040,8 +4106,8 @@
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) {
       const hint = navigator.onLine
-        ? "Фото недоступно. Нажмите ↺ на карте (нужен доступ к API меток, часто VPN) или «Скачать фото» по Wi‑Fi."
-        : "Фото не скачаны. Нажмите «Скачать фото» по Wi‑Fi или откройте метку при наличии сети.";
+        ? "Нет фото в API для этой метки. Нажмите ↺ на карте (VPN) и «Подготовка к полю» для маршрута."
+        : "Фото не скачаны. Выберите маршрут и «Подготовка к полю» по Wi‑Fi/VPN.";
       container.innerHTML = `<p class="ble-popup-loading">${hint}</p>`;
       return;
     }
