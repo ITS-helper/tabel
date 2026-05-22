@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260522b";
+  const BLE_MAP_BUILD = "20260522c";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -3176,7 +3176,70 @@
       routeId: point.bleRoute?.id ?? null,
       routeTitle: point.bleRoute?.title || "",
       zoneId: point.ble_zone_id ?? point.ble_zoneId ?? null,
+      bleImageStatus: point.ble_image_status || "",
+      locationImageStatus: point.ble_location_image_status || "",
     };
+  }
+
+  function summarizeRoutePhotoStats(raw) {
+    const stats = {
+      urlCount: 0,
+      markersWithPhotos: 0,
+      markersNoPhoto: 0,
+      noPhotoBle: [],
+    };
+    if (!Array.isArray(raw)) return stats;
+    stats.urlCount = collectPhotoUrlsFromRaw(raw, { allowExpired: true }).length;
+    for (const p of raw) {
+      const tag = pickFirstUrl(p, ["ble_image_url", "bleImageUrl", "ble_image"]);
+      const place = pickFirstUrl(p, ["location_image_url", "locationImageUrl", "location_image"]);
+      const ble = String(p.ble_number ?? p.bleNumber ?? "");
+      if (tag || place) {
+        stats.markersWithPhotos++;
+        continue;
+      }
+      const st = p.ble_image_status || p.ble_location_image_status || "";
+      if (st === "no_photo" || !tag) {
+        stats.markersNoPhoto++;
+        if (ble) stats.noPhotoBle.push(ble);
+      }
+    }
+    return stats;
+  }
+
+  function photoUnavailableHint(pt) {
+    if (pt?.photoTag || pt?.photoPlace) return null;
+    const tagSt = pt.bleImageStatus || "";
+    const placeSt = pt.locationImageStatus || "";
+    if (tagSt === "no_photo" || placeSt === "no_photo") {
+      return "На сервере VSM нет фото этой метки (статус no_photo). Обход возможен по координатам; снимок нужно загрузить в VSM с объекта.";
+    }
+    if (tagSt === "stale_photo" || placeSt === "stale_photo") {
+      return "Фото на сервере устарело. Нажмите «Обновить» в панели (VPN), затем снова «Подготовка к полю».";
+    }
+    if (navigator.onLine) {
+      return "Нет ссылки на фото в API. «Обновить» в панели (VPN) → «Подготовка к полю» для маршрута.";
+    }
+    return "Фото не в памяти телефона. По Wi‑Fi/VPN: «Подготовка к полю» для выбранного маршрута.";
+  }
+
+  function formatRouteSyncDoneMessage(route, slimRaw, raw, photosOk, photoUrls, photosFail) {
+    const st = summarizeRoutePhotoStats(raw);
+    let msg = `Готово к полю.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\n`;
+    msg += `Скачано файлов фото: ${photosOk} из ${photoUrls.length}\n`;
+    msg += `Меток с фото на сервере: ${st.markersWithPhotos}`;
+    if (st.markersNoPhoto) {
+      msg += `\nБез фото на сервере: ${st.markersNoPhoto}`;
+      if (st.noPhotoBle.length) msg += ` (№ ${st.noPhotoBle.join(", ")})`;
+    }
+    if (photosFail) msg += `\n\nНе скачалось: ${photosFail} (повторите синхронизацию).`;
+    if (st.markersNoPhoto && !st.markersWithPhotos) {
+      msg += "\n\nСинхронизация не добавит фото — их нет в VSM для этого маршрута.";
+    } else if (st.markersNoPhoto) {
+      msg += "\n\nУ части меток фото в VSM ещё нет — в поле будут только координаты.";
+    }
+    msg += "\n\nБез связи откройте карту — данные из памяти телефона.";
+    return msg;
   }
 
   function createBleIcon(point, editTouchTarget = false) {
@@ -3749,7 +3812,7 @@
       const raw = filterRawByRoute(rawAll, route);
       if (!raw.length) {
         alert(
-          `В маршруте «${route.routeTitle}» не найдены метки в ответе API.\n\nНажмите ↺ на карте, убедитесь что выбран нужный маршрут, и повторите синхронизацию.`
+          `В маршруте «${route.routeTitle}» не найдены метки в ответе API.\n\nНажмите «Обновить» в панели (VPN), выберите маршрут и повторите синхронизацию.`
         );
         return;
       }
@@ -3806,8 +3869,9 @@
 
       if (!photoUrls.length && !markersOnly) {
         await refreshFieldPackChrome();
+        const st = summarizeRoutePhotoStats(raw);
         alert(
-          `Маршрут «${route.routeTitle}»: ${slimRaw.length} меток сохранено, но у них нет ссылок на фото в API.\n\nНажмите ↺ при VPN — затем синхронизацию снова. В поле координаты будут, фото — только если появятся в API.`
+          `Маршрут «${route.routeTitle}»: ${slimRaw.length} меток сохранено.\n\nНа сервере нет фото (${st.markersNoPhoto} меток, статус no_photo).\n\n«Обновить» + «Подготовка к полю» помогут только когда фото появятся в VSM.`
         );
         return;
       }
@@ -3821,7 +3885,7 @@
         alert(
           markersOnly
             ? `Координаты сохранены: ${slimRaw.length} меток.\nМаршрут: ${route.routeTitle}\n\nФото не скачивались.`
-            : `Готово к полю.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\nФото в памяти: ${photosOk} из ${photoUrls.length}`
+            : formatRouteSyncDoneMessage(route, slimRaw, raw, photosOk, photoUrls.length, photosFail)
         );
         return;
       }
@@ -3976,11 +4040,7 @@
         return;
       }
 
-      alert(
-        `Готово к полю.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\nФото: ${photosOk} из ${photoUrls.length}` +
-          (photosFail ? ` (${photosFail} не скачались — повторите синхронизацию)` : "") +
-          `\n\nБез связи откройте карту — на карте только этот маршрут.`
-      );
+      alert(formatRouteSyncDoneMessage(route, slimRaw, raw, photosOk, photoUrls.length, photosFail));
     } catch (e) {
       const msg = String(e?.message || e || "");
       if (msg.includes("QuotaExceeded") || msg.includes("quota")) {
@@ -4105,10 +4165,8 @@
     container.innerHTML = "";
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) {
-      const hint = navigator.onLine
-        ? "Нет фото в API для этой метки. Нажмите ↺ на карте (VPN) и «Подготовка к полю» для маршрута."
-        : "Фото не скачаны. Выберите маршрут и «Подготовка к полю» по Wi‑Fi/VPN.";
-      container.innerHTML = `<p class="ble-popup-loading">${hint}</p>`;
+      const hint = photoUnavailableHint(pt) || "Фото недоступно.";
+      container.innerHTML = `<p class="ble-popup-loading">${esc(hint)}</p>`;
       return;
     }
     const wrap = document.createElement("div");
@@ -4767,13 +4825,15 @@
 
   function setRetryVisible(show) {
     const retry = document.getElementById("mapRetryBtn");
-    if (retry) retry.hidden = !show;
+    if (!retry) return;
+    retry.hidden = !show;
+    retry.disabled = !!retry.dataset.busy;
   }
 
   function revealMapControls() {
     const dock = document.getElementById("mapFloatDock");
     if (dock) dock.hidden = false;
-    setRetryVisible(false);
+    setRetryVisible(true);
   }
 
   async function resolveCompanyId() {
@@ -4834,7 +4894,7 @@
       } catch {
         /* ignore */
       }
-      setRetryVisible(false);
+      setRetryVisible(true);
       hideMapMsg();
       scheduleDefaultMapCenter({ force: true, fromLive: true });
     } catch (e) {
@@ -4997,7 +5057,7 @@
       if (dock) dock.hidden = false;
       setRetryVisible(true);
       showMapMsg(
-        "Ошибка загрузки карты: " + formatBleError(e, tried) + " Нажмите ↺ в панели.",
+        "Ошибка загрузки карты: " + formatBleError(e, tried) + " Нажмите «Обновить» в панели.",
         "error"
       );
     }
