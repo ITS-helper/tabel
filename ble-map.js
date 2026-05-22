@@ -75,9 +75,40 @@
   let fieldPackDownloadActive = false;
   let fieldPackMetaCache = null;
   let fieldPackAbort = null;
+  let fieldSyncIdbChain = Promise.resolve();
+  let fieldSyncPhotosSinceAuth = 0;
 
   function fieldPackConcurrency() {
-    return isCoarseMobile() ? 1 : 4;
+    return isCoarseMobile() ? 1 : 3;
+  }
+
+  function fieldSyncPhotoBatchSize() {
+    return isCoarseMobile() ? 1 : BLE_FIELD_PHOTO_BATCH;
+  }
+
+  function resetFieldSyncIdbChain() {
+    fieldSyncIdbChain = Promise.resolve();
+  }
+
+  function enqueueFieldSyncIdbWrite(fn) {
+    const run = fieldSyncIdbChain.then(() => fn());
+    fieldSyncIdbChain = run.catch((e) => {
+      console.warn("[ble-map] field sync idb", e?.message || e);
+    });
+    return run;
+  }
+
+  function commitFieldPackMetaQueued(meta) {
+    return enqueueFieldSyncIdbWrite(() => commitFieldPackMeta(meta));
+  }
+
+  function appendFieldPackPhotosBatchQueued(entries) {
+    if (!entries?.length) return Promise.resolve();
+    return enqueueFieldSyncIdbWrite(() => appendFieldPackPhotosBatch(entries));
+  }
+
+  function commitFieldPackMarkersQueued(slimRaw) {
+    return enqueueFieldSyncIdbWrite(() => commitFieldPackMarkers(slimRaw));
   }
 
   function yieldToMain() {
@@ -3488,9 +3519,11 @@
           ? { Authorization: `Bearer ${token}` }
           : {};
     const ctrl = new AbortController();
-    const timeoutMs = isCoarseMobile() ? 45000 : 70000;
+    const timeoutMs = isCoarseMobile() ? 90000 : 70000;
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    if (fieldPackAbort?.signal) {
+    if (fieldPackAbort?.signal?.aborted) {
+      ctrl.abort();
+    } else if (fieldPackAbort?.signal) {
       fieldPackAbort.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
     }
     try {
@@ -3500,6 +3533,35 @@
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function fetchPhotoBlobForFieldWithRetry(url) {
+    const maxAttempts = isCoarseMobile() ? 4 : 3;
+    let lastErr = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (fieldPackAbort?.signal.aborted) throw new Error("aborted");
+      if (fieldSyncPhotosSinceAuth >= 12) {
+        await ensureBleTokenForField();
+        fieldSyncPhotosSinceAuth = 0;
+      }
+      try {
+        const blob = await fetchPhotoBlobForField(url);
+        fieldSyncPhotosSinceAuth++;
+        return blob;
+      } catch (e) {
+        lastErr = e;
+        const msg = String(e?.message || e || "");
+        if (msg === "aborted") throw e;
+        if (/photo_http_401|photo_http_403|auth/i.test(msg)) {
+          await ensureBleTokenForField();
+          fieldSyncPhotosSinceAuth = 0;
+        }
+        if (attempt < maxAttempts - 1) {
+          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+        }
+      }
+    }
+    throw lastErr || new Error("photo_fetch_failed");
   }
 
   function setFieldPackStatus(text, kind = "") {
@@ -3597,10 +3659,16 @@
     }
     fieldPackDownloadActive = true;
     fieldPackAbort = new AbortController();
+    fieldSyncPhotosSinceAuth = 0;
+    resetFieldSyncIdbChain();
     if (btn) btn.disabled = true;
     setFieldPackCancelVisible(true);
     setFieldPackStatus("Подготовка…", "busy");
     try {
+      if (!(await ensureBleTokenForField())) {
+        alert("Нет доступа к API. Проверьте VPN и обновите страницу.");
+        return;
+      }
       if (!navigator.onLine) {
         alert("Нужен интернет для синхронизации. Подключитесь к Wi‑Fi или VPN и повторите.");
         return;
@@ -3659,8 +3727,8 @@
       };
       setFieldPackStatus(`Метки: ${slimRaw.length} (${route.routeTitle})…`, "busy");
       await yieldToMain();
-      await commitFieldPackMarkers(slimRaw);
-      await commitFieldPackMeta(partialMeta);
+      await commitFieldPackMarkersQueued(slimRaw);
+      await commitFieldPackMetaQueued(partialMeta);
       if (!bleMap) initBleMap([53.038, 39.011], 15);
       bleCompanyId = cid;
       await applyBleListToMap(slimRaw, "");
@@ -3681,7 +3749,7 @@
       if (markersOnly || !toFetch.length) {
         partialMeta.photosOk = photosOk;
         partialMeta.photosFail = photosFail;
-        await commitFieldPackMeta(partialMeta);
+        await commitFieldPackMetaQueued(partialMeta);
         clearFieldSyncState();
         await refreshFieldPackChrome();
         alert(
@@ -3704,14 +3772,8 @@
 
       let done = 0;
       const total = toFetch.length;
-      const pendingBatch = [];
-      let flushChain = Promise.resolve();
-      const flushPendingBatch = () => {
-        if (!pendingBatch.length) return flushChain;
-        const chunk = pendingBatch.splice(0, pendingBatch.length);
-        flushChain = flushChain.then(() => appendFieldPackPhotosBatch(chunk));
-        return flushChain;
-      };
+      const batchSize = fieldSyncPhotoBatchSize();
+      let lastStatusAt = 0;
 
       setFieldPackStatus(
         `Фото: 0 / ${total} (всего ${photosOk}/${photoUrls.length}) · 0 МБ`,
@@ -3720,52 +3782,89 @@
       await yieldToMain();
 
       const queue = [...toFetch];
-      const workers = Array.from({ length: fieldPackConcurrency() }, async () => {
+      const updateSyncProgress = async (force) => {
+        const now = Date.now();
+        if (!force && now - lastStatusAt < 500 && done < total) return;
+        lastStatusAt = now;
+        setFieldPackStatus(
+          `Фото: ${done} / ${total} (всего ${photosOk}/${photoUrls.length}) · ${formatFieldPackMb(bytesTotal)}`,
+          "busy"
+        );
+        partialMeta.photosOk = photosOk;
+        partialMeta.photosFail = photosFail;
+        partialMeta.bytesTotal = bytesTotal;
+        try {
+          await commitFieldPackMetaQueued(partialMeta);
+        } catch (e) {
+          console.warn("[ble-map] field sync meta", e?.message || e);
+        }
+        await yieldToMain();
+      };
+
+      const runPhotoWorker = async () => {
+        const pendingBatch = [];
+        const flushBatch = async () => {
+          if (!pendingBatch.length) return;
+          const chunk = pendingBatch.splice(0, pendingBatch.length);
+          await appendFieldPackPhotosBatchQueued(chunk);
+        };
+
         while (queue.length) {
-          if (fieldPackAbort?.signal.aborted) break;
+          if (fieldPackAbort?.signal.aborted) return;
           const url = queue.shift();
-          if (!url) break;
+          if (!url) continue;
           try {
-            let blob = await fetchPhotoBlobForField(url);
-            if (fieldPackAbort?.signal.aborted) break;
+            let blob = await fetchPhotoBlobForFieldWithRetry(url);
+            if (fieldPackAbort?.signal.aborted) return;
             if (blob.size > BLE_FIELD_PHOTO_MAX_BYTES) {
               photosFail++;
-              done++;
-              continue;
+            } else {
+              blob = await compressPhotoBlobForField(blob);
+              pendingBatch.push([url, blob]);
+              if (pendingBatch.length >= batchSize) {
+                await flushBatch();
+              }
+              photosOk++;
+              bytesTotal += blob.size || 0;
             }
-            blob = await compressPhotoBlobForField(blob);
-            if (fieldPackAbort?.signal.aborted) break;
-            pendingBatch.push([url, blob]);
-            if (pendingBatch.length >= BLE_FIELD_PHOTO_BATCH) {
-              await flushPendingBatch();
-            }
-            photosOk++;
-            bytesTotal += blob.size || 0;
           } catch (e) {
-            photosFail++;
-            console.warn("[ble-map] field sync photo", url.slice(0, 60), e?.message || e);
+            const msg = String(e?.message || e || "");
+            if (msg !== "aborted") {
+              photosFail++;
+              console.warn("[ble-map] field sync photo", url.slice(0, 60), msg);
+            }
           }
           done++;
-          if (done % BLE_FIELD_YIELD_EVERY === 0 || done === total) {
-            setFieldPackStatus(
-              `Фото: ${done} / ${total} (всего ${photosOk}/${photoUrls.length}) · ${formatFieldPackMb(bytesTotal)}`,
-              "busy"
-            );
-            partialMeta.photosOk = photosOk;
-            partialMeta.photosFail = photosFail;
-            partialMeta.bytesTotal = bytesTotal;
-            await commitFieldPackMeta(partialMeta);
-            await yieldToMain();
+          await updateSyncProgress(done === total);
+          if (isCoarseMobile()) {
+            await new Promise((r) => setTimeout(r, 180));
           }
         }
-      });
-      await Promise.all(workers);
+        try {
+          await flushBatch();
+        } catch (e) {
+          console.warn("[ble-map] field sync flush", e?.message || e);
+        }
+      };
+
+      try {
+        await Promise.all(
+          Array.from({ length: fieldPackConcurrency() }, () => runPhotoWorker())
+        );
+      } catch (e) {
+        console.warn("[ble-map] field sync workers", e?.message || e);
+      }
+      try {
+        await fieldSyncIdbChain;
+      } catch {
+        /* ignore */
+      }
 
       if (fieldPackAbort?.signal.aborted) {
         partialMeta.photosOk = photosOk;
         partialMeta.photosFail = photosFail;
         partialMeta.bytesTotal = bytesTotal;
-        await commitFieldPackMeta(partialMeta);
+        await commitFieldPackMetaQueued(partialMeta);
         saveFieldSyncState({
           ...loadFieldSyncState(),
           pausedAt: new Date().toISOString(),
@@ -3783,9 +3882,6 @@
         return;
       }
 
-      await flushPendingBatch();
-      await flushChain();
-
       const meta = {
         version: BLE_FIELD_PACK_VERSION,
         companyId: cid,
@@ -3797,8 +3893,10 @@
         bytesTotal,
         tagOnly,
         packSource: "sync",
+        routeId: route.routeId,
+        routeTitle: route.routeTitle,
       };
-      await commitFieldPackMeta(meta);
+      await commitFieldPackMetaQueued(meta);
       clearFieldSyncState();
       setBleMapData(mergeBleMapDataFromRaw(raw));
       updateMapStats();
@@ -3830,6 +3928,7 @@
     } finally {
       fieldPackDownloadActive = false;
       fieldPackAbort = null;
+      resetFieldSyncIdbChain();
       setFieldPackCancelVisible(false);
       if (btn) btn.disabled = false;
     }
