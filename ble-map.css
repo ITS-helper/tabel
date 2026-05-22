@@ -715,12 +715,12 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
 
 .map-retry-btn {
   font-family: Oswald, sans-serif;
-  font-size: 0.85em;
+  font-size: 0.72em;
   font-weight: 700;
   letter-spacing: 0.04em;
   min-width: 34px;
   min-height: 34px;
-  padding: 5px 9px;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--accent);
   background: #e3f2fd;

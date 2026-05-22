@@ -5340,7 +5340,7 @@
     });
     window.addEventListener("online", () => {
       hideMapMsg();
-      setRetryVisible(false);
+      setRetryVisible(true);
       updateOfflineEditChrome();
       void (async () => {
         if (!countOfflinePendingEdits()) return;
