@@ -2318,13 +2318,14 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   :root {
-    --map-float-dock-top: max(24px, calc(env(safe-area-inset-top, 0px) + 8px));
+    /* Standalone (прямой URL, не iframe): браузер уже обрабатывает env() сам.
+       +16px — комфортный отступ под Dynamic Island; адресная строка снизу — норма. */
+    --map-float-dock-top: max(24px, calc(env(safe-area-inset-top, 0px) + 16px));
   }
 
-  /* iPhone в iframe: viewport-fit=cover — iframe начинается под Dynamic Island.
-     env(safe-area-inset-top) ≈ 59px (Dynamic Island) + адресная строка ≈ 44px + 8px gap = 111px.
-     Плавающие лейблы выезжают на 8px выше toolbar → минимум ~119px, берём 120.
-     Старый iPhone без острова (env ≈ 20px): max(112, 88) = 112px. */
+  /* iPhone в iframe: viewport-fit=cover на внешней странице — iframe начинается
+     под Dynamic Island (y=0 физический). env() + адресная строка Safari (~44px) + gap.
+     JS переопределяет это значение через root.style для корректного расчёта. */
   html.ble-map-embedded.ble-map-ios {
     --map-float-dock-top: max(112px, calc(env(safe-area-inset-top, 20px) + 68px));
   }

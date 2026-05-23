@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523h";
+  const BLE_MAP_BUILD = "20260523i";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -4846,32 +4846,38 @@
       getComputedStyle(root).getPropertyValue("--safe-area-top") || "0"
     );
 
-    let topPx = 8;
-
     if (mobile) {
       if (embedded && isIOS) {
         /* iPhone Safari в iframe: viewport-fit=cover → iframe начинается под Dynamic Island.
-           env(safe-area-inset-top) ≈ 59px (Dynamic Island) + address bar ≈ 44px + gap 8px = ~111px.
-           Используем реальное значение safe-area из CSS. Минимум 100px — для старых iPhone. */
-        topPx = Math.max(100, safeTop + 52);
-      } else if (!embedded && isIOS) {
-        /* Standalone iPhone: контент уже начинается ниже хрома, нужен минимальный отступ. */
-        topPx = Math.max(8, safeTop + 8);
+           env(safe-area-inset-top) ≈ 59px + адресная строка ≈ 44px + gap = ~111px.
+           CSS env() может не работать внутри iframe → переопределяем через JS. */
+        const topPx = Math.max(100, safeTop + 52);
+        root.style.setProperty("--map-float-dock-top", `${topPx}px`);
+      } else if (embedded && !isIOS) {
+        /* Android / десктоп в iframe: контент уже ниже хрома — минимальный отступ. */
+        const topPx = Math.max(12, safeTop + 6);
+        root.style.setProperty("--map-float-dock-top", `${topPx}px`);
       } else {
-        /* Android / десктоп / не-iOS: минимальный отступ. */
-        topPx = Math.max(12, safeTop + 6);
+        /* Standalone (прямой URL): CSS сам считает env(safe-area-inset-top) корректно.
+           НЕ переопределяем через JS, чтобы не затереть env() нулём. */
+        root.style.removeProperty("--map-float-dock-top");
       }
+    } else {
+      root.style.removeProperty("--map-float-dock-top");
     }
 
-    root.style.setProperty("--map-float-dock-top", `${topPx}px`);
-
+    /* scrollMargin = dock top + dock height + gap.
+       Читаем актуальное значение переменной (JS-переопределение или CSS env()). */
+    const actualTopPx = parseFloat(
+      getComputedStyle(root).getPropertyValue("--map-float-dock-top") || "24"
+    ) || 24;
     const dock = document.getElementById("mapFloatDock");
     let dockH = mobile ? 52 : 44;
     if (dock && !dock.hidden) {
       const measured = dock.offsetHeight;
       if (measured > 0) dockH = Math.min(measured, mobile && document.body.classList.contains("ble-map--edit") ? 64 : 140);
     }
-    const scrollMargin = topPx + dockH + 8;
+    const scrollMargin = actualTopPx + dockH + 8;
     root.style.setProperty("--map-float-dock-scroll-margin", `${scrollMargin}px`);
     root.style.setProperty("--map-leaflet-top-margin", `${scrollMargin}px`);
   }
