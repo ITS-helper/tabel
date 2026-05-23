@@ -7,6 +7,8 @@
   --warning: #ffa726;
   --danger: #ef5350;
   --map-float-dock-top: max(8px, env(safe-area-inset-top, 0px));
+  /* env() нельзя читать через getComputedStyle — используем CSS-переменную как мост */
+  --safe-area-top: env(safe-area-inset-top, 0px);
   --map-float-dock-scroll-margin: calc(60px + var(--map-float-dock-top));
   --map-leaflet-top-margin: calc(64px + var(--map-float-dock-top));
 }
@@ -2328,36 +2330,54 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   /* На iPhone — чуть компактнее: меньше padding и высота 40px вместо 44px */
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar {
+  /* ── Весь мобильный тулбар компактнее ── */
+  body:not(.ble-map--edit) .map-toolbar {
+    gap: 5px;
+    padding: 6px 8px 5px;
+    border-radius: 12px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--fields {
+    padding-top: 6px; /* место для плавающих лейблов */
+    gap: 5px;
+  }
+
+  body:not(.ble-map--edit) .map-toolbar-row--actions {
     gap: 6px;
-    padding: 6px 8px 4px;
+    padding: 2px 2px 2px;
   }
 
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar-row--fields {
-    padding-top: 4px;
+  /* Поля первой строки (поиск, маршрут, карта) — высота 36px */
+  body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-route-select,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-toolbar-field--layer-actions select {
+    height: 36px;
+    min-height: 36px;
+    font-size: 13px;
+    padding: 0 28px 0 12px;
   }
 
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-filter-btn,
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
-    height: 40px;
-    min-height: 40px;
-    padding: 0 15px;
-    font-size: 12px;
+  body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar input {
+    font-size: 16px; /* не зумить на iOS */
+    padding-right: 36px;
   }
 
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn {
-    min-width: 40px;
-    padding: 0 12px;
-    font-size: 17px;
+  /* Кнопки второй строки — высота 38px */
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-filter-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 14px !important;
+    font-size: 12px !important;
+    border-radius: 999px;
   }
 
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-route-select,
-  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-toolbar-field--layer-actions select {
-    height: 40px;
-    min-height: 40px;
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn {
+    min-width: 38px !important;
+    padding: 0 10px !important;
+    font-size: 16px !important;
   }
 
   .map-float-dock {
