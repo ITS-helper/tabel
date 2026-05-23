@@ -2319,11 +2319,11 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     --map-float-dock-top: max(24px, calc(env(safe-area-inset-top, 0px) + 8px));
   }
 
-  /* В iframe большой отступ нужен только на iPhone (Dynamic Island + Safari address bar).
-     На Android в iframe адресной строки нет — оставляем минимальный.
-     88px ≈ status bar (50px) + Safari UI (38px). */
+  /* iPhone в iframe: viewport-fit=cover — iframe начинается под Dynamic Island.
+     env(safe-area-inset-top) ≈ 59px (Dynamic Island) + адресная строка ≈ 44px = 103px.
+     Используем env() + запас, но не меньше 96px (для старых iPhone без острова). */
   html.ble-map-embedded.ble-map-ios {
-    --map-float-dock-top: 88px;
+    --map-float-dock-top: max(96px, calc(env(safe-area-inset-top, 20px) + 52px));
   }
 
   /* На iPhone — чуть компактнее: меньше padding и высота 40px вместо 44px */
