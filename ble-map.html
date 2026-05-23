@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260523i" />
+  <link rel="stylesheet" href="ble-map.css?v=20260523j" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -162,7 +162,19 @@
           <button type="button" class="map-field-pack-cancel" id="mapFieldPackCancel" hidden>
             Остановить синхронизацию
           </button>
-          <p id="mapZoneEditHint" class="map-zone-edit-hint" hidden></p>
+          <div id="mapZonePanel" class="map-zone-panel" hidden>
+            <div class="map-zone-panel__row">
+              <label class="map-zone-panel__name-label">
+                <span class="map-zone-panel__name-cap">Название зоны</span>
+                <input type="text" id="mapZoneNameInput" class="map-zone-panel__name-input"
+                  placeholder="Введите название" maxlength="120" autocomplete="off" />
+              </label>
+              <button type="button" id="mapZoneCloneBtn" class="map-zone-clone-btn" title="Создать копию этой зоны">
+                ⊕ Клонировать
+              </button>
+            </div>
+            <p id="mapZoneEditHint" class="map-zone-edit-hint"></p>
+          </div>
         </div>
       </div>
     </section>
@@ -259,7 +271,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
   <script src="ble-genplan-mask.js?v=20260520m"></script>
-  <script src="ble-map.js?v=20260523i"></script>
+  <script src="ble-map.js?v=20260523j"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

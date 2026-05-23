@@ -1403,7 +1403,103 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   max-width: 100%;
 }
 
-.map-float-dock .map-zone-edit-hint:not([hidden]) {
+.map-zone-panel {
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-radius: 0 0 12px 12px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(21, 101, 192, 0.1);
+  border-top: none;
+  box-shadow: 0 4px 12px rgba(21, 101, 192, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.map-zone-panel[hidden] { display: none !important; }
+
+.map-zone-panel__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.map-zone-panel__name-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.map-zone-panel__name-cap {
+  font-family: Oswald, sans-serif;
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.map-zone-panel__name-input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(33, 150, 243, 0.4);
+  background: #fff;
+  color: #37474f;
+  box-sizing: border-box;
+}
+
+.map-zone-panel__name-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.14);
+}
+
+.map-zone-clone-btn {
+  flex: 0 0 auto;
+  font-family: Oswald, sans-serif;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(33, 150, 243, 0.35);
+  background: #e3f2fd;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  touch-action: manipulation;
+}
+
+.map-zone-clone-btn:hover {
+  background: #bbdefb;
+  border-color: var(--accent);
+}
+
+.map-zone-clone-btn:active {
+  transform: translateY(1px);
+}
+
+.map-float-dock .map-zone-edit-hint {
+  margin: 0;
+  padding: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #546e7a;
+}
+
+.map-float-dock:has(.map-zone-panel:not([hidden])) .map-toolbar {
+  border-radius: 12px 12px 0 0;
+}
+
+/* Убираем старый отдельный hint (теперь он внутри panel) */
+.map-float-dock > .map-zone-edit-hint:not([hidden]) {
   margin: 0;
   padding: 4px 10px 6px;
   border-radius: 0 0 12px 12px;
@@ -1411,10 +1507,6 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   border: 1px solid rgba(21, 101, 192, 0.08);
   border-top: none;
   box-shadow: 0 4px 12px rgba(21, 101, 192, 0.1);
-}
-
-.map-float-dock:has(.map-zone-edit-hint:not([hidden])) .map-toolbar {
-  border-radius: 12px 12px 0 0;
 }
 
 .map-toolbar {

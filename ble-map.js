@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523i";
+  const BLE_MAP_BUILD = "20260523j";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -1491,12 +1491,85 @@
   function updateZoneEditHint(text) {
     const el = document.getElementById("mapZoneEditHint");
     if (!el) return;
-    if (text) {
-      el.textContent = text;
-      el.hidden = false;
-    } else {
-      el.hidden = true;
-      el.textContent = "";
+    el.textContent = text || "";
+  }
+
+  function showZonePanel(zone) {
+    const panel = document.getElementById("mapZonePanel");
+    const input = document.getElementById("mapZoneNameInput");
+    if (!panel || !input) return;
+    const dirty = bleDirtyZones.get(zone.id);
+    input.value = dirty?.name ?? zone.name ?? "";
+    panel.hidden = false;
+  }
+
+  function hideZonePanel() {
+    const panel = document.getElementById("mapZonePanel");
+    if (panel) panel.hidden = true;
+  }
+
+  function cloneSelectedZone() {
+    const id = bleSelectedZoneId;
+    if (!id) return;
+    const zone = getZoneById(id);
+    if (!zone) return;
+    const dirty = bleDirtyZones.get(id);
+    const srcPts = (dirty?.pts || zone.pts || []).map((p) => [...p]);
+    if (srcPts.length < 3) return;
+
+    // Сдвигаем клон немного к северо-востоку, чтобы он был виден
+    const offset = 0.00025;
+    const clonedPts = srcPts.map((p) => [p[0] + offset, p[1] + offset]);
+
+    const tempId = -(Date.now() % 100000000);
+    const srcName = dirty?.name ?? zone.name ?? `Зона ${id}`;
+    const cloneName = `Копия — ${srcName}`;
+
+    const newZone = {
+      id: tempId,
+      name: cloneName,
+      description: zone.description ?? "",
+      color: zone.color ?? "#0088cc",
+      pts: clonedPts,
+    };
+    bleZoneData.push(newZone);
+    bleDirtyZones.set(tempId, {
+      name: cloneName,
+      description: newZone.description,
+      pts: clonedPts,
+      isNew: true,
+    });
+
+    if (bleMap) drawZones(bleMap);
+    if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
+    selectZoneForEdit(tempId);
+    updateEditBarState();
+  }
+
+  function wireZonePanel() {
+    const input = document.getElementById("mapZoneNameInput");
+    const cloneBtn = document.getElementById("mapZoneCloneBtn");
+
+    if (input) {
+      input.addEventListener("input", () => {
+        const id = bleSelectedZoneId;
+        if (!id) return;
+        const zone = getZoneById(id);
+        const dirty = bleDirtyZones.get(id);
+        const pts = dirty?.pts ?? zone?.pts ?? [];
+        const desc = dirty?.description ?? zone?.description ?? null;
+        bleDirtyZones.set(id, {
+          name: input.value.trim(),
+          description: desc,
+          pts: pts.map((p) => [...p]),
+          isNew: dirty?.isNew ?? false,
+        });
+        updateEditBarState();
+      });
+    }
+
+    if (cloneBtn) {
+      cloneBtn.addEventListener("click", cloneSelectedZone);
     }
   }
 
@@ -2136,6 +2209,7 @@
     disableAllZonePm();
     resetZoneStyles();
     syncZoneEditUiClasses();
+    hideZonePanel();
     updateZoneEditHint(
       bleDirtyZones.size
         ? "Вершины скрыты. Есть несохранённые зоны — «Сохранить»."
@@ -2155,6 +2229,7 @@
       disableAllZonePm();
       resetZoneStyles();
       syncZoneEditUiClasses();
+      hideZonePanel();
       updateZoneEditHint("");
       redrawMapLayers();
       updateEditBarState();
@@ -2171,6 +2246,8 @@
     if (bleMap) drawZones(bleMap);
     if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
     const entry = bleZoneLayers.get(id);
+    const zone = getZoneById(id);
+    if (zone) showZonePanel(zone);
     if (!entry) {
       updateEditBarState();
       return;
@@ -2213,6 +2290,13 @@
       removeOfflineMarkerEdit(point.id);
     });
     bleDirtyMarkers.clear();
+    /* Удаляем временные (клонированные) зоны с temp-ID перед откатом */
+    bleDirtyZones.forEach((dirty, zid) => {
+      if (dirty.isNew) {
+        bleZoneData = bleZoneData.filter((z) => z.id !== zid);
+        bleZoneLayers.delete(zid);
+      }
+    });
     [...bleDirtyZones.keys()].forEach((zid) => revertZoneGeometry(zid));
     bleDirtyZones.clear();
     stopBleDrawTools();
@@ -2267,26 +2351,54 @@
     for (const [zoneId, dirty] of bleDirtyZones) {
       const pts = dirty.pts;
       if (pts.length < 3) throw new Error(`У зоны ${zoneId} должно быть минимум 3 точки`);
-      try {
-        await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
+
+      if (dirty.isNew) {
+        /* Новая зона (клон) — пробуем POST */
+        const created = await bleApiMutate("POST", `/api/v1/ble_zone/`, {
+          companyId: bleCompanyId,
+          name: dirty.name || "Новая зона",
+          description: dirty.description ?? "",
           points: ptsToApiPoints(pts),
         });
-      } catch (e) {
-        if (String(e.message || "").includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
-          const fresh = await bleApiFetch(`/api/v1/ble_zone/${zoneId}`);
-          await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
-            name: fresh?.name || `Зона ${zoneId}`,
-            description: fresh?.description ?? null,
-            points: ptsToApiPoints(pts),
-          });
-        } else {
-          throw e;
+        const newId = created?.id;
+        const z = bleZoneData.find((x) => x.id === zoneId);
+        if (z) {
+          z.pts = pts.map((p) => [...p]);
+          if (dirty.name !== undefined) z.name = dirty.name;
+          if (newId) z.id = newId;
+          z.isNew = false;
+        }
+      } else {
+        /* Существующая зона — PUT с именем и геометрией */
+        const body = { points: ptsToApiPoints(pts) };
+        if (dirty.name !== undefined) body.name = dirty.name;
+        if (dirty.description !== undefined) body.description = dirty.description;
+        try {
+          await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, body);
+        } catch (e) {
+          if (String(e.message || "").includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
+            const fresh = await bleApiFetch(`/api/v1/ble_zone/${zoneId}`);
+            await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
+              name: fresh?.name || `Зона ${zoneId}`,
+              description: fresh?.description ?? null,
+              points: ptsToApiPoints(pts),
+            });
+          } else {
+            throw e;
+          }
+        }
+        const z = bleZoneData.find((x) => x.id === zoneId);
+        if (z) {
+          z.pts = pts.map((p) => [...p]);
+          if (dirty.name !== undefined) z.name = dirty.name;
+          if (dirty.description !== undefined) z.description = dirty.description;
+        }
+        const entry = bleZoneLayers.get(zoneId);
+        if (entry) {
+          entry.data.pts = pts.map((p) => [...p]);
+          if (dirty.name !== undefined) entry.data.name = dirty.name;
         }
       }
-      const z = bleZoneData.find((x) => x.id === zoneId);
-      if (z) z.pts = pts.map((p) => [...p]);
-      const entry = bleZoneLayers.get(zoneId);
-      if (entry) entry.data.pts = pts.map((p) => [...p]);
       saved++;
     }
     bleDirtyZones.clear();
@@ -2294,6 +2406,7 @@
     disableAllZonePm();
     resetZoneStyles();
     syncZoneEditUiClasses();
+    hideZonePanel();
     updateZoneEditHint("");
     return saved;
   }
@@ -2413,6 +2526,7 @@
       disableAllZonePm();
       bleSelectedZoneId = null;
       syncZoneEditUiClasses();
+      hideZonePanel();
       updateZoneEditHint("");
       document.body.classList.remove("ble-map--zone-edit");
       bleEditMapMsg = "";
@@ -5289,6 +5403,7 @@
     wireBaseLayerPickers();
     wireGenplanCalibUi();
     wireBleDrawUi();
+    wireZonePanel();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
