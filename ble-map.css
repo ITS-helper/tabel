@@ -1514,6 +1514,69 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   transform: translateY(1px);
 }
 
+.map-zone-align-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-zone-align-panel__count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.map-zone-align-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.map-zone-align-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.map-zone-align-field select {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(33, 150, 243, 0.35);
+  background: #fff;
+}
+
+.map-zone-align-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.map-zone-align-btn {
+  flex: 1 1 auto;
+}
+
+.map-zone-align-btn--ghost {
+  background: transparent;
+  border-color: rgba(21, 101, 192, 0.25);
+}
+
+body.ble-map--zone-align .leaflet-interactive.ble-zone-align-target {
+  stroke: #ffffff !important;
+  stroke-width: 3 !important;
+  fill-opacity: 0.28 !important;
+}
+
+@media (max-width: 768px) {
+  .map-zone-align-panel__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .map-float-dock .map-zone-edit-hint {
   margin: 0;
   padding: 2px 0 0;

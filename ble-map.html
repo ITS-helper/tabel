@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260523m" />
+  <link rel="stylesheet" href="ble-map.css?v=20260523n" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -145,6 +145,7 @@
                     <option value="ruler">Линейка</option>
                     <option value="line">Линия</option>
                     <option value="parallel">Параллельные</option>
+                    <option value="align-zones">Выровнять зоны</option>
                     <option value="genplan-calib" id="mapEditToolsGenplanOpt" hidden>Подогнать генплан</option>
                   </select>
                 </label>
@@ -177,6 +178,45 @@
               </button>
             </div>
             <p id="mapZoneEditHint" class="map-zone-edit-hint"></p>
+          </div>
+          <div id="mapZoneAlignPanel" class="map-zone-panel map-zone-align-panel" hidden>
+            <div class="map-zone-align-panel__head">
+              <span class="map-zone-panel__name-cap">Выровнять вершины</span>
+              <span id="mapZoneAlignCount" class="map-zone-align-panel__count">Выбрано: 0</span>
+            </div>
+            <div class="map-zone-align-panel__grid">
+              <label class="map-zone-align-field">
+                <span class="map-zone-panel__name-cap">Вершина</span>
+                <select id="mapZoneAlignEdge" aria-label="Какую вершину выравнивать">
+                  <option value="top">Верхняя (север)</option>
+                  <option value="bottom">Нижняя (юг)</option>
+                  <option value="left">Левая (запад)</option>
+                  <option value="right">Правая (восток)</option>
+                </select>
+              </label>
+              <label class="map-zone-align-field">
+                <span class="map-zone-panel__name-cap">Ось</span>
+                <select id="mapZoneAlignAxis" aria-label="Ось выравнивания">
+                  <option value="horizontal">Горизонталь</option>
+                  <option value="vertical">Вертикаль</option>
+                  <option value="line">По линии</option>
+                </select>
+              </label>
+              <label class="map-zone-align-field" id="mapZoneAlignRefField">
+                <span class="map-zone-panel__name-cap">Уровень</span>
+                <select id="mapZoneAlignRef" aria-label="Уровень выравнивания">
+                  <option value="max">По крайней</option>
+                  <option value="avg">По среднему</option>
+                  <option value="min">По противоположной</option>
+                </select>
+              </label>
+            </div>
+            <p id="mapZoneAlignHint" class="map-zone-edit-hint"></p>
+            <div class="map-zone-align-panel__actions">
+              <button type="button" class="map-zone-clone-btn" id="mapZoneAlignClearBtn">Очистить</button>
+              <button type="button" class="map-zone-clone-btn map-zone-align-btn" id="mapZoneAlignApplyBtn" disabled>Выровнять</button>
+              <button type="button" class="map-zone-clone-btn map-zone-align-btn map-zone-align-btn--ghost" id="mapZoneAlignCloseBtn">Закрыть</button>
+            </div>
           </div>
         </div>
       </div>
@@ -277,7 +317,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
   <script src="ble-genplan-mask.js?v=20260520m"></script>
-  <script src="ble-map.js?v=20260523m"></script>
+  <script src="ble-map.js?v=20260523n"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

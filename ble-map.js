@@ -26,7 +26,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523m";
+  const BLE_MAP_BUILD = "20260523n";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -666,6 +666,12 @@
   let bleGenplanCalibMode = false;
   let bleGenplanCalibSavedLayer = null;
   let bleDrawTool = null;
+  let bleZoneAlignMode = false;
+  let bleAlignZoneIds = new Set();
+  let bleAlignLinePts = [];
+  let bleAlignPreview = null;
+  let bleAlignMapListeners = null;
+  const bleAlignSettings = { edge: "top", axis: "horizontal", ref: "max" };
   const bleDrawGroupByMap = new WeakMap();
   const BLE_DRAW_SNAP_DEG = 15;
   const BLE_DRAW_PARALLEL_HALF_M = 200;
@@ -1682,6 +1688,275 @@
     }
   }
 
+  function getZonePtsForAlign(zoneId) {
+    const zone = getZoneById(zoneId);
+    const dirty = bleDirtyZones.get(zoneId);
+    const src = dirty?.pts ?? zone?.pts ?? [];
+    return src.map((p) => [p[0], p[1]]);
+  }
+
+  function pickZoneVertexIndex(pts, edge) {
+    if (!pts.length) return 0;
+    let idx = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const [lat, lng] = pts[i];
+      const [bestLat, bestLng] = pts[idx];
+      if (edge === "top" && lat > bestLat) idx = i;
+      else if (edge === "bottom" && lat < bestLat) idx = i;
+      else if (edge === "left" && lng < bestLng) idx = i;
+      else if (edge === "right" && lng > bestLng) idx = i;
+    }
+    return idx;
+  }
+
+  function collectZoneAlignTargets() {
+    const targets = [];
+    for (const zoneId of bleAlignZoneIds) {
+      const pts = getZonePtsForAlign(zoneId);
+      if (pts.length < 3) continue;
+      const ptIndex = pickZoneVertexIndex(pts, bleAlignSettings.edge);
+      const [lat, lng] = pts[ptIndex];
+      targets.push({ zoneId, ptIndex, lat, lng });
+    }
+    return targets;
+  }
+
+  function projectPointOntoLineDeg(point, lineA, lineB) {
+    const cosLat = Math.cos((lineA.lat * Math.PI) / 180);
+    const bx = (lineB.lng - lineA.lng) * M_PER_DEG_LAT * cosLat;
+    const by = (lineB.lat - lineA.lat) * M_PER_DEG_LAT;
+    const px = (point.lng - lineA.lng) * M_PER_DEG_LAT * cosLat;
+    const py = (point.lat - lineA.lat) * M_PER_DEG_LAT;
+    const len2 = bx * bx + by * by;
+    if (len2 < 1e-12) return L.latLng(point.lat, point.lng);
+    const t = (px * bx + py * by) / len2;
+    return L.latLng(
+      lineA.lat + (by * t) / M_PER_DEG_LAT,
+      lineA.lng + (bx * t) / (M_PER_DEG_LAT * cosLat)
+    );
+  }
+
+  function applyZoneVertexEdit(zoneId, pts) {
+    const zone = getZoneById(zoneId);
+    markZoneDirty(
+      zoneId,
+      pts,
+      bleDirtyZones.get(zoneId)?.name ?? zone?.name,
+      bleDirtyZones.get(zoneId)?.description ?? zone?.description ?? null
+    );
+    const entry = bleZoneLayers.get(zoneId);
+    if (entry?.layer) {
+      entry.layer.setLatLngs(pts.map((p) => L.latLng(p[0], p[1])));
+      entry.data.pts = pts.map((p) => [...p]);
+    }
+  }
+
+  function applyZoneAlign() {
+    const targets = collectZoneAlignTargets();
+    if (targets.length < 2) {
+      updateZoneAlignHint("Выберите минимум две зоны.");
+      return;
+    }
+    if (bleAlignSettings.axis === "line") {
+      if (bleAlignLinePts.length < 2) {
+        updateZoneAlignHint("Два клика на карте — опорная линия.");
+        return;
+      }
+      const [lineA, lineB] = bleAlignLinePts;
+      for (const t of targets) {
+        const pts = getZonePtsForAlign(t.zoneId);
+        const projected = projectPointOntoLineDeg(L.latLng(t.lat, t.lng), lineA, lineB);
+        pts[t.ptIndex][0] = projected.lat;
+        pts[t.ptIndex][1] = projected.lng;
+        applyZoneVertexEdit(t.zoneId, pts);
+      }
+    } else if (bleAlignSettings.axis === "horizontal") {
+      const lats = targets.map((t) => t.lat);
+      const level =
+        bleAlignSettings.ref === "min"
+          ? Math.min(...lats)
+          : bleAlignSettings.ref === "avg"
+            ? lats.reduce((a, b) => a + b, 0) / lats.length
+            : Math.max(...lats);
+      for (const t of targets) {
+        const pts = getZonePtsForAlign(t.zoneId);
+        pts[t.ptIndex][0] = level;
+        applyZoneVertexEdit(t.zoneId, pts);
+      }
+    } else {
+      const lngs = targets.map((t) => t.lng);
+      const level =
+        bleAlignSettings.ref === "min"
+          ? Math.min(...lngs)
+          : bleAlignSettings.ref === "avg"
+            ? lngs.reduce((a, b) => a + b, 0) / lngs.length
+            : Math.max(...lngs);
+      for (const t of targets) {
+        const pts = getZonePtsForAlign(t.zoneId);
+        pts[t.ptIndex][1] = level;
+        applyZoneVertexEdit(t.zoneId, pts);
+      }
+    }
+    redrawMapLayers();
+    updateZoneAlignUi();
+    updateEditBarState();
+    updateZoneAlignHint(`Выровнено вершин: ${targets.length}. «Сохранить» — записать на сервер.`);
+  }
+
+  function toggleAlignZone(zoneId) {
+    const id = Number(zoneId);
+    if (!id) return;
+    if (bleAlignZoneIds.has(id)) bleAlignZoneIds.delete(id);
+    else bleAlignZoneIds.add(id);
+    bleSelectedZoneId = null;
+    hideZonePanel();
+    disableAllZonePm();
+    redrawMapLayers();
+    updateZoneAlignUi();
+    updateEditBarState();
+  }
+
+  function clearAlignZoneSelection() {
+    bleAlignZoneIds.clear();
+    bleAlignLinePts = [];
+    bleAlignPreview = null;
+    redrawMapLayers();
+    updateZoneAlignUi();
+  }
+
+  function updateZoneAlignHint(text) {
+    const el = document.getElementById("mapZoneAlignHint");
+    if (el) el.textContent = text || "";
+  }
+
+  function updateZoneAlignUi() {
+    const panel = document.getElementById("mapZoneAlignPanel");
+    const countEl = document.getElementById("mapZoneAlignCount");
+    const applyBtn = document.getElementById("mapZoneAlignApplyBtn");
+    const refField = document.getElementById("mapZoneAlignRefField");
+    const edgeSel = document.getElementById("mapZoneAlignEdge");
+    const axisSel = document.getElementById("mapZoneAlignAxis");
+    const refSel = document.getElementById("mapZoneAlignRef");
+    if (panel) panel.hidden = !bleZoneAlignMode;
+    if (countEl) countEl.textContent = `Выбрано: ${bleAlignZoneIds.size}`;
+    const lineMode = bleAlignSettings.axis === "line";
+    if (refField) refField.hidden = lineMode;
+    if (edgeSel) edgeSel.value = bleAlignSettings.edge;
+    if (axisSel) axisSel.value = bleAlignSettings.axis;
+    if (refSel) refSel.value = bleAlignSettings.ref;
+    const canApply =
+      bleAlignZoneIds.size >= 2 && (!lineMode || bleAlignLinePts.length >= 2);
+    if (applyBtn) applyBtn.disabled = !canApply;
+    if (!bleZoneAlignMode) return;
+    if (lineMode) {
+      updateZoneAlignHint(
+        bleAlignLinePts.length >= 2
+          ? "Линия задана. «Выровнять» — спроецировать вершины на неё."
+          : bleAlignLinePts.length === 1
+            ? "Второй клик на карте — конец опорной линии."
+            : "Кликайте зоны для выбора. Два клика на карте — линия выравнивания."
+      );
+    } else {
+      updateZoneAlignHint(
+        "Кликайте по зонам, чтобы добавить или убрать из выбора. Затем «Выровнять»."
+      );
+    }
+  }
+
+  function detachAlignMapListeners() {
+    if (!bleAlignMapListeners) return;
+    const { map, onClick, onMove } = bleAlignMapListeners;
+    map.off("click", onClick);
+    map.off("mousemove", onMove);
+    bleAlignMapListeners = null;
+  }
+
+  function attachAlignMapListeners() {
+    detachAlignMapListeners();
+    if (!bleZoneAlignMode || bleAlignSettings.axis !== "line") return;
+    const map = getActiveMap();
+    if (!map) return;
+    const onClick = (e) => {
+      if (!bleZoneAlignMode || bleAlignSettings.axis !== "line") return;
+      if (bleAlignLinePts.length >= 2) bleAlignLinePts = [];
+      L.DomEvent.stopPropagation(e);
+      let ll = e.latlng;
+      if (bleAlignLinePts.length === 1 && e.originalEvent?.shiftKey) {
+        ll = snapDrawLatLng(bleAlignLinePts[0], ll, true);
+      }
+      bleAlignLinePts.push(ll);
+      bleAlignPreview = null;
+      updateZoneAlignUi();
+      renderBleDrawOnAllMaps();
+    };
+    const onMove = (e) => {
+      if (!bleZoneAlignMode || bleAlignSettings.axis !== "line") return;
+      if (bleAlignLinePts.length === 1) {
+        let ll = e.latlng;
+        if (e.originalEvent?.shiftKey) ll = snapDrawLatLng(bleAlignLinePts[0], ll, true);
+        bleAlignPreview = ll;
+        renderBleDrawOnAllMaps();
+      }
+    };
+    map.on("click", onClick);
+    map.on("mousemove", onMove);
+    bleAlignMapListeners = { map, onClick, onMove };
+  }
+
+  function setBleZoneAlignMode(on) {
+    bleZoneAlignMode = !!on;
+    if (bleZoneAlignMode) {
+      stopBleDrawTools();
+      bleSelectedZoneId = null;
+      hideZonePanel();
+      disableAllZonePm();
+    } else {
+      bleAlignZoneIds.clear();
+      bleAlignLinePts = [];
+      bleAlignPreview = null;
+      detachAlignMapListeners();
+    }
+    document.body.classList.toggle("ble-map--zone-align", bleZoneAlignMode);
+    updateZoneAlignUi();
+    attachAlignMapListeners();
+    redrawMapLayers();
+    renderBleDrawOnAllMaps();
+    updateEditBarState();
+  }
+
+  function wireZoneAlignPanel() {
+    if (document.body.dataset.bleZoneAlignWired === "1") return;
+    document.body.dataset.bleZoneAlignWired = "1";
+    document.getElementById("mapZoneAlignEdge")?.addEventListener("change", (e) => {
+      bleAlignSettings.edge = e.target.value || "top";
+      updateZoneAlignUi();
+    });
+    document.getElementById("mapZoneAlignAxis")?.addEventListener("change", (e) => {
+      bleAlignSettings.axis = e.target.value || "horizontal";
+      bleAlignLinePts = [];
+      bleAlignPreview = null;
+      updateZoneAlignUi();
+      attachAlignMapListeners();
+      renderBleDrawOnAllMaps();
+    });
+    document.getElementById("mapZoneAlignRef")?.addEventListener("change", (e) => {
+      bleAlignSettings.ref = e.target.value || "max";
+      updateZoneAlignUi();
+    });
+    document.getElementById("mapZoneAlignApplyBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      applyZoneAlign();
+    });
+    document.getElementById("mapZoneAlignClearBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearAlignZoneSelection();
+    });
+    document.getElementById("mapZoneAlignCloseBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      setBleZoneAlignMode(false);
+    });
+  }
+
   function latLngsToPts(latlngs) {
     return latlngs.map((ll) => [ll.lat, ll.lng]);
   }
@@ -1902,6 +2177,27 @@
         dashArray: "5 5",
       });
     }
+
+    if (bleZoneAlignMode && bleAlignLinePts.length) {
+      const pts = [...bleAlignLinePts];
+      if (pts.length === 1 && bleAlignPreview) pts.push(bleAlignPreview);
+      if (pts.length >= 2) {
+        drawSegmentWithLabel(group, pts[0], pts[1], {
+          color: "#e65100",
+          weight: 3,
+          dashArray: "8 6",
+        });
+      } else if (pts.length === 1) {
+        L.circleMarker(pts[0], {
+          radius: 5,
+          color: "#e65100",
+          fillColor: "#ff9800",
+          fillOpacity: 1,
+          weight: 2,
+          interactive: false,
+        }).addTo(group);
+      }
+    }
   }
 
   function renderBleDrawOnAllMaps() {
@@ -1936,7 +2232,7 @@
     if (!bleDrawTool) {
       if (bleEditMode && isZoneEditAllowed()) {
         updateZoneEditHint(
-          "Чертёж: линейка, линия (Shift — угол 15°), параллельные. Выберите инструмент."
+          "Чертёж: линейка, линия, параллельные. «Выровнять зоны» — выстроить вершины по линии."
         );
       }
       return;
@@ -1961,6 +2257,10 @@
       } else {
         updateZoneEditHint("Параллельные: клик — линия через точку, параллельная оси.");
       }
+      return;
+    }
+    if (bleZoneAlignMode) {
+      updateZoneAlignUi();
     }
   }
 
@@ -2043,6 +2343,7 @@
   }
 
   function setBleDrawTool(tool) {
+    if (tool) setBleZoneAlignMode(false);
     const next = bleDrawTool === tool ? null : tool;
     bleDrawTool = next;
     resetBleDrawSession();
@@ -2099,6 +2400,10 @@
       "ble-map--draw-line",
       "ble-map--draw-parallel"
     );
+  }
+
+  function stopZoneAlignTool() {
+    setBleZoneAlignMode(false);
   }
 
   function wireBleDrawUi() {
@@ -2409,6 +2714,7 @@
     [...bleDirtyZones.keys()].forEach((zid) => revertZoneGeometry(zid));
     bleDirtyZones.clear();
     stopBleDrawTools();
+    stopZoneAlignTool();
     clearBleDrawArtifacts();
     disableAllZonePm();
     bleSelectedZoneId = null;
@@ -2673,6 +2979,7 @@
     } else {
       if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
       stopBleDrawTools();
+      stopZoneAlignTool();
       closeAllToolsMenus();
       clearBleDrawArtifacts();
       disableAllZonePm();
@@ -2697,7 +3004,7 @@
     if (!targetMap) return;
     const forEdit =
       isZoneEditAllowed() && targetMap === getActiveMap() && opts.forEdit !== false;
-    const zoneFocused = forEdit && bleSelectedZoneId != null;
+    const zoneFocused = forEdit && bleSelectedZoneId != null && !bleZoneAlignMode;
     let group = bleZoneGroups.get(targetMap);
     if (!group) {
       group = L.layerGroup().addTo(targetMap);
@@ -2709,7 +3016,8 @@
     if (!bleZoneData.length) return;
     bleZoneData.forEach((z) => {
       if (!z.id || z.pts.length < 3) return;
-      const isSelected = bleSelectedZoneId === z.id;
+      const inAlignSet = bleZoneAlignMode && bleAlignZoneIds.has(z.id);
+      const isSelected = bleSelectedZoneId === z.id || inAlignSet;
       const dimmed = zoneFocused && !isSelected;
       const pts = getZoneDisplayPts(z);
       const layerMode = bleBaseLayerCurrent;
@@ -2728,6 +3036,7 @@
         weight: zoneStyle.weight,
         dashArray: isSelected ? "6 4" : null,
         interactive: forEdit,
+        className: inAlignSet ? "ble-zone-align-target" : "",
       });
       layer.zoneMeta = z;
       layer.bindTooltip(z.name || `Зона ${z.id}`, {
@@ -2739,6 +3048,10 @@
           if (!isZoneEditAllowed()) return;
           if (bleDrawTool) return;
           L.DomEvent.stopPropagation(e);
+          if (bleZoneAlignMode) {
+            toggleAlignZone(z.id);
+            return;
+          }
           selectZoneForEdit(z.id);
         });
         bleZoneLayers.set(z.id, { layer, data: z });
@@ -3234,6 +3547,11 @@
           if (!bleEditMode) return;
           if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
           else setGenplanCalibMode(true);
+          return;
+        }
+        if (action === "align-zones") {
+          if (!bleEditMode || !isZoneEditAllowed()) return;
+          setBleZoneAlignMode(!bleZoneAlignMode);
           return;
         }
         if (!bleEditMode) return;
@@ -5556,6 +5874,7 @@
     wireGenplanCalibUi();
     wireBleDrawUi();
     wireZonePanel();
+    wireZoneAlignPanel();
     wireMapMsgDismiss();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
