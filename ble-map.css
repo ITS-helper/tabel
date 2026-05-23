@@ -729,12 +729,40 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
 }
 
 .map-msg {
-  text-align: center;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
   padding: 14px;
   font-size: 13px;
   color: var(--muted);
   border: 1px dashed var(--border);
   border-radius: 8px;
+}
+
+.map-msg__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-msg__close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.map-msg__close:hover {
+  opacity: 1;
+}
+
+.map-msg__close[hidden] {
+  display: none;
 }
 
 .map-msg.error {

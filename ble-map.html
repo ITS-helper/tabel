@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260523k" />
+  <link rel="stylesheet" href="ble-map.css?v=20260523l" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -47,7 +47,10 @@
   <div class="ble-map-page-main">
     <section class="map-section open" data-map-section="ble" aria-label="Карта BLE-меток">
       <div class="map-inner">
-        <div id="mapMsg" class="map-msg" hidden></div>
+        <div id="mapMsg" class="map-msg" hidden>
+          <span class="map-msg__text"></span>
+          <button type="button" class="map-msg__close" aria-label="Закрыть">✕</button>
+        </div>
         <div id="bleMap">
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
         </div>
@@ -263,7 +266,10 @@
       </div>
     </div>
     <div id="bleMapFS"></div>
-    <div id="mapFsMsg" class="map-msg map-fs-msg" hidden aria-live="polite"></div>
+    <div id="mapFsMsg" class="map-msg map-fs-msg" hidden aria-live="polite">
+      <span class="map-msg__text"></span>
+      <button type="button" class="map-msg__close" aria-label="Закрыть">✕</button>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -271,7 +277,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
   <script src="ble-genplan-mask.js?v=20260520m"></script>
-  <script src="ble-map.js?v=20260523k"></script>
+  <script src="ble-map.js?v=20260523l"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

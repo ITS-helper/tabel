@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523k";
+  const BLE_MAP_BUILD = "20260523l";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -944,15 +944,18 @@
   }
 
   function showMapMsg(text, type = "") {
-    if (!text || type !== "error") return;
+    if (!text) return;
     const fsOpen = isMapFullscreenOpen();
     const el = fsOpen ? document.getElementById("mapFsMsg") : document.getElementById("mapMsg");
     if (!el) return;
-    el.textContent = text;
+    const textEl = el.querySelector(".map-msg__text");
+    if (textEl) textEl.textContent = text;
+    else el.textContent = text;
+    const isError = type === "error";
     el.className =
-      el.id === "mapFsMsg"
-        ? "map-msg map-fs-msg error"
-        : "map-msg error";
+      (el.id === "mapFsMsg" ? "map-msg map-fs-msg" : "map-msg") + (isError ? " error" : "");
+    const closeBtn = el.querySelector(".map-msg__close");
+    if (closeBtn) closeBtn.hidden = !isError;
     el.hidden = false;
   }
 
@@ -961,6 +964,12 @@
     const fs = document.getElementById("mapFsMsg");
     if (main) main.hidden = true;
     if (fs) fs.hidden = true;
+  }
+
+  function wireMapMsgDismiss() {
+    for (const id of ["mapMsg", "mapFsMsg"]) {
+      document.getElementById(id)?.querySelector(".map-msg__close")?.addEventListener("click", hideMapMsg);
+    }
   }
 
   function getPreferredTransportId() {
@@ -1415,6 +1424,49 @@
     return dirty ? dirty.pts : z.pts;
   }
 
+  function isNewZoneRecord(zoneId, dirty) {
+    return Boolean(dirty?.isNew) || Number(zoneId) < 0;
+  }
+
+  function applyZoneNameToLocalState(zoneId, name) {
+    const trimmed = normalizeZoneName(name);
+    const zone = getZoneById(zoneId);
+    if (zone) zone.name = trimmed;
+    const entry = bleZoneLayers.get(zoneId);
+    if (entry) entry.data.name = trimmed;
+    const layer = entry?.layer;
+    if (layer?.getTooltip()) {
+      layer.setTooltipContent(trimmed || `Зона ${zoneId}`);
+    }
+    return trimmed;
+  }
+
+  function syncActiveZonePanelToDirty() {
+    const zoneId = bleSelectedZoneId;
+    if (zoneId == null) return;
+    const input = document.getElementById("mapZoneNameInput");
+    const panel = document.getElementById("mapZonePanel");
+    if (!input || !panel || panel.hidden) return;
+    const name = normalizeZoneName(input.value);
+    if (!name) return;
+    const zone = getZoneById(zoneId);
+    const dirty = bleDirtyZones.get(zoneId);
+    if (!zone && !dirty) return;
+    const prevName = normalizeZoneName(dirty?.name ?? zone?.name ?? "");
+    if (name === prevName && dirty) return;
+    const pts = dirty?.pts ?? zone?.pts ?? [];
+    const desc = dirty?.description ?? zone?.description ?? null;
+    const isNew = isNewZoneRecord(zoneId, dirty);
+    bleDirtyZones.set(zoneId, {
+      name,
+      description: desc,
+      pts: pts.map((p) => [...p]),
+      nameChanged: isNew || name !== prevName,
+      isNew,
+    });
+    applyZoneNameToLocalState(zoneId, name);
+  }
+
   function normalizeZoneName(name) {
     return String(name ?? "").trim();
   }
@@ -1455,7 +1507,7 @@
       description: description ?? prev?.description ?? zone?.description ?? null,
       pts: pts.map((p) => [p[0], p[1]]),
       nameChanged: prev?.nameChanged ?? false,
-      isNew: prev?.isNew ?? false,
+      isNew: isNewZoneRecord(id, prev),
     });
     updateEditBarState();
   }
@@ -1552,6 +1604,17 @@
     const srcName = dirty?.name ?? zone.name ?? `Зона ${id}`;
     const cloneName = makeUniqueZoneName(`Копия — ${srcName}`, tempId);
 
+    const sourceDirty = bleDirtyZones.get(id);
+    if (sourceDirty) {
+      bleDirtyZones.set(id, {
+        name: normalizeZoneName(zone.name),
+        description: sourceDirty.description ?? zone.description ?? null,
+        pts: sourceDirty.pts.map((p) => [...p]),
+        nameChanged: false,
+        isNew: false,
+      });
+    }
+
     const newZone = {
       id: tempId,
       name: cloneName,
@@ -1577,23 +1640,30 @@
     const input = document.getElementById("mapZoneNameInput");
     const cloneBtn = document.getElementById("mapZoneCloneBtn");
 
-    if (input) {
-      input.addEventListener("input", () => {
-        const id = bleSelectedZoneId;
-        if (!id) return;
-        const zone = getZoneById(id);
-        const dirty = bleDirtyZones.get(id);
-        const pts = dirty?.pts ?? zone?.pts ?? [];
-        const desc = dirty?.description ?? zone?.description ?? null;
-        bleDirtyZones.set(id, {
-          name: input.value.trim(),
-          description: desc,
-          pts: pts.map((p) => [...p]),
-          nameChanged: true,
-          isNew: dirty?.isNew ?? false,
-        });
-        updateEditBarState();
+    const onZoneNameInput = () => {
+      const id = bleSelectedZoneId;
+      if (!id) return;
+      const zone = getZoneById(id);
+      const dirty = bleDirtyZones.get(id);
+      const pts = dirty?.pts ?? zone?.pts ?? [];
+      const desc = dirty?.description ?? zone?.description ?? null;
+      const prevName = normalizeZoneName(dirty?.name ?? zone?.name ?? "");
+      const name = normalizeZoneName(input.value);
+      const isNew = isNewZoneRecord(id, dirty);
+      bleDirtyZones.set(id, {
+        name,
+        description: desc,
+        pts: pts.map((p) => [...p]),
+        nameChanged: isNew || name !== prevName,
+        isNew,
       });
+      applyZoneNameToLocalState(id, name);
+      updateEditBarState();
+    };
+
+    if (input) {
+      input.addEventListener("input", onZoneNameInput);
+      input.addEventListener("change", onZoneNameInput);
     }
 
     if (cloneBtn) {
@@ -2377,14 +2447,22 @@
   }
 
   async function saveDirtyZones() {
+    syncActiveZonePanelToDirty();
     if (!bleDirtyZones.size) return 0;
     let saved = 0;
     for (const [zoneId, dirty] of bleDirtyZones) {
       const pts = dirty.pts;
       if (pts.length < 3) throw new Error(`У зоны ${zoneId} должно быть минимум 3 точки`);
+      const isNew = isNewZoneRecord(zoneId, dirty);
 
-      if (dirty.isNew) {
-        let zoneName = makeUniqueZoneName(dirty.name || "Новая зона", zoneId);
+      if (isNew) {
+        let zoneName = normalizeZoneName(dirty.name) || "Новая зона";
+        if (isZoneNameTaken(zoneName, zoneId)) {
+          if (dirty.nameChanged) {
+            throw new Error(`Зона «${zoneName}» уже существует. Укажите другое имя.`);
+          }
+          zoneName = makeUniqueZoneName(zoneName, zoneId);
+        }
         let created = null;
         for (let attempt = 0; attempt < 5; attempt++) {
           try {
@@ -5463,6 +5541,7 @@
     wireGenplanCalibUi();
     wireBleDrawUi();
     wireZonePanel();
+    wireMapMsgDismiss();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
