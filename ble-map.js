@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523d";
+  const BLE_MAP_BUILD = "20260523e";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -4843,8 +4843,9 @@
 
     if (mobile) {
       if (embedded && isIOS) {
-        /* iPhone Safari в iframe: Dynamic Island + адресная строка перекрывают верх */
-        topPx = 140;
+        /* iPhone Safari в iframe: Dynamic Island + адресная строка перекрывают верх.
+           ~88px = status bar (50) + Safari chrome (38). JS фолбэк — CSS должен победить. */
+        topPx = 88;
       } else {
         /* Android / десктоп в iframe / standalone — минимальный отступ от верха */
         const vv = window.visualViewport;

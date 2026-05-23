@@ -2320,9 +2320,43 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   }
 
   /* В iframe большой отступ нужен только на iPhone (Dynamic Island + Safari address bar).
-     На Android в iframe адресной строки нет — оставляем минимальный. */
+     На Android в iframe адресной строки нет — оставляем минимальный.
+     88px ≈ status bar (50px) + Safari UI (38px). */
   html.ble-map-embedded.ble-map-ios {
-    --map-float-dock-top: 140px;
+    --map-float-dock-top: 88px;
+  }
+
+  /* На iPhone — чуть компактнее: меньше padding и высота 40px вместо 44px */
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar {
+    gap: 6px;
+    padding: 6px 8px 4px;
+  }
+
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar-row--fields {
+    padding-top: 4px;
+  }
+
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-filter-btn,
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
+    height: 40px;
+    min-height: 40px;
+    padding: 0 15px;
+    font-size: 12px;
+  }
+
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn {
+    min-width: 40px;
+    padding: 0 12px;
+    font-size: 17px;
+  }
+
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar #mapSearchBlock.map-search-bar--toolbar input,
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-route-select,
+  html.ble-map-ios body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--fields .map-toolbar-field--layer-actions select {
+    height: 40px;
+    min-height: 40px;
   }
 
   .map-float-dock {
