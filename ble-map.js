@@ -24,7 +24,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523j";
+  const BLE_MAP_BUILD = "20260523k";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -1415,20 +1415,47 @@
     return dirty ? dirty.pts : z.pts;
   }
 
+  function normalizeZoneName(name) {
+    return String(name ?? "").trim();
+  }
+
+  function isZoneNameTaken(name, excludeZoneId = null) {
+    const n = normalizeZoneName(name).toLowerCase();
+    if (!n) return false;
+    return bleZoneData.some((z) => {
+      if (excludeZoneId != null && Number(z.id) === Number(excludeZoneId)) return false;
+      return normalizeZoneName(z.name).toLowerCase() === n;
+    });
+  }
+
+  function makeUniqueZoneName(baseName, excludeZoneId = null) {
+    let name = normalizeZoneName(baseName) || "Новая зона";
+    if (!isZoneNameTaken(name, excludeZoneId)) return name;
+    const stem = name.replace(/\s*\(\d+\)$/, "");
+    for (let i = 2; i < 100; i++) {
+      const candidate = `${stem} (${i})`;
+      if (!isZoneNameTaken(candidate, excludeZoneId)) return candidate;
+    }
+    return `${stem} (${Date.now() % 10000})`;
+  }
+
   function resolveZoneRecordName(zoneId, nameHint) {
-    const hint = String(nameHint ?? "").trim();
+    const hint = normalizeZoneName(nameHint);
     if (hint) return hint;
     const zone = getZoneById(zoneId);
-    return String(zone?.name ?? "").trim();
+    return normalizeZoneName(zone?.name);
   }
 
   function markZoneDirty(zoneId, pts, name, description) {
     const id = Number(zoneId);
     const zone = getZoneById(id);
+    const prev = bleDirtyZones.get(id);
     bleDirtyZones.set(id, {
-      name: resolveZoneRecordName(id, name),
-      description: description ?? zone?.description ?? null,
+      name: resolveZoneRecordName(id, name ?? prev?.name),
+      description: description ?? prev?.description ?? zone?.description ?? null,
       pts: pts.map((p) => [p[0], p[1]]),
+      nameChanged: prev?.nameChanged ?? false,
+      isNew: prev?.isNew ?? false,
     });
     updateEditBarState();
   }
@@ -1523,7 +1550,7 @@
 
     const tempId = -(Date.now() % 100000000);
     const srcName = dirty?.name ?? zone.name ?? `Зона ${id}`;
-    const cloneName = `Копия — ${srcName}`;
+    const cloneName = makeUniqueZoneName(`Копия — ${srcName}`, tempId);
 
     const newZone = {
       id: tempId,
@@ -1562,6 +1589,7 @@
           name: input.value.trim(),
           description: desc,
           pts: pts.map((p) => [...p]),
+          nameChanged: true,
           isNew: dirty?.isNew ?? false,
         });
         updateEditBarState();
@@ -2340,7 +2368,10 @@
   function formatZoneSaveError(err) {
     const raw = String(err?.message || err || "");
     if (raw.includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
-      return "Конфликт имени зоны на сервере. Обновите страницу и сохраните снова.";
+      const quoted = raw.match(/«([^»]+)»/);
+      if (quoted) return `Зона «${quoted[1]}» уже существует. Укажите другое имя.`;
+      if (/уже существует/i.test(raw)) return raw.replace(/^Error:\s*/i, "").slice(0, 200);
+      return "Такое имя зоны уже занято. Укажите другое имя.";
     }
     return raw;
   }
@@ -2353,30 +2384,56 @@
       if (pts.length < 3) throw new Error(`У зоны ${zoneId} должно быть минимум 3 точки`);
 
       if (dirty.isNew) {
-        /* Новая зона (клон) — пробуем POST */
-        const created = await bleApiMutate("POST", `/api/v1/ble_zone/`, {
-          companyId: bleCompanyId,
-          name: dirty.name || "Новая зона",
-          description: dirty.description ?? "",
-          points: ptsToApiPoints(pts),
-        });
+        let zoneName = makeUniqueZoneName(dirty.name || "Новая зона", zoneId);
+        let created = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            created = await bleApiMutate("POST", `/api/v1/ble_zone/`, {
+              companyId: bleCompanyId,
+              name: zoneName,
+              description: dirty.description ?? "",
+              points: ptsToApiPoints(pts),
+            });
+            break;
+          } catch (e) {
+            if (
+              attempt < 4 &&
+              String(e.message || "").includes("BLE_ZONE_VALIDATION_NAME_EXIST")
+            ) {
+              zoneName = makeUniqueZoneName(`${zoneName} (${attempt + 2})`, zoneId);
+              continue;
+            }
+            throw e;
+          }
+        }
         const newId = created?.id;
         const z = bleZoneData.find((x) => x.id === zoneId);
         if (z) {
           z.pts = pts.map((p) => [...p]);
-          if (dirty.name !== undefined) z.name = dirty.name;
+          z.name = zoneName;
           if (newId) z.id = newId;
           z.isNew = false;
         }
       } else {
-        /* Существующая зона — PUT с именем и геометрией */
         const body = { points: ptsToApiPoints(pts) };
-        if (dirty.name !== undefined) body.name = dirty.name;
-        if (dirty.description !== undefined) body.description = dirty.description;
+        if (dirty.nameChanged) {
+          const trimmed = normalizeZoneName(dirty.name);
+          if (!trimmed) throw new Error(`У зоны ${zoneId} должно быть имя`);
+          if (isZoneNameTaken(trimmed, zoneId)) {
+            throw new Error(`Зона «${trimmed}» уже существует. Укажите другое имя.`);
+          }
+          body.name = trimmed;
+          if (dirty.description !== undefined) body.description = dirty.description;
+        }
         try {
           await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, body);
         } catch (e) {
           if (String(e.message || "").includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
+            if (dirty.nameChanged) {
+              throw new Error(
+                `BLE_ZONE_VALIDATION_NAME_EXIST: «${body.name || dirty.name || ""}»`
+              );
+            }
             const fresh = await bleApiFetch(`/api/v1/ble_zone/${zoneId}`);
             await bleApiMutate("PUT", `/api/v1/ble_zone/${zoneId}`, {
               name: fresh?.name || `Зона ${zoneId}`,
@@ -2390,13 +2447,15 @@
         const z = bleZoneData.find((x) => x.id === zoneId);
         if (z) {
           z.pts = pts.map((p) => [...p]);
-          if (dirty.name !== undefined) z.name = dirty.name;
+          if (dirty.nameChanged && dirty.name !== undefined) z.name = normalizeZoneName(dirty.name);
           if (dirty.description !== undefined) z.description = dirty.description;
         }
         const entry = bleZoneLayers.get(zoneId);
         if (entry) {
           entry.data.pts = pts.map((p) => [...p]);
-          if (dirty.name !== undefined) entry.data.name = dirty.name;
+          if (dirty.nameChanged && dirty.name !== undefined) {
+            entry.data.name = normalizeZoneName(dirty.name);
+          }
         }
       }
       saved++;
