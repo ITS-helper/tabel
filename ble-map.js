@@ -16,6 +16,8 @@
 
   /** Список меток (~1.5 МБ): через Supabase Edge пока 500; сначала Worker */
   const BLE_WORKER_ONLY_PATHS = ["/api/v1/map/ble/"];
+  /** ble_zone на Edge сейчас отвечает 500 — сначала Worker */
+  const BLE_WORKER_PREFERRED_PATHS = ["/api/v1/ble_zone"];
 
   const BLE_FETCH_TIMEOUT_MS = 120000;
   const BLE_LIST_FETCH_TIMEOUT_MS = 22000;
@@ -24,7 +26,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523l";
+  const BLE_MAP_BUILD = "20260523m";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -990,12 +992,21 @@
     }
   }
 
+  function isWorkerPreferredBlePath(path) {
+    return BLE_WORKER_PREFERRED_PATHS.some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+    );
+  }
+
   function transportOrder(path) {
     if (path && path.includes("/token")) {
       return ["supabase", "worker"];
     }
     if (path && isWorkerOnlyBlePath(path)) {
       return ["supabase", "worker"];
+    }
+    if (path && isWorkerPreferredBlePath(path)) {
+      return ["worker", "supabase"];
     }
     const pref = getPreferredTransportId();
     const ids = BLE_TRANSPORTS.map((t) => t.id);
@@ -2437,6 +2448,11 @@
 
   function formatZoneSaveError(err) {
     const raw = String(err?.message || err || "");
+    if (raw.includes("supabase_proxy_")) {
+      const via = formatBleError(err, err.bleTriedTransports || ["supabase", "worker"]);
+      if (via !== raw) return via;
+      return "Прокси Supabase временно недоступен для зон. Повторите сохранение или включите VPN.";
+    }
     if (raw.includes("BLE_ZONE_VALIDATION_NAME_EXIST")) {
       const quoted = raw.match(/«([^»]+)»/);
       if (quoted) return `Зона «${quoted[1]}» уже существует. Укажите другое имя.`;
@@ -2466,8 +2482,7 @@
         let created = null;
         for (let attempt = 0; attempt < 5; attempt++) {
           try {
-            created = await bleApiMutate("POST", `/api/v1/ble_zone/`, {
-              companyId: bleCompanyId,
+            created = await bleApiMutate("POST", "/api/v1/ble_zone", {
               name: zoneName,
               description: dirty.description ?? "",
               points: ptsToApiPoints(pts),
