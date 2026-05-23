@@ -26,7 +26,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523n";
+  const BLE_MAP_BUILD = "20260523o";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -668,6 +668,7 @@
   let bleDrawTool = null;
   let bleZoneAlignMode = false;
   let bleAlignZoneIds = new Set();
+  let bleAlignVertexKeys = new Set();
   let bleAlignLinePts = [];
   let bleAlignPreview = null;
   let bleAlignMapListeners = null;
@@ -689,6 +690,7 @@
   let bleMarkerLayer = null;
   const bleZoneGroups = new WeakMap();
   const bleZoneVertexByMap = new WeakMap();
+  const bleAlignPickByMap = new WeakMap();
   let bleZoneLayers = new Map();
   let bleEditMapMsg = "";
   let bleListSnapshot = null;
@@ -1695,6 +1697,78 @@
     return src.map((p) => [p[0], p[1]]);
   }
 
+  function isAlignPickMode() {
+    return bleAlignSettings.edge === "pick";
+  }
+
+  function alignVertexKey(zoneId, ptIndex) {
+    return `${zoneId}:${ptIndex}`;
+  }
+
+  function toggleAlignVertex(zoneId, ptIndex) {
+    const key = alignVertexKey(zoneId, ptIndex);
+    if (bleAlignVertexKeys.has(key)) bleAlignVertexKeys.delete(key);
+    else bleAlignVertexKeys.add(key);
+    const map = getActiveMap();
+    if (map) syncAlignPickHandles(map);
+    updateZoneAlignUi();
+  }
+
+  function zoneHasPickedAlignVertex(zoneId) {
+    const prefix = `${zoneId}:`;
+    for (const key of bleAlignVertexKeys) {
+      if (key.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  function clearAlignPickHandles(targetMap) {
+    if (!targetMap) return;
+    const state = bleAlignPickByMap.get(targetMap);
+    if (!state) return;
+    try {
+      if (state.group?._map) targetMap.removeLayer(state.group);
+    } catch {
+      /* ignore */
+    }
+    bleAlignPickByMap.delete(targetMap);
+  }
+
+  function syncAlignPickHandles(map) {
+    clearAlignPickHandles(map);
+    if (!map || !bleZoneAlignMode || !isAlignPickMode()) return;
+    const group = L.layerGroup().addTo(map);
+    const handles = [];
+    bleZoneData.forEach((z) => {
+      if (!z.id || z.pts.length < 3) return;
+      const pts = getZonePtsForAlign(z.id);
+      pts.forEach((p, ptIndex) => {
+        const picked = bleAlignVertexKeys.has(alignVertexKey(z.id, ptIndex));
+        const handle = L.circleMarker([p[0], p[1]], {
+          radius: picked ? 9 : 7,
+          color: picked ? "#ffffff" : "#e65100",
+          fillColor: picked ? "#76ff03" : "#ff9800",
+          fillOpacity: 1,
+          weight: picked ? 3 : 2,
+          interactive: true,
+          className: "ble-zone-align-pick-handle" + (picked ? " is-picked" : ""),
+        });
+        handle.on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          toggleAlignVertex(z.id, ptIndex);
+        });
+        handle.addTo(group);
+        handles.push(handle);
+      });
+    });
+    try {
+      group.bringToFront?.();
+    } catch {
+      /* ignore */
+    }
+    bleAlignPickByMap.set(map, { group, handles });
+  }
+
   function pickZoneVertexIndex(pts, edge) {
     if (!pts.length) return 0;
     let idx = 0;
@@ -1710,6 +1784,20 @@
   }
 
   function collectZoneAlignTargets() {
+    if (isAlignPickMode()) {
+      const targets = [];
+      for (const key of bleAlignVertexKeys) {
+        const sep = key.indexOf(":");
+        if (sep < 0) continue;
+        const zoneId = Number(key.slice(0, sep));
+        const ptIndex = Number(key.slice(sep + 1));
+        const pts = getZonePtsForAlign(zoneId);
+        if (ptIndex < 0 || ptIndex >= pts.length) continue;
+        const [lat, lng] = pts[ptIndex];
+        targets.push({ zoneId, ptIndex, lat, lng });
+      }
+      return targets;
+    }
     const targets = [];
     for (const zoneId of bleAlignZoneIds) {
       const pts = getZonePtsForAlign(zoneId);
@@ -1753,8 +1841,11 @@
 
   function applyZoneAlign() {
     const targets = collectZoneAlignTargets();
+    const pickMode = isAlignPickMode();
     if (targets.length < 2) {
-      updateZoneAlignHint("Выберите минимум две зоны.");
+      updateZoneAlignHint(
+        pickMode ? "Выберите минимум две вершины (оранжевые точки)." : "Выберите минимум две зоны."
+      );
       return;
     }
     if (bleAlignSettings.axis === "line") {
@@ -1816,11 +1907,13 @@
     updateEditBarState();
   }
 
-  function clearAlignZoneSelection() {
+  function clearAlignSelection() {
     bleAlignZoneIds.clear();
+    bleAlignVertexKeys.clear();
     bleAlignLinePts = [];
     bleAlignPreview = null;
     redrawMapLayers();
+    renderBleDrawOnAllMaps();
     updateZoneAlignUi();
   }
 
@@ -1838,16 +1931,37 @@
     const axisSel = document.getElementById("mapZoneAlignAxis");
     const refSel = document.getElementById("mapZoneAlignRef");
     if (panel) panel.hidden = !bleZoneAlignMode;
-    if (countEl) countEl.textContent = `Выбрано: ${bleAlignZoneIds.size}`;
+    const pickMode = isAlignPickMode();
+    if (countEl) {
+      countEl.textContent = pickMode
+        ? `Вершин: ${bleAlignVertexKeys.size}`
+        : `Зон: ${bleAlignZoneIds.size}`;
+    }
     const lineMode = bleAlignSettings.axis === "line";
     if (refField) refField.hidden = lineMode;
     if (edgeSel) edgeSel.value = bleAlignSettings.edge;
     if (axisSel) axisSel.value = bleAlignSettings.axis;
     if (refSel) refSel.value = bleAlignSettings.ref;
-    const canApply =
-      bleAlignZoneIds.size >= 2 && (!lineMode || bleAlignLinePts.length >= 2);
+    const selectedCount = pickMode ? bleAlignVertexKeys.size : bleAlignZoneIds.size;
+    const canApply = selectedCount >= 2 && (!lineMode || bleAlignLinePts.length >= 2);
     if (applyBtn) applyBtn.disabled = !canApply;
     if (!bleZoneAlignMode) return;
+    if (pickMode) {
+      if (lineMode) {
+        updateZoneAlignHint(
+          bleAlignLinePts.length >= 2
+            ? "Линия задана. «Выровнять» — спроецировать выбранные вершины на неё."
+            : bleAlignLinePts.length === 1
+              ? "Второй клик на карте — конец опорной линии (Shift — угол 15°)."
+              : "Кликайте оранжевые точки на зонах, затем два клика на карте — линия."
+        );
+      } else {
+        updateZoneAlignHint(
+          "Кликайте оранжевые точки на зонах — выбранные подсветятся зелёным. Затем «Выровнять»."
+        );
+      }
+      return;
+    }
     if (lineMode) {
       updateZoneAlignHint(
         bleAlignLinePts.length >= 2
@@ -1912,6 +2026,7 @@
       disableAllZonePm();
     } else {
       bleAlignZoneIds.clear();
+      bleAlignVertexKeys.clear();
       bleAlignLinePts = [];
       bleAlignPreview = null;
       detachAlignMapListeners();
@@ -1929,7 +2044,14 @@
     document.body.dataset.bleZoneAlignWired = "1";
     document.getElementById("mapZoneAlignEdge")?.addEventListener("change", (e) => {
       bleAlignSettings.edge = e.target.value || "top";
+      if (isAlignPickMode()) bleAlignZoneIds.clear();
+      else bleAlignVertexKeys.clear();
+      bleAlignLinePts = [];
+      bleAlignPreview = null;
+      redrawMapLayers();
+      renderBleDrawOnAllMaps();
       updateZoneAlignUi();
+      attachAlignMapListeners();
     });
     document.getElementById("mapZoneAlignAxis")?.addEventListener("change", (e) => {
       bleAlignSettings.axis = e.target.value || "horizontal";
@@ -1949,7 +2071,7 @@
     });
     document.getElementById("mapZoneAlignClearBtn")?.addEventListener("click", (e) => {
       e.preventDefault();
-      clearAlignZoneSelection();
+      clearAlignSelection();
     });
     document.getElementById("mapZoneAlignCloseBtn")?.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1979,6 +2101,7 @@
   const BLE_VERTEX_HIT_PX = 24;
 
   function clearZoneVertexHandles(targetMap) {
+    clearAlignPickHandles(targetMap);
     if (!targetMap) return;
     const state = bleZoneVertexByMap.get(targetMap);
     if (!state) return;
@@ -3016,7 +3139,11 @@
     if (!bleZoneData.length) return;
     bleZoneData.forEach((z) => {
       if (!z.id || z.pts.length < 3) return;
-      const inAlignSet = bleZoneAlignMode && bleAlignZoneIds.has(z.id);
+      const inAlignSet =
+        bleZoneAlignMode &&
+        (isAlignPickMode()
+          ? zoneHasPickedAlignVertex(z.id)
+          : bleAlignZoneIds.has(z.id));
       const isSelected = bleSelectedZoneId === z.id || inAlignSet;
       const dimmed = zoneFocused && !isSelected;
       const pts = getZoneDisplayPts(z);
@@ -3049,6 +3176,7 @@
           if (bleDrawTool) return;
           L.DomEvent.stopPropagation(e);
           if (bleZoneAlignMode) {
+            if (isAlignPickMode()) return;
             toggleAlignZone(z.id);
             return;
           }
@@ -3058,9 +3186,12 @@
       }
       layer.addTo(group);
     });
-    if (forEdit && bleSelectedZoneId) {
+    if (forEdit && bleSelectedZoneId && !bleZoneAlignMode) {
       const entry = bleZoneLayers.get(bleSelectedZoneId);
       if (entry?.layer) scheduleZoneVertexHandles(entry.layer, entry.data);
+    }
+    if (forEdit && bleZoneAlignMode && isAlignPickMode()) {
+      syncAlignPickHandles(targetMap);
     }
   }
 

@@ -1565,6 +1565,14 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   border-color: rgba(21, 101, 192, 0.25);
 }
 
+body.ble-map--zone-align .ble-zone-align-pick-handle {
+  cursor: pointer;
+}
+
+body.ble-map--zone-align .ble-zone-align-pick-handle.is-picked {
+  filter: drop-shadow(0 0 4px rgba(118, 255, 3, 0.85));
+}
+
 body.ble-map--zone-align .leaflet-interactive.ble-zone-align-target {
   stroke: #ffffff !important;
   stroke-width: 3 !important;
