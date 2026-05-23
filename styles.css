@@ -2919,6 +2919,8 @@ html.app--blemap-tab {
   padding: 0;
   min-height: 100dvh;
   height: 100dvh;
+  height: -webkit-fill-available; /* iOS Safari: корректная высота с учётом nav bar */
+  height: 100svh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
