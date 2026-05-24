@@ -29,7 +29,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260524r";
+  const BLE_MAP_BUILD = "20260524s";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -6942,15 +6942,8 @@ if(cards.length)selectIdx(0);
 
   function initWebFieldSyncChrome() {
     if (isBleNativeApp()) return;
-    const packBtn = document.getElementById("mapFieldPackBtn");
-    if (packBtn) {
-      packBtn.title =
-        "Скачать фото маршрута или всех маршрутов в кэш браузера (IndexedDB). Shift+клик — zip и др.";
-      const long = packBtn.querySelector(".map-toolbar-text--long");
-      const short = packBtn.querySelector(".map-toolbar-text--short");
-      if (long) long.textContent = "Скачать фото";
-      if (short) short.textContent = "Фото";
-    }
+    document.getElementById("mapRouteExportBtn")?.setAttribute("hidden", "");
+    document.getElementById("mapFieldPackBtn")?.setAttribute("hidden", "");
     const retryBtn = document.getElementById("mapRetryBtn");
     if (retryBtn) {
       retryBtn.title = "Обновить координаты меток и полигоны с сервера (Wi‑Fi/VPN)";
