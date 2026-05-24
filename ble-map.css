@@ -254,7 +254,7 @@ body.ble-map-tools-menu-open .map-toolbar {
   isolation: isolate;
 }
 
-/* Убираем белую «сетку» — швы между тайлами Leaflet (фон #bleMap был светлым) */
+/* Тёмный фон под спутником — если между тайлами останется щель, она не белая */
 #bleMap.leaflet-container,
 #bleMapFS.leaflet-container {
   background: #1a2430;
@@ -270,12 +270,6 @@ body.ble-map-tools-menu-open .map-toolbar {
   box-shadow: none !important;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-}
-
-.leaflet-zoom-animated .leaflet-tile {
-  width: 257px !important;
-  height: 257px !important;
-  margin: -0.5px 0 0 -0.5px;
 }
 
 .mask-image {
