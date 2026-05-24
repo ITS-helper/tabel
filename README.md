@@ -177,12 +177,28 @@ supabase functions deploy ble-map-proxy --no-verify-jwt
 
 ---
 
+---
+
+## APK — карта для Android
+
+Отдельное приложение (Capacitor) с той же BLE-картой и офлайн-подготовкой маршрута. Сборка и установка: [`docs/mobile-apk.md`](docs/mobile-apk.md).
+
+```bash
+npm install
+npm run mobile:build
+npm run mobile:open   # Android Studio → Build APK
+```
+
+---
+
 ## Структура репозитория
 
 | Путь | Назначение |
 |------|------------|
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Руководство пользователя (гайд по функциям) |
-| [`docs/ble-field-pack.md`](docs/ble-field-pack.md) | Офлайн-пакет BLE: сборка и публикация |
+| [`docs/mobile-apk.md`](docs/mobile-apk.md) | Android APK (Capacitor), этап 1 |
+| [`capacitor.config.json`](capacitor.config.json) | Конфиг приложения |
+| [`android/`](android/) | Проект Android Studio |
 | [`index.html`](index.html) | Разметка |
 | [`ble-map.html`](ble-map.html), [`ble-map.js`](ble-map.js) | Карта BLE-меток |
 | [`styles.css`](styles.css) | Стили (в т.ч. сводка, шапка-«капсулы», график) |

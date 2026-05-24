@@ -29,7 +29,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523w";
+  const BLE_MAP_BUILD = "20260524a";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -586,7 +586,9 @@
     const route = getActiveRouteForFieldSync();
     if (!route) {
       alert(
-        "Сначала выберите маршрут в списке «Маршрут» (не «Все маршруты»), затем нажмите «Подготовка к полю»."
+        isBleNativeApp()
+          ? "Сначала выберите маршрут в списке «Маршрут», затем «Подготовить»."
+          : "Сначала выберите маршрут в списке «Маршрут» (не «Все маршруты»), затем нажмите «Подготовка к полю»."
       );
       return;
     }
@@ -595,8 +597,11 @@
     const est = estimateMarkersOnRoute(route.routeId);
     const estLine = est > 0 ? `~${est} меток` : "метки маршрута";
     const mobile = isCoarseMobile();
+    const native = isBleNativeApp();
     let intro =
-      `Подготовка к полю — только выбранный маршрут:\n\n«${route.routeTitle}»\n${estLine}, координаты и фото (метка + место).\n\n`;
+      native
+        ? `Подготовить маршрут к обходу без сети?\n\n«${route.routeTitle}»\n${estLine}, координаты и фото.\n\nДанные сохранятся в память приложения.\n\n`
+        : `Подготовка к полю — только выбранный маршрут:\n\n«${route.routeTitle}»\n${estLine}, координаты и фото (метка + место).\n\n`;
     if (summary) intro += `Сейчас в памяти: ${summary}\nДокачаем только недостающее по этому маршруту.\n\n`;
     intro += mobile
       ? "Нужен Wi‑Fi/VPN. Можно остановить и продолжить позже (Safari).\n\nНачать синхронизацию?"
@@ -5928,6 +5933,41 @@ if(cards.length)selectIdx(0);
 
   window.setBleMapFilter = setBleMapFilter;
 
+  function isBleNativeApp() {
+    try {
+      if (window.Capacitor?.isNativePlatform?.()) return true;
+      if (document.documentElement?.dataset?.wwNative === "1") return true;
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
+  function initNativeAppChrome() {
+    if (!isBleNativeApp()) return;
+    document.documentElement.classList.add("ble-map-native");
+    document.body.classList.add("ble-map-native");
+    document.getElementById("bleMapPageHeader")?.classList.add("is-native");
+    const back = document.getElementById("bleMapBackLink");
+    if (back) back.hidden = true;
+    document.getElementById("mapRouteExportBtn")?.setAttribute("hidden", "");
+    const packBtn = document.getElementById("mapFieldPackBtn");
+    if (packBtn) {
+      packBtn.title =
+        "Подготовить маршрут: метки и фото в память приложения (для обхода без сети)";
+      packBtn.querySelector(".map-toolbar-text--long") &&
+        (packBtn.querySelector(".map-toolbar-text--long").textContent = "Подготовить");
+      packBtn.querySelector(".map-toolbar-text--short") &&
+        (packBtn.querySelector(".map-toolbar-text--short").textContent = "Подг.");
+    }
+    const logo = document.getElementById("bleMapBackLogo");
+    if (logo) {
+      logo.disabled = true;
+      logo.style.pointerEvents = "none";
+      logo.style.opacity = "0.85";
+    }
+  }
+
   function isCoarseMobile() {
     return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
   }
@@ -5943,7 +5983,8 @@ if(cards.length)selectIdx(0);
 
   function updateMapFloatDockTopInset() {
     const root = document.documentElement;
-    const mobile = isCoarseMobile() || window.innerWidth <= 768;
+    const native = isBleNativeApp();
+    const mobile = isCoarseMobile() || window.innerWidth <= 768 || native;
     const embedded = window.self !== window.top;
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
     root.classList.toggle("ble-map-ios", isIOS);
@@ -5955,7 +5996,10 @@ if(cards.length)selectIdx(0);
     );
 
     if (mobile) {
-      if (embedded && isIOS) {
+      if (native) {
+        const topPx = Math.max(8, safeTop + 4);
+        root.style.setProperty("--map-float-dock-top", `${topPx}px`);
+      } else if (embedded && isIOS) {
         /* iPhone Safari в iframe: viewport-fit=cover → iframe начинается под Dynamic Island.
            env(safe-area-inset-top) ≈ 59px + адресная строка ≈ 44px + gap = ~111px.
            CSS env() может не работать внутри iframe → переопределяем через JS. */
@@ -5992,9 +6036,10 @@ if(cards.length)selectIdx(0);
 
   function applyMapLayoutClasses() {
     const embedded = window.self !== window.top;
-    document.documentElement.classList.toggle("ble-map-embedded", embedded);
-    document.body.classList.toggle("ble-map-embedded", embedded);
-    document.body.classList.toggle("ble-map-mobile", isCoarseMobile());
+    const native = isBleNativeApp();
+    document.documentElement.classList.toggle("ble-map-embedded", embedded && !native);
+    document.body.classList.toggle("ble-map-embedded", embedded && !native);
+    document.body.classList.toggle("ble-map-mobile", isCoarseMobile() || native);
     updateMapFloatDockTopInset();
   }
 
@@ -6180,6 +6225,16 @@ if(cards.length)selectIdx(0);
 
       const companyId = await resolveCompanyId();
       bleCompanyId = companyId;
+
+      if (isBleNativeApp() && (await hasFieldPackInStorage())) {
+        const fromField = await tryLoadFieldPack(companyId);
+        if (fromField) {
+          if (navigator.onLine) {
+            void refreshBleMapFromApi(companyId).catch(() => {});
+          }
+          return;
+        }
+      }
 
       if (shouldPreferFieldPack()) {
         const fromField = await tryLoadFieldPack(companyId);
@@ -6523,6 +6578,7 @@ if(cards.length)selectIdx(0);
   }
 
   function initEmbeddedChrome() {
+    initNativeAppChrome();
     bindBleMapBackLogo();
     if (window.self !== window.top) {
       document.getElementById("bleMapPageHeader")?.classList.add("is-embedded");

@@ -1,0 +1,11 @@
+{
+  "appId": "ru.its.workwatch.blemap",
+  "appName": "WORK WATCH Карта",
+  "webDir": "mobile/www",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,0 +1,8 @@
+# Скопируйте в local.properties (файл в .gitignore).
+# Путь к Android SDK — обычно после установки Android Studio:
+#
+# Windows:
+# sdk.dir=C\:\\Users\\YourName\\AppData\\Local\\Android\\Sdk
+#
+# macOS:
+# sdk.dir=/Users/YourName/Library/Android/sdk

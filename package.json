@@ -13,13 +13,26 @@
     "supabase:login": "supabase login",
     "supabase:link": "supabase link --project-ref owcuvcshwtivqueftiuk",
     "supabase:deploy-ble-map": "supabase functions deploy ble-map-proxy --no-verify-jwt",
-    "supabase:deploy-ble-sync": "supabase functions deploy ble-map-sync --no-verify-jwt"
+    "supabase:deploy-ble-sync": "supabase functions deploy ble-map-sync --no-verify-jwt",
+    "mobile:sync": "node scripts/sync-mobile-www.mjs",
+    "mobile:build": "npm run mobile:sync && npx cap sync android",
+    "mobile:open": "npm run mobile:build && npx cap open android",
+    "mobile:run": "npm run mobile:build && npx cap run android",
+    "cap:sync": "npm run mobile:build"
   },
   "dependencies": {
+    "@capacitor/android": "^7.2.0",
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/core": "^7.2.0",
+    "@capacitor/network": "^7.0.1",
     "bcryptjs": "^2.4.3",
+    "fflate": "^0.8.2",
+    "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.2.0",
     "@mlightcad/libredwg-web": "^0.7.1",
     "@napi-rs/canvas": "^1.0.0",
     "@resvg/resvg-js": "^2.6.2",

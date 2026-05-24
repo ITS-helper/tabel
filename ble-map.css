@@ -839,6 +839,22 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   border-color: #1565c0;
 }
 
+body.ble-map-native .map-route-export-btn {
+  display: none !important;
+}
+
+body.ble-map-native .ble-map-page-header.is-native {
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+
+body.ble-map-native .ble-map-page-back {
+  display: none;
+}
+
+body.ble-map-native #bleMapBackLogo {
+  pointer-events: none;
+}
+
 .map-route-export-btn:disabled {
   opacity: 0.55;
   cursor: wait;
