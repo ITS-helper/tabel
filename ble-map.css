@@ -254,14 +254,12 @@ body.ble-map-tools-menu-open .map-toolbar {
   isolation: isolate;
 }
 
-/* Тёмный фон под спутником — если между тайлами останется щель, она не белая */
+/* Тёмный фон под спутником — щели между тайлами не белые */
 #bleMap.leaflet-container,
-#bleMapFS.leaflet-container {
-  background: #1a2430;
-}
-
-.leaflet-tile-pane {
-  background: #1a2430;
+#bleMapFS.leaflet-container,
+#bleMap .leaflet-tile-pane,
+#bleMapFS .leaflet-tile-pane {
+  background: #0f1214;
 }
 
 .leaflet-container img.leaflet-tile {
@@ -270,6 +268,18 @@ body.ble-map-tools-menu-open .map-toolbar {
   box-shadow: none !important;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/*
+ * Швы Esri/Leaflet: перекрытие относительно размера тайла на текущем зуме
+ * (не фиксированные 257px — они давали видимую квадратную сетку).
+ */
+.leaflet-tile-pane img.leaflet-tile.ble-esri-tile {
+  margin: -1px 0 0 -1px;
+  width: calc(100% + 2px) !important;
+  height: calc(100% + 2px) !important;
 }
 
 .mask-image {
