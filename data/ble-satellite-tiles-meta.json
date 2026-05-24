@@ -1,0 +1,12 @@
+{
+  "source": "Esri World Imagery",
+  "urlTemplate": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  "localPath": "assets/tiles/satellite/{z}/{x}/{y}.jpg",
+  "southWest": [59.6433573, 28.3533887801391],
+  "northEast": [59.671461026891904, 28.446077576446537],
+  "minZoom": 14,
+  "maxZoom": 18,
+  "attribution": "Esri",
+  "updated_at": "2026-05-24T00:00:00.000Z",
+  "note": "Охват СПГ (из ble-genplan-meta + отступ). Скачать: npm run mobile:tiles"
+}

@@ -7,6 +7,8 @@ google_sheet_raw.csv
 
 _workarounds_src/
 
+dist/
+!dist/.gitkeep
 node_modules/
 mobile/www/
 mobile/vendor-cache/
@@ -19,6 +21,7 @@ android/.idea/
 scripts/.tools/
 data/ble-field-pack.zip
 data/ble-genplan-tiles/
+assets/tiles/satellite/
 scripts/auth-credentials.txt
 scripts/auth-users-seed.sql
 

@@ -181,13 +181,14 @@ supabase functions deploy ble-map-proxy --no-verify-jwt
 
 ## APK — карта для Android
 
-Отдельное приложение (Capacitor) с той же BLE-картой и офлайн-подготовкой маршрута. Сборка и установка: [`docs/mobile-apk.md`](docs/mobile-apk.md).
+Отдельное приложение (Capacitor) с BLE-картой: **спутник офлайн**, фото маршрута в памяти телефона, без пароля на входе. Сборка: [`docs/mobile-apk.md`](docs/mobile-apk.md).
 
 ```bash
 npm install
-npm run mobile:build
-npm run mobile:open   # Android Studio → Build APK
+npm run mobile:apk
 ```
+
+Файл: `dist/workwatch-ble-map-debug.apk`. Подробнее: [`docs/mobile-apk.md`](docs/mobile-apk.md).
 
 ---
 

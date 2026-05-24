@@ -14,8 +14,11 @@
     "supabase:link": "supabase link --project-ref owcuvcshwtivqueftiuk",
     "supabase:deploy-ble-map": "supabase functions deploy ble-map-proxy --no-verify-jwt",
     "supabase:deploy-ble-sync": "supabase functions deploy ble-map-sync --no-verify-jwt",
+    "mobile:tiles": "node scripts/download-satellite-tiles.mjs",
+    "mobile:icons": "node scripts/generate-android-icons.mjs",
     "mobile:sync": "node scripts/sync-mobile-www.mjs",
-    "mobile:build": "npm run mobile:sync && npx cap sync android",
+    "mobile:build": "npm run mobile:tiles && npm run mobile:icons && npm run mobile:sync && npx cap sync android",
+    "mobile:apk": "npm run mobile:build && node scripts/build-android-apk.mjs",
     "mobile:open": "npm run mobile:build && npx cap open android",
     "mobile:run": "npm run mobile:build && npx cap run android",
     "cap:sync": "npm run mobile:build"

@@ -95,6 +95,55 @@ function patchHtml(html) {
     /<a class="ble-map-page-back" href="index\.html" id="bleMapBackLink">← График<\/a>/,
     '<a class="ble-map-page-back" href="#" id="bleMapBackLink" hidden>← График</a>'
   );
+  /* APK: без пароля, упрощённое редактирование меток */
+  out = out.replace(/<div class="ble-map-access-gate"[\s\S]*?<\/div>\s*/m, "");
+  out = out.replace(
+    'title="Редактировать метки и зоны"',
+    'title="Редактировать положение меток"'
+  );
+  out = out.replace(
+    /(<button type="button" class="map-edit-mode-btn" id="mapEditModeBtn"[\s\S]*?<\/button>)\s*/,
+    `$1
+            <button
+              type="button"
+              class="map-send-pending-btn"
+              id="mapSendPendingBtn"
+              hidden
+              title="Отправить запомненные правки меток на сервер VSM"
+            >
+              <span class="map-toolbar-text map-toolbar-text--long">Отправить</span>
+              <span class="map-toolbar-text map-toolbar-text--short">↑</span>
+            </button>
+            `
+  );
+  out = out.replace(
+    /id="mapSaveBtn" disabled>Сохранить/,
+    'id="mapSaveBtn" disabled>Запомнить'
+  );
+  out = out.replace(
+    '<label class="map-route-field map-route-field--toolbar map-toolbar-field--tools" id="mapToolsFieldDock">',
+    '<label class="map-route-field map-route-field--toolbar map-toolbar-field--tools" id="mapToolsFieldDock" hidden>'
+  );
+  out = out.replace(
+    '<select id="mapEditToolsSelect" aria-label="Инструменты">',
+    '<select id="mapEditToolsSelect" aria-label="Инструменты" hidden disabled>'
+  );
+  out = out.replace(
+    /id="mapFieldPackBtn"[\s\S]*?<span class="map-toolbar-text map-toolbar-text--long">Офлайн<\/span>/,
+    'id="mapFieldPackBtn"\n              title="Скачать фото выбранного маршрута или всех маршрутов"\n            >\n              <span class="map-toolbar-text map-toolbar-text--long">Скачать фото</span>'
+  );
+  out = out.replace(
+    /<span class="map-toolbar-text map-toolbar-text--short">Офлайн<\/span>/,
+    '<span class="map-toolbar-text map-toolbar-text--short">Фото</span>'
+  );
+  out = out.replace(
+    'title="Обновить метки и фото с сервера (API через Supabase; без VPN — кэш и прокси фото)"',
+    'title="Обновить координаты меток и полигоны с сервера (Wi‑Fi/VPN)"'
+  );
+  out = out.replace(
+    'aria-label="Обновить данные карты"',
+    'aria-label="Обновить координаты и зоны"'
+  );
   return out;
 }
 
@@ -135,12 +184,16 @@ async function main() {
   }
 
   copyDir(path.join(ROOT, "assets"), path.join(OUT, "assets"));
+  if (!fs.existsSync(path.join(ROOT, "assets", "tiles", "satellite"))) {
+    console.warn("[mobile:sync] нет офлайн-тайлов — выполните: npm run mobile:tiles");
+  }
 
   ensureDir(path.join(OUT, "data"));
   for (const f of [
     "ble-genplan-meta.json",
     "ble-map-cache-meta.json",
     "ble-field-pack-meta.json",
+    "ble-satellite-tiles-meta.json",
   ]) {
     const p = path.join(ROOT, "data", f);
     if (fs.existsSync(p)) copyFile(p, path.join(OUT, "data", f));
