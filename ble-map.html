@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260523u" />
+  <link rel="stylesheet" href="ble-map.css?v=20260523w" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -121,16 +121,16 @@
               type="button"
               class="map-route-export-btn"
               id="mapRouteExportBtn"
-              title="Скачать автономный HTML: карта маршрута, метки и фото (работает без интернета из «Файлы»)"
+              title="Сохранить HTML-файл маршрута в «Файлы» (не кэш «Офлайн»)"
             >
-              <span class="map-toolbar-text map-toolbar-text--long">Скачать</span>
-              <span class="map-toolbar-text map-toolbar-text--short">↓</span>
+              <span class="map-toolbar-text map-toolbar-text--long">Сохранить файл</span>
+              <span class="map-toolbar-text map-toolbar-text--short">Файл</span>
             </button>
             <button
               type="button"
               class="map-field-pack-btn"
               id="mapFieldPackBtn"
-              title="Офлайн-режим: координаты и фото меток в память телефона (без zip)"
+              title="Кэш в браузере: метки и фото в память телефона (не файл)"
             >
               <span class="map-toolbar-text map-toolbar-text--long">Офлайн</span>
               <span class="map-toolbar-text map-toolbar-text--short">Офлайн</span>
@@ -171,6 +171,7 @@
             </div>
           </div>
           <p id="mapOfflineSyncStatus" class="map-offline-sync-status" hidden></p>
+          <p id="mapRouteExportStatus" class="map-route-export-status" hidden></p>
           <p id="mapFieldPackStatus" class="map-field-pack-status" hidden></p>
           <button type="button" class="map-field-pack-cancel" id="mapFieldPackCancel" hidden>
             Остановить синхронизацию
@@ -327,7 +328,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
   <script src="ble-genplan-mask.js?v=20260520m"></script>
-  <script src="ble-map.js?v=20260523u"></script>
+  <script src="ble-map.js?v=20260523w"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

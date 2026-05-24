@@ -844,6 +844,23 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   cursor: wait;
 }
 
+.map-route-export-status {
+  margin: 4px 0 0;
+  padding: 0 4px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #0d47a1;
+}
+
+.map-route-export-status--busy {
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.map-route-export-status[hidden] {
+  display: none !important;
+}
+
 .map-offline-sync-status {
   margin: 0;
   padding: 4px 10px 2px;
@@ -2581,6 +2598,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-filter-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-route-export-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
     height: 38px !important;
     min-height: 38px !important;
@@ -2803,10 +2821,12 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn,
   html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-edit-mode-btn,
   html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn,
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-route-export-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-filter-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-edit-mode-btn,
-  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn {
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-route-export-btn {
     min-height: 48px !important;
     padding: 10px 18px !important;
     font-family: Oswald, sans-serif;
@@ -2979,6 +2999,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 .map-toolbar .map-filter-btn,
 .map-toolbar .map-retry-btn,
 .map-toolbar .map-field-pack-btn,
+.map-toolbar .map-route-export-btn,
 .map-toolbar .map-edit-mode-btn {
   height: var(--ctl-h);
   min-height: var(--ctl-h);
@@ -3093,6 +3114,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 .map-toolbar .map-filter-btn,
 .map-toolbar .map-retry-btn,
 .map-toolbar .map-field-pack-btn,
+.map-toolbar .map-route-export-btn,
 .map-toolbar .map-edit-mode-btn {
   display: inline-flex;
   align-items: center;
@@ -3255,6 +3277,7 @@ body.ble-map--edit .map-toolbar .map-edit-mode-btn {
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-filter-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-route-export-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
     height: var(--ctl-h-mobile);
     min-height: var(--ctl-h-mobile);
