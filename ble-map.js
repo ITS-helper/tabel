@@ -29,8 +29,9 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260524a";
+  const BLE_MAP_BUILD = "20260524r";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
+  const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
@@ -42,6 +43,8 @@
   const BLE_FIELD_PHOTOS_STORE = "photos";
   const BLE_FIELD_PACK_KEY = "pack";
   const BLE_FIELD_MARKERS_KEY = "markers";
+  const BLE_FIELD_ZONES_KEY = "zones";
+  const BLE_FIELD_PHOTO_REVISIONS_KEY = "photoRevisions";
   const BLE_FIELD_PACK_VERSION = 3;
   const BLE_FIELD_PACK_META_URL = "data/ble-field-pack-meta.json";
   const BLE_FIELD_PHOTO_MAX_BYTES = 2.5 * 1024 * 1024;
@@ -62,6 +65,9 @@
   const BLE_ZONE_SMALL_MAX_PTS = 12;
   const BLE_BASE_LAYER_KEY = "ww-ble-base-layer";
   const BLE_BASE_LAYERS = ["street", "satellite", "hybrid", "genplan"];
+  const BLE_SATELLITE_ONLINE_URL =
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const BLE_SATELLITE_BUNDLED_URL = "assets/tiles/satellite/{z}/{x}/{y}.jpg";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -78,17 +84,70 @@
   let bleZoneData = [];
   const fieldPhotoBlobUrls = new Map();
   let fieldPackDownloadActive = false;
+  let fieldPhotoRefreshActive = false;
   let fieldPackMetaCache = null;
   let fieldPackAbort = null;
   let fieldSyncIdbChain = Promise.resolve();
   let fieldSyncPhotosSinceAuth = 0;
 
   function fieldPackConcurrency() {
-    return isCoarseMobile() ? 4 : 6;
+    if (isBleNativeApp()) return 6;
+    return isCoarseMobile() ? 3 : 6;
   }
 
-  function fieldSyncPhotoBatchSize() {
-    return isCoarseMobile() ? 4 : BLE_FIELD_PHOTO_BATCH;
+  function getCapacitorHttpPlugin() {
+    try {
+      return window.Capacitor?.Plugins?.CapacitorHttp || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function blobFromCapacitorHttpResponse(res) {
+    const ct = res.headers?.["Content-Type"] || res.headers?.["content-type"] || "image/jpeg";
+    const mime = String(ct).split(";")[0] || "image/jpeg";
+    const data = res.data;
+    if (data instanceof Blob) return data;
+    if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+      return new Blob([data], { type: mime });
+    }
+    if (typeof data === "string") {
+      let b64 = data;
+      const comma = b64.indexOf(",");
+      if (b64.startsWith("data:") && comma >= 0) b64 = b64.slice(comma + 1);
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    }
+    throw new Error("cap_http_bad_data");
+  }
+
+  /** Прямая загрузка с Yandex — тот же URL, что в попапе метки (нативный HTTP, без CORS). */
+  async function fetchPhotoBlobNativeDirect(url) {
+    const http = getCapacitorHttpPlugin();
+    if (http?.get) {
+      const res = await http.get({
+        url: String(url),
+        responseType: "blob",
+        connectTimeout: 8000,
+        readTimeout: 12000,
+      });
+      if (res.status >= 400) throw new Error(`photo_http_${res.status}`);
+      return blobFromCapacitorHttpResponse(res);
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(String(url), {
+        signal: ctrl.signal,
+        referrerPolicy: "no-referrer",
+      });
+      if (!res.ok) throw new Error(`photo_http_${res.status}`);
+      return res.blob();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function resetFieldSyncIdbChain() {
@@ -110,6 +169,14 @@
   function appendFieldPackPhotosBatchQueued(entries) {
     if (!entries?.length) return Promise.resolve();
     return enqueueFieldSyncIdbWrite(() => appendFieldPackPhotosBatch(entries));
+  }
+
+  function withAsyncTimeout(promise, ms, errMsg = "timeout") {
+    let timer = 0;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(errMsg)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
 
   function commitFieldPackMarkersQueued(slimRaw) {
@@ -524,6 +591,23 @@
     };
   }
 
+  /** Маршрут для синхронизации: выбранный или «Все маршруты». */
+  function getFieldSyncRouteRef() {
+    const routeId = bleMapRouteFilter ? String(bleMapRouteFilter) : "";
+    if (!routeId) {
+      return { routeId: "", routeTitle: "Все маршруты" };
+    }
+    const route = bleRoutes.find((r) => String(r.id) === routeId);
+    return {
+      routeId,
+      routeTitle: route ? routeOptionLabel(route) : `Маршрут ${routeId}`,
+    };
+  }
+
+  function isAllRoutesFieldSync(route) {
+    return route != null && !String(route.routeId ?? route.id ?? "");
+  }
+
   function estimateMarkersOnRoute(routeId) {
     if (!routeId) return 0;
     const route = getActiveRouteForFieldSync() || {
@@ -540,27 +624,48 @@
     return onMap;
   }
 
-  async function pruneFieldPhotosNotInUrls(keepUrls) {
-    const keep = new Set(keepUrls || []);
+  function fieldPhotoIsStored(url, keysSet) {
+    if (!url || !keysSet?.size) return false;
+    const exact = String(url);
+    if (keysSet.has(exact)) return true;
+    const pathKey = photoUrlPathnameKey(exact);
+    if (!pathKey) return false;
+    for (const key of keysSet) {
+      if (photoUrlPathnameKey(key) === pathKey) return true;
+    }
+    return false;
+  }
+
+  function countStoredPhotosForUrls(urls, keysSet) {
+    if (!urls?.length || !keysSet?.size) return 0;
+    let n = 0;
+    for (const url of urls) {
+      if (fieldPhotoIsStored(url, keysSet)) n++;
+    }
+    return n;
+  }
+
+  async function pruneFieldPhotosMatchingUrls(urls) {
+    const dropPaths = new Set((urls || []).map((u) => photoUrlPathnameKey(u)).filter(Boolean));
+    if (!dropPaths.size) return 0;
     const keys = await getFieldPhotoKeysSet();
-    const drop = [...keys].filter((k) => !keep.has(k));
+    const drop = [...keys].filter((k) => dropPaths.has(photoUrlPathnameKey(k)));
     if (!drop.length) return 0;
-    revokeFieldPhotoBlobUrls();
+    for (const key of drop) {
+      if (fieldPhotoBlobUrls.has(key)) {
+        try {
+          URL.revokeObjectURL(fieldPhotoBlobUrls.get(key));
+        } catch {
+          /* ignore */
+        }
+        fieldPhotoBlobUrls.delete(key);
+      }
+    }
     const db = await openFieldDb();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readwrite");
       const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
-      for (const key of drop) {
-        if (fieldPhotoBlobUrls.has(key)) {
-          try {
-            URL.revokeObjectURL(fieldPhotoBlobUrls.get(key));
-          } catch {
-            /* ignore */
-          }
-          fieldPhotoBlobUrls.delete(key);
-        }
-        store.delete(key);
-      }
+      for (const key of drop) store.delete(key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -568,65 +673,95 @@
     return drop.length;
   }
 
+  async function pruneFieldPhotosNotInUrls(keepUrls) {
+    const keepPaths = new Set((keepUrls || []).map((u) => photoUrlPathnameKey(u)).filter(Boolean));
+    const keys = await getFieldPhotoKeysSet();
+    const drop = [...keys].filter((k) => !keepPaths.has(photoUrlPathnameKey(k)));
+    if (!drop.length) return 0;
+    for (const key of drop) {
+      if (fieldPhotoBlobUrls.has(key)) {
+        try {
+          URL.revokeObjectURL(fieldPhotoBlobUrls.get(key));
+        } catch {
+          /* ignore */
+        }
+        fieldPhotoBlobUrls.delete(key);
+      }
+    }
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readwrite");
+      const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
+      for (const key of drop) store.delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    return drop.length;
+  }
+
+  function fieldMemoryLabel() {
+    return isBleNativeApp() ? "память телефона" : "кэш браузера";
+  }
+
   async function fieldSyncSummaryLine() {
     const meta = await loadFieldPackMeta();
     const inDb = await countFieldPhotosInDb();
-    const markers = meta?.markerCount || 0;
+    const markers =
+      meta?.markerCount ||
+      (await loadFieldPackMarkers())?.length ||
+      bleListSnapshot?.raw?.length ||
+      0;
     const photos = Math.max(meta?.photosOk || 0, inDb);
     if (!markers && !photos) return "";
     const routeBit = meta?.routeTitle ? `${meta.routeTitle} · ` : "";
-    const need = meta?.photoCount ? meta.photoCount - photos : 0;
-    if (need > 0) return `${routeBit}${markers} меток · ${photos} фото (ещё ~${need})`;
-    return `${routeBit}${markers} меток · ${photos} фото`;
+    if (meta?.photoCount && photos < meta.photoCount) {
+      return `${routeBit}${photos} фото в ${fieldMemoryLabel()} (ещё ~${meta.photoCount - photos})`;
+    }
+    if (photos) return `${routeBit}${photos} фото в ${fieldMemoryLabel()}`;
+    return `${routeBit}${markers} меток`;
   }
 
   async function onFieldPackPrimaryClick() {
     if (fieldPackDownloadActive || routeExportActive) return;
 
-    const route = getActiveRouteForFieldSync();
-    if (!route) {
-      alert(
-        isBleNativeApp()
-          ? "Сначала выберите маршрут в списке «Маршрут», затем «Подготовить»."
-          : "Сначала выберите маршрут в списке «Маршрут» (не «Все маршруты»), затем нажмите «Подготовка к полю»."
-      );
-      return;
-    }
-
+    const route = getFieldSyncRouteRef();
     const summary = await fieldSyncSummaryLine();
-    const est = estimateMarkersOnRoute(route.routeId);
-    const estLine = est > 0 ? `~${est} меток` : "метки маршрута";
-    const mobile = isCoarseMobile();
-    const native = isBleNativeApp();
-    let intro =
-      native
-        ? `Подготовить маршрут к обходу без сети?\n\n«${route.routeTitle}»\n${estLine}, координаты и фото.\n\nДанные сохранятся в память приложения.\n\n`
-        : `Подготовка к полю — только выбранный маршрут:\n\n«${route.routeTitle}»\n${estLine}, координаты и фото (метка + место).\n\n`;
-    if (summary) intro += `Сейчас в памяти: ${summary}\nДокачаем только недостающее по этому маршруту.\n\n`;
-    intro += mobile
-      ? "Нужен Wi‑Fi/VPN. Можно остановить и продолжить позже (Safari).\n\nНачать синхронизацию?"
-      : "Нужен интернет (Wi‑Fi/VPN). Можно прервать и продолжить позже.\n\nНачать синхронизацию?";
+    const allRoutes = isAllRoutesFieldSync(route);
+    const est = allRoutes
+      ? bleListSnapshot?.raw?.length || bleMapData.length || 0
+      : estimateMarkersOnRoute(route.routeId);
+    const estLine = est > 0 ? `~${est} меток` : allRoutes ? "метки всех маршрутов" : "метки маршрута";
+    const routeLabel = allRoutes ? "всех маршрутов" : `маршрута «${route.routeTitle}»`;
+    const mem = fieldMemoryLabel();
+
+    let intro = `Скачать фото меток ${routeLabel}?\n\n${estLine}.\n\nФото сохранятся в ${mem} (как в попапе метки). Уже скачанные не перекачиваются.\n\nКоординаты и зоны — кнопкой «Обновить» (↺).`;
+    if (summary) intro += `\n\nСейчас: ${summary}`;
+    intro += "\n\nНужен интернет (Wi‑Fi/VPN). Начать загрузку фото?";
 
     if (!confirm(intro)) {
-      const more = confirm(
-        "Другие способы:\n\nОК — импорт .zip (если есть архив с ПК)\nОтмена — закрыть"
-      );
-      if (more) openFieldPackFilePicker();
+      if (confirm("Другие способы:\n\nОК — импорт .zip\nОтмена — закрыть")) {
+        openFieldPackFilePicker();
+      }
       return;
     }
-
-    void syncFieldDataBeforeWork({ resume: true, routeId: route.routeId, routeTitle: route.routeTitle });
+    void syncFieldDataBeforeWork({
+      photosOnly: true,
+      resume: true,
+      routeId: route.routeId,
+      routeTitle: route.routeTitle,
+    });
   }
 
   async function onFieldPackAdvancedMenu() {
     if (fieldPackDownloadActive || routeExportActive) return;
     const hosted = await fetchHostedFieldPackMeta();
     const choice = prompt(
-      "Дополнительно (обычно не нужно):\n\n" +
-        "1 — импорт .zip с телефона\n" +
+      "Дополнительно:\n\n" +
+        "1 — импорт .zip\n" +
         (hosted?.packUrl ? "2 — скачать готовый zip с сайта (~146 МБ)\n" : "") +
-        "3 — очистить и скачать всё заново\n" +
-        "4 — только координаты (без фото)\n\n" +
+        "3 — принудительное обновление фото (удалить и скачать заново)\n" +
+        "4 — только координаты маршрута (без фото)\n\n" +
         "Введите номер или Отмена:",
       ""
     );
@@ -640,14 +775,14 @@
       return;
     }
     if (choice.trim() === "3") {
-      const route = getActiveRouteForFieldSync();
-      if (!route) {
-        alert("Выберите маршрут в списке «Маршрут».");
-        return;
-      }
-      if (confirm(`Удалить данные и скачать заново маршрут «${route.routeTitle}»?`)) {
+      const route = getFieldSyncRouteRef();
+      const routeLabel = isAllRoutesFieldSync(route)
+        ? "всех маршрутов"
+        : `маршрута «${route.routeTitle}»`;
+      if (confirm(`Принудительно обновить фото ${routeLabel}?\n\nУже скачанные фото будут удалены и скачаны заново.`)) {
         void syncFieldDataBeforeWork({
           fullReset: true,
+          photosOnly: true,
           resume: false,
           routeId: route.routeId,
           routeTitle: route.routeTitle,
@@ -656,9 +791,8 @@
       return;
     }
     if (choice.trim() === "4") {
-      const route = getActiveRouteForFieldSync();
-      if (!route) {
-        alert("Выберите маршрут в списке «Маршрут».");
+      const route = getFieldSyncRouteRef();
+      if (!route.routeId && !confirm("Координаты всех маршрутов? Это может занять время.\n\nОК — продолжить")) {
         return;
       }
       void syncFieldDataBeforeWork({
@@ -759,7 +893,300 @@
     const fromApi = pickFirstUrl(rawPoint, keys);
     if (fromApi && !isPhotoUrlExpired(fromApi)) return fromApi;
     if (prevUrl && !isPhotoUrlExpired(prevUrl)) return prevUrl;
+    if (isBleNativeApp()) {
+      if (fromApi) return fromApi;
+      if (prevUrl) return prevUrl;
+    }
     return "";
+  }
+
+  function photoUrlPathnameKey(url) {
+    try {
+      const u = new URL(String(url));
+      return `${u.origin}${u.pathname}`.toLowerCase();
+    } catch {
+      return String(url || "")
+        .split("?")[0]
+        .toLowerCase();
+    }
+  }
+
+  function fieldPhotoStorageKey(url) {
+    return photoUrlPathnameKey(url) || String(url || "");
+  }
+
+  function photoRevisionFromServer(url, point, slot) {
+    if (!url || !point) return "";
+    const path = photoUrlPathnameKey(url);
+    const updated = point.updated_at || point.updatedAt || "";
+    const status =
+      slot === "tag"
+        ? point.ble_image_status || point.bleImageStatus || ""
+        : point.ble_location_image_status || point.bleLocationImageStatus || "";
+    return `${path}|${updated}|${status}`;
+  }
+
+  function photoEntriesFromRawPoint(point) {
+    const out = [];
+    const bleId = point.id;
+    const tagUrl = pickFirstUrl(point, ["ble_image_url", "bleImageUrl", "ble_image"]);
+    if (tagUrl) {
+      out.push({
+        bleId,
+        slot: "tag",
+        url: tagUrl,
+        pathKey: fieldPhotoStorageKey(tagUrl),
+        rev: photoRevisionFromServer(tagUrl, point, "tag"),
+      });
+    }
+    const placeUrl = pickFirstUrl(point, ["location_image_url", "locationImageUrl", "location_image"]);
+    if (placeUrl) {
+      out.push({
+        bleId,
+        slot: "place",
+        url: placeUrl,
+        pathKey: fieldPhotoStorageKey(placeUrl),
+        rev: photoRevisionFromServer(placeUrl, point, "place"),
+      });
+    }
+    return out;
+  }
+
+  function buildPhotoRevisionsFromRaw(raw) {
+    const out = {};
+    if (!Array.isArray(raw)) return out;
+    for (const p of raw) {
+      for (const e of photoEntriesFromRawPoint(p)) {
+        out[e.pathKey] = {
+          rev: e.rev,
+          url: e.url,
+          bleId: e.bleId,
+          slot: e.slot,
+        };
+      }
+    }
+    return out;
+  }
+
+  function indexPhotoRevisionsByBleSlot(revisions) {
+    const byBleSlot = {};
+    if (!revisions) return byBleSlot;
+    for (const entry of Object.values(revisions)) {
+      if (entry?.bleId == null || !entry.slot) continue;
+      byBleSlot[`${entry.bleId}:${entry.slot}`] = entry;
+    }
+    return byBleSlot;
+  }
+
+  async function loadFieldPhotoRevisions() {
+    try {
+      const db = await openFieldDb();
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readonly");
+      const rev = await idbGet(tx.objectStore(BLE_FIELD_META_STORE), BLE_FIELD_PHOTO_REVISIONS_KEY);
+      db.close();
+      return rev && typeof rev === "object" ? rev : {};
+    } catch {
+      return {};
+    }
+  }
+
+  async function commitFieldPhotoRevisions(revisions) {
+    if (!revisions || typeof revisions !== "object") return;
+    return enqueueFieldSyncIdbWrite(async () => {
+      const db = await openFieldDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(BLE_FIELD_META_STORE, "readwrite");
+        tx.objectStore(BLE_FIELD_META_STORE).put(revisions, BLE_FIELD_PHOTO_REVISIONS_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    });
+  }
+
+  async function deleteFieldPhotosByKeys(keys) {
+    const drop = [...new Set((keys || []).filter(Boolean))];
+    if (!drop.length) return;
+    for (const key of drop) {
+      for (const k of [key, photoUrlPathnameKey(key)]) {
+        const blobUrl = fieldPhotoBlobUrls.get(k);
+        if (blobUrl) {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            /* ignore */
+          }
+          fieldPhotoBlobUrls.delete(k);
+        }
+      }
+    }
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_PHOTOS_STORE, "readwrite");
+      const store = tx.objectStore(BLE_FIELD_PHOTOS_STORE);
+      for (const key of drop) store.delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  function collectPhotoUpdatesAfterRefresh(raw, prevRevisions, existingKeys) {
+    const next = buildPhotoRevisionsFromRaw(raw);
+    const prevByBleSlot = indexPhotoRevisionsByBleSlot(prevRevisions);
+    const toUpdate = [];
+    const keysToDelete = [];
+
+    if (!prevRevisions || !Object.keys(prevRevisions).length) {
+      return { next, toUpdate, keysToDelete };
+    }
+
+    for (const p of raw) {
+      for (const e of photoEntriesFromRawPoint(p)) {
+        const prevByPath = prevRevisions[e.pathKey];
+        if (prevByPath?.rev === e.rev) continue;
+
+        const prevBySlot =
+          e.bleId != null ? prevByBleSlot[`${e.bleId}:${e.slot}`] : null;
+        const hadLocally =
+          prevByPath != null ||
+          prevBySlot != null ||
+          fieldPhotoIsStored(e.url, existingKeys);
+
+        if (!hadLocally) continue;
+
+        if (prevBySlot?.pathKey && prevBySlot.pathKey !== e.pathKey) {
+          keysToDelete.push(prevBySlot.pathKey);
+        } else if (prevByPath && prevByPath.rev !== e.rev) {
+          keysToDelete.push(e.pathKey);
+        }
+
+        toUpdate.push(e);
+      }
+    }
+
+    return { next, toUpdate, keysToDelete };
+  }
+
+  async function syncChangedFieldPhotosAfterRefresh(companyId) {
+    if (fieldPackDownloadActive || fieldPhotoRefreshActive || !navigator.onLine) return;
+    const raw = bleListSnapshot?.raw;
+    if (!Array.isArray(raw) || !raw.length) return;
+    if (companyId && bleListSnapshot.companyId && Number(bleListSnapshot.companyId) !== Number(companyId)) {
+      return;
+    }
+
+    fieldPhotoRefreshActive = true;
+    let ok = 0;
+    let fail = 0;
+    try {
+      const prevRevisions = await loadFieldPhotoRevisions();
+      const existingKeys = await getFieldPhotoKeysSet();
+      const { next, toUpdate, keysToDelete } = collectPhotoUpdatesAfterRefresh(
+        raw,
+        prevRevisions,
+        existingKeys
+      );
+
+      if (!Object.keys(prevRevisions).length) {
+        await commitFieldPhotoRevisions(next);
+        return;
+      }
+
+      if (!toUpdate.length) {
+        await commitFieldPhotoRevisions(next);
+        return;
+      }
+
+      if (keysToDelete.length) {
+        await deleteFieldPhotosByKeys(keysToDelete);
+      }
+
+      const total = toUpdate.length;
+      setFieldPackStatus(`Обновление фото: 0 / ${total}…`, "busy");
+      showMapMsg(`На сервере изменилось ${total} фото — докачиваем…`, "");
+
+      let done = 0;
+      let idx = 0;
+      const workers = Math.min(fieldPackConcurrency(), total);
+
+      const worker = async () => {
+        while (idx < toUpdate.length) {
+          if (fieldPackAbort?.signal.aborted) return;
+          const i = idx++;
+          const item = toUpdate[i];
+          if (!item) continue;
+          try {
+            const blob = await fetchPhotoBlobForFieldWithRetry(item.url);
+            if (blob?.size && blob.size <= BLE_FIELD_PHOTO_MAX_BYTES) {
+              await persistFieldPhotoBlob(item.url, blob);
+              ok++;
+            } else {
+              fail++;
+            }
+          } catch (e) {
+            const msg = String(e?.message || e || "");
+            if (msg !== "aborted") {
+              fail++;
+              console.warn("[ble-map] photo refresh", item.url.slice(0, 60), msg);
+            }
+          }
+          done++;
+          setFieldPackStatus(`Обновление фото: ${done} / ${total}…`, "busy");
+        }
+      };
+
+      await Promise.all(Array.from({ length: workers }, () => worker()));
+      await commitFieldPhotoRevisions(next);
+      await refreshFieldPackChrome();
+
+      if (ok > 0) {
+        showMapMsg(
+          `Обновлено ${ok} фото${fail ? ` (${fail} ошибок)` : ""} после ↺.`,
+          fail ? "error" : ""
+        );
+        setTimeout(hideMapMsg, fail ? 5000 : 3500);
+      } else if (fail > 0) {
+        showMapMsg(`Не удалось обновить ${fail} фото. Повторите ↺ или «Скачать фото».`, "error");
+      }
+    } catch (e) {
+      console.warn("[ble-map] photo refresh sync", e?.message || e);
+    } finally {
+      fieldPhotoRefreshActive = false;
+      if (!fieldPackDownloadActive) {
+        const st = document.getElementById("mapFieldPackStatus");
+        if (st?.textContent?.startsWith("Обновление фото:")) {
+          void refreshFieldPackChrome();
+        }
+      }
+    }
+  }
+
+  async function findFieldPhotoDbKey(url) {
+    if (!url) return null;
+    const exact = String(url);
+    try {
+      const blob = await readFieldPhotoBlobFromDb(exact);
+      if (blob) return exact;
+    } catch {
+      /* ignore */
+    }
+    const pathKey = photoUrlPathnameKey(exact);
+    if (!pathKey) return null;
+    try {
+      const keys = await getFieldPhotoKeysSet();
+      for (const key of keys) {
+        if (photoUrlPathnameKey(key) === pathKey) return key;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  function rememberFieldPhotoBlobUrl(sourceUrl, dbKey, blobUrl) {
+    if (dbKey) fieldPhotoBlobUrls.set(dbKey, blobUrl);
+    if (sourceUrl) fieldPhotoBlobUrls.set(String(sourceUrl), blobUrl);
   }
 
   function mergeBleMapDataFromRaw(rawBle) {
@@ -1020,15 +1447,19 @@
     );
   }
 
+  function isMapDataBlePath(path) {
+    return !!path && String(path).includes("/map_data");
+  }
+
   function transportOrder(path) {
     if (path && path.includes("/token")) {
       return ["supabase", "worker"];
     }
     if (path && isWorkerOnlyBlePath(path)) {
-      return ["supabase", "worker"];
+      return isBleNativeApp() ? ["worker", "supabase"] : ["supabase", "worker"];
     }
-    if (path && isWorkerPreferredBlePath(path)) {
-      return ["worker", "supabase"];
+    if (path && (isWorkerPreferredBlePath(path) || isMapDataBlePath(path))) {
+      return isBleNativeApp() ? ["worker", "supabase"] : ["worker", "supabase"];
     }
     const pref = getPreferredTransportId();
     const ids = BLE_TRANSPORTS.map((t) => t.id);
@@ -1277,6 +1708,7 @@
   }
 
   function hasUnsavedEdits() {
+    if (isBleNativeApp()) return bleDirtyMarkers.size > 0;
     return bleDirtyMarkers.size > 0 || bleDirtyZones.size > 0;
   }
 
@@ -1381,11 +1813,15 @@
   function updateOfflineEditChrome() {
     const pending = countOfflinePendingEdits();
     const offline = !navigator.onLine;
+    const native = isBleNativeApp();
     document.body.classList.toggle("ble-map--offline", offline);
-    document.body.classList.toggle("ble-map--offline-pending", pending > 0);
+    document.body.classList.toggle(
+      "ble-map--offline-pending",
+      native ? pending > 0 && !bleEditMode : pending > 0
+    );
 
     const saveBtn = document.getElementById("mapSaveBtn");
-    if (saveBtn && bleEditMode) {
+    if (saveBtn && bleEditMode && !native) {
       if (offline && hasUnsavedEdits()) {
         saveBtn.textContent = "Сохранить локально";
       } else if (!offline && pending > 0) {
@@ -1395,10 +1831,32 @@
       }
     }
 
+    const sendBtn = document.getElementById("mapSendPendingBtn");
+    if (sendBtn) {
+      if (native) {
+        sendBtn.hidden = bleEditMode || pending === 0;
+        sendBtn.disabled = offline || pending === 0;
+        sendBtn.textContent =
+          pending === 1 ? "Отправить (1)" : pending > 0 ? `Отправить (${pending})` : "Отправить";
+        const long = sendBtn.querySelector(".map-toolbar-text--long");
+        const short = sendBtn.querySelector(".map-toolbar-text--short");
+        if (long) long.textContent = pending > 0 ? sendBtn.textContent : "Отправить";
+        if (short) short.textContent = pending > 0 ? String(pending) : "↑";
+      } else {
+        sendBtn.hidden = true;
+      }
+    }
+
     if (offline || pending > 0) {
       const parts = [];
       if (offline) parts.push("Офлайн");
-      if (pending) parts.push(`${pending} ${pending === 1 ? "правка" : "правок"} ждёт отправки`);
+      if (pending) {
+        if (native && bleEditMode) {
+          /* статус отправки — только вне режима правки */
+        } else {
+          parts.push(`${pending} ${pending === 1 ? "правка" : "правок"} ждёт отправки`);
+        }
+      }
       setOfflineSyncStatus(parts.join(" · "), offline ? "offline" : "pending");
     } else {
       setOfflineSyncStatus("");
@@ -1550,6 +2008,7 @@
   }
 
   function isZoneEditAllowed() {
+    if (isBleNativeApp()) return false;
     return bleEditMode;
   }
 
@@ -2825,8 +3284,16 @@
   function updateEditBarState() {
     const saveBtn = document.getElementById("mapSaveBtn");
     const pending = countOfflinePendingEdits();
-    const canSave = hasUnsavedEdits() || (pending > 0 && navigator.onLine);
-    if (saveBtn) saveBtn.disabled = !canSave;
+    const native = isBleNativeApp();
+    if (saveBtn) {
+      if (native) {
+        saveBtn.textContent = "Запомнить";
+        saveBtn.disabled = !bleEditMode || !hasUnsavedEdits();
+      } else {
+        const canSave = hasUnsavedEdits() || (pending > 0 && navigator.onLine);
+        saveBtn.disabled = !canSave;
+      }
+    }
     const toggle = document.getElementById("mapEditToggle");
     if (toggle) toggle.classList.toggle("active", bleEditMode);
     const toolsRow = document.getElementById("mapEditToolsRow");
@@ -2843,11 +3310,25 @@
   }
 
   function cancelAllEdits() {
-    bleDirtyMarkers.forEach(({ point, origLat, origLng }) => {
-      point.lat = origLat;
-      point.lng = origLng;
-      removeOfflineMarkerEdit(point.id);
-    });
+    if (isBleNativeApp()) {
+      const q = loadOfflineMarkerQueue();
+      bleDirtyMarkers.forEach(({ point, origLat, origLng }) => {
+        const queued = q.edits.find((e) => e.id === point.id);
+        if (queued?.lat != null && queued?.lng != null) {
+          point.lat = queued.lat;
+          point.lng = queued.lng;
+        } else {
+          point.lat = origLat;
+          point.lng = origLng;
+        }
+      });
+    } else {
+      bleDirtyMarkers.forEach(({ point, origLat, origLng }) => {
+        point.lat = origLat;
+        point.lng = origLng;
+        removeOfflineMarkerEdit(point.id);
+      });
+    }
     bleDirtyMarkers.clear();
     /* Удаляем временные (клонированные) зоны с temp-ID перед откатом */
     bleDirtyZones.forEach((dirty, zid) => {
@@ -3014,6 +3495,54 @@
     return saved;
   }
 
+  async function rememberEdits() {
+    if (!isBleNativeApp() || !bleEditMode) return;
+    const btn = document.getElementById("mapSaveBtn");
+    if (btn) btn.disabled = true;
+    try {
+      if (hasUnsavedEdits()) {
+        mergeDirtyMarkersIntoOfflineQueue();
+        bleDirtyMarkers.clear();
+      }
+      const pending = countOfflinePendingEdits();
+      setEditMode(false, { skipConfirm: true });
+      if (pending > 0) {
+        showMapMsg(
+          `Запомнено на устройстве: ${pending} ${pending === 1 ? "метка" : "меток"}. Отправка — кнопкой «Отправить».`,
+          ""
+        );
+        setTimeout(hideMapMsg, 4500);
+      }
+      redrawMapLayers();
+    } finally {
+      updateEditBarState();
+    }
+  }
+
+  async function sendPendingMarkerEdits() {
+    if (!isBleNativeApp()) return;
+    const btn = document.getElementById("mapSendPendingBtn");
+    if (btn) btn.disabled = true;
+    try {
+      if (!countOfflinePendingEdits()) return;
+      if (!navigator.onLine) {
+        alert("Нет сети. Подключитесь к Wi‑Fi/VPN и нажмите «Отправить».");
+        return;
+      }
+      const n = await flushOfflineMarkerEditQueue();
+      if (!n) showMapMsg("Нечего отправлять.", "");
+    } catch (e) {
+      showMapMsg(
+        "Ошибка отправки: " +
+          (e?.message || e) +
+          (countOfflinePendingEdits() ? " Правки остались на устройстве." : ""),
+        "error"
+      );
+    } finally {
+      updateEditBarState();
+    }
+  }
+
   async function saveAllEdits() {
     const btn = document.getElementById("mapSaveBtn");
     if (btn) {
@@ -3072,6 +3601,11 @@
     }
   }
 
+  async function onSaveEditClick() {
+    if (isBleNativeApp()) await rememberEdits();
+    else await saveAllEdits();
+  }
+
   function redrawMapLayers(opts = {}) {
     const drawMarkers = opts.markers !== false;
     const drawZonesFlag = opts.zones !== false;
@@ -3093,12 +3627,20 @@
     }
     if (on) {
       const mobile = isCoarseMobile();
-      const offlineHint = !navigator.onLine
-        ? "\n\nСейчас без сети: метки можно двигать, правки сохранятся на телефоне и уйдут на сервер, когда появится интернет."
-        : "";
-      const confirmText = mobile
-        ? `Режим редактирования меток VSM.\n\n• Удержите метку 1 сек., затем перетащите${offlineHint}\n\nПродолжить?`
-        : `Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: оранжевые точки — вершины; Shift + перетаскивание — зона целиком\n• «Сохранить» — записать на сервер (или локально без сети)${offlineHint}\n\nПродолжить?`;
+      const native = isBleNativeApp();
+      let confirmText;
+      if (native) {
+        confirmText = mobile
+          ? "Режим редактирования меток.\n\nУдержите метку 1 сек., перетащите.\n«Запомнить» — сохранить на устройстве.\n«Отправить» — на сервер (вне режима правки).\n\nПродолжить?"
+          : "Режим редактирования положения меток.\n\n• Удержите метку 1 сек., затем перетащите\n• «Запомнить» — сохранить на устройстве и выйти\n• «Отправить» — отправить на сервер VSM (кнопка вне режима правки)\n\nПродолжить?";
+      } else {
+        const offlineHint = !navigator.onLine
+          ? "\n\nСейчас без сети: метки можно двигать, правки сохранятся на телефоне и уйдут на сервер, когда появится интернет."
+          : "";
+        confirmText = mobile
+          ? `Режим редактирования меток VSM.\n\n• Удержите метку 1 сек., затем перетащите${offlineHint}\n\nПродолжить?`
+          : `Режим редактирования меняет данные на сервере VSM.\n\n• Метки: удержите 1 сек., затем перетащите\n• Зоны: оранжевые точки — вершины; Shift + перетаскивание — зона целиком\n• «Сохранить» — записать на сервер (или локально без сети)${offlineHint}\n\nПродолжить?`;
+      }
       if (!opts.skipConfirm && !window.confirm(confirmText)) {
         return;
       }
@@ -3114,13 +3656,17 @@
       enterEmbeddedEditLayout();
       syncZoneEditUiClasses();
       updateDrawHint();
-      bleEditMapMsg = isCoarseMobile()
-        ? navigator.onLine
-          ? "Удержите метку 1 сек., перетащите. «Сохранить» — на сервер."
-          : "Офлайн: удержите метку 1 сек., перетащите. Правки сохранятся на устройстве."
-        : navigator.onLine
-          ? "Метки: удержите 1 сек. Зоны: вершины; Shift — перетащить. «Сохранить» — на сервер."
-          : "Офлайн: метки можно двигать; «Сохранить локально» — в очередь на отправку.";
+      bleEditMapMsg = isBleNativeApp()
+        ? isCoarseMobile()
+          ? "Удержите метку 1 сек., перетащите. «Запомнить» — на устройство."
+          : "Удержите метку 1 сек., перетащите. «Запомнить» — на устройство, «Отправить» — на сервер."
+        : isCoarseMobile()
+          ? navigator.onLine
+            ? "Удержите метку 1 сек., перетащите. «Сохранить» — на сервер."
+            : "Офлайн: удержите метку 1 сек., перетащите. Правки сохранятся на устройстве."
+          : navigator.onLine
+            ? "Метки: удержите 1 сек. Зоны: вершины; Shift — перетащить. «Сохранить» — на сервер."
+            : "Офлайн: метки можно двигать; «Сохранить локально» — в очередь на отправку.";
       hideMapMsg();
     } else {
       if (bleGenplanCalibMode) finishGenplanCalibMode({ save: false });
@@ -3440,7 +3986,7 @@
     const toolsField = document.getElementById("mapToolsFieldDock");
     if (layerActions) layerActions.hidden = bleEditMode;
     if (layerDock) layerDock.hidden = !bleEditMode;
-    if (toolsField) toolsField.hidden = !bleEditMode;
+    if (toolsField) toolsField.hidden = isBleNativeApp() ? true : !bleEditMode;
     syncGenplanCalibMenuVisibility();
   }
 
@@ -3463,26 +4009,47 @@
   }
 
   function tileLayerZoomOpts(mobile, nativeZoom) {
+    const native = isBleNativeApp();
     return {
       detectRetina: false,
-      updateWhenIdle: mobile,
-      updateWhenZooming: true,
-      keepBuffer: 4,
+      updateWhenIdle: mobile || native,
+      updateWhenZooming: !native,
+      keepBuffer: native ? 2 : 4,
       minZoom: BLE_MAP_MIN_ZOOM,
       maxZoom: BLE_MAP_EDIT_MAX_ZOOM,
       maxNativeZoom: nativeZoom,
     };
   }
 
+  function useBundledSatelliteTiles() {
+    return isBleNativeApp();
+  }
+
+  function satelliteTileUrlTemplate() {
+    return useBundledSatelliteTiles() ? BLE_SATELLITE_BUNDLED_URL : BLE_SATELLITE_ONLINE_URL;
+  }
+
+  function satelliteTileLayerOpts(mobile, extra = {}) {
+    const bundled = useBundledSatelliteTiles();
+    return {
+      attribution: bundled ? "Esri (в приложении)" : "Esri",
+      ...tileLayerZoomOpts(mobile, BLE_SATELLITE_NATIVE_ZOOM),
+      ...(bundled
+        ? {
+            crossOrigin: false,
+            errorTileUrl:
+              "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          }
+        : {}),
+      ...extra,
+    };
+  }
+
   function createBleSatelliteUnderlay(mobile) {
-    return L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      {
-        attribution: "Esri",
-        opacity: 0.38,
-        ...tileLayerZoomOpts(mobile, BLE_SATELLITE_NATIVE_ZOOM),
-      }
-    );
+    return L.tileLayer(satelliteTileUrlTemplate(), {
+      opacity: 0.38,
+      ...satelliteTileLayerOpts(mobile),
+    });
   }
 
   function applyBleMapZoomLimits(forEdit) {
@@ -3495,13 +4062,12 @@
   }
 
   function buildBleTileLayers(mobile) {
-    const satellite = L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { attribution: "Esri", ...tileLayerZoomOpts(mobile, BLE_SATELLITE_NATIVE_ZOOM) }
-    );
-    const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      ...tileLayerZoomOpts(mobile, BLE_STREET_NATIVE_ZOOM),
-    });
+    const satellite = L.tileLayer(satelliteTileUrlTemplate(), satelliteTileLayerOpts(mobile));
+    const street = useBundledSatelliteTiles()
+      ? satellite
+      : L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          ...tileLayerZoomOpts(mobile, BLE_STREET_NATIVE_ZOOM),
+        });
     const layers = { satellite, street, hybrid: satellite, satelliteUnderlay: null };
     if (bleGenplanMeta) {
       layers.genplan = buildGenplanOverlay();
@@ -3514,6 +4080,7 @@
   }
 
   function normalizeBaseLayerId(layerId) {
+    if (isBleNativeApp() && (layerId === "street" || layerId === "hybrid")) return "satellite";
     if (layerId === "genplan" && !isGenplanLayerAvailable()) return "hybrid";
     if (BLE_BASE_LAYERS.includes(layerId)) return layerId;
     return "street";
@@ -3540,11 +4107,11 @@
   function readStoredBaseLayer() {
     try {
       const stored = localStorage.getItem(BLE_BASE_LAYER_KEY);
-      return normalizeBaseLayerId(stored);
+      if (stored) return normalizeBaseLayerId(stored);
     } catch {
       /* ignore */
     }
-    return "street";
+    return isBleNativeApp() ? "satellite" : "street";
   }
 
   function usesFixedLayerMenu() {
@@ -3955,12 +4522,12 @@
       return "На сервере VSM нет фото этой метки (статус no_photo). Обход возможен по координатам; снимок нужно загрузить в VSM с объекта.";
     }
     if (tagSt === "stale_photo" || placeSt === "stale_photo") {
-      return "Фото на сервере устарело. Нажмите «Обновить» в панели (VPN), затем снова «Подготовка к полю».";
+      return "Фото на сервере устарело. Нажмите «Обновить» (↺), затем «Скачать фото».";
     }
     if (navigator.onLine) {
-      return "Нет ссылки на фото в API. «Обновить» в панели (VPN) → «Подготовка к полю» для маршрута.";
+      return "Нет ссылки на фото в API. «Обновить» (↺) → «Скачать фото» для маршрута.";
     }
-    return "Фото не в памяти телефона. По Wi‑Fi/VPN: «Подготовка к полю» для выбранного маршрута.";
+    return `Фото не в ${fieldMemoryLabel()}. По Wi‑Fi/VPN: «Скачать фото» для выбранного маршрута.`;
   }
 
   function formatRouteSyncDoneMessage(route, slimRaw, raw, photosOk, photoUrls, photosFail) {
@@ -4367,9 +4934,13 @@ if(cards.length)selectIdx(0);
     const img = document.getElementById("photoViewerImg");
     const overlay = document.getElementById("photoViewerOverlay");
     if (!img || !overlay) return;
-    img.src = photoSrcForDisplay(url) || url;
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
+    img.removeAttribute("src");
+    void (async () => {
+      const src = await resolvePhotoSrcForDisplay(url);
+      if (img.isConnected) img.src = src;
+    })();
   };
 
   function closePhotoViewer() {
@@ -4380,7 +4951,23 @@ if(cards.length)selectIdx(0);
   function needsPhotoRefresh(pt) {
     const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
     if (!urls.length) return true;
+    if (isBleNativeApp()) {
+      return urls.some((url) => isPhotoUrlExpired(url) && !fieldPhotoBlobUrls.has(url));
+    }
     return urls.some(isPhotoUrlExpired);
+  }
+
+  async function needsPhotoRefreshAsync(pt) {
+    const urls = [pt.photoTag, pt.photoPlace].filter(Boolean);
+    if (!urls.length) return true;
+    if (!isBleNativeApp()) return urls.some(isPhotoUrlExpired);
+    for (const url of urls) {
+      if (!isPhotoUrlExpired(url)) continue;
+      if (fieldPhotoBlobUrls.has(url)) continue;
+      const dbKey = await findFieldPhotoDbKey(url);
+      if (!dbKey) return true;
+    }
+    return false;
   }
 
   function isYandexPhotoUrl(url) {
@@ -4415,6 +5002,17 @@ if(cards.length)selectIdx(0);
     return url;
   }
 
+  async function resolvePhotoSrcForDisplay(url) {
+    if (!url) return "";
+    const cached = photoSrcForDisplay(url);
+    if (fieldPhotoBlobUrls.has(url)) return cached;
+    const img = document.createElement("img");
+    if (await loadFieldPhotoIntoImg(img, url)) {
+      return img.src || photoSrcForDisplay(url) || url;
+    }
+    return url;
+  }
+
   async function fetchBleListLive(companyId) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return null;
@@ -4429,6 +5027,29 @@ if(cards.length)selectIdx(0);
       console.warn("[ble-map] live BLE list", e?.message || e);
     }
     return null;
+  }
+
+  async function fetchBleListLiveWithTimeout(companyId, timeoutMs) {
+    const ms = timeoutMs || (isBleNativeApp() ? 40000 : BLE_LIST_FETCH_TIMEOUT_MS);
+    let timer = null;
+    try {
+      return await Promise.race([
+        fetchBleListLive(companyId),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("list_timeout")), ms);
+        }),
+      ]);
+    } catch (e) {
+      console.warn("[ble-map] live BLE list", e?.message || e);
+      return null;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function rawHasFreshPhotoUrls(raw, opts = {}) {
+    if (isBleNativeApp() && mapDataHasPhotoUrls()) return true;
+    return collectPhotoUrlsFromRaw(raw, { tagOnly: !!opts.tagOnly, allowExpired: false }).length > 0;
   }
 
   function revokeFieldPhotoBlobUrls() {
@@ -4603,20 +5224,105 @@ if(cards.length)selectIdx(0);
     db.close();
   }
 
+  function parseMapDataZones(mapData) {
+    if (!mapData?.zones || !mapData?.points) return [];
+    const pointsByZone = {};
+    mapData.points.forEach((p) => {
+      if (!pointsByZone[p.zoneId]) pointsByZone[p.zoneId] = [];
+      pointsByZone[p.zoneId].push([p.latitude, p.longitude]);
+    });
+    return mapData.zones
+      .map((z) => ({
+        id: z.id,
+        name: z.name || "",
+        description: z.description || "",
+        color: z.color || "#0088cc",
+        pts: (pointsByZone[z.id] || []).map((p) => [...p]),
+      }))
+      .filter((z) => z.pts.length > 2);
+  }
+
+  function applyBleZoneDataFromParsed(zones) {
+    bleZoneData = Array.isArray(zones) ? zones : [];
+    if (bleMap) drawZones(bleMap);
+    if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
+  }
+
+  async function loadFieldPackZones() {
+    try {
+      const db = await openFieldDb();
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readonly");
+      const zones = await idbGet(tx.objectStore(BLE_FIELD_META_STORE), BLE_FIELD_ZONES_KEY);
+      db.close();
+      return Array.isArray(zones) && zones.length ? zones : null;
+    } catch (e) {
+      console.warn("[ble-map] field zones load", e?.message || e);
+      return null;
+    }
+  }
+
+  async function commitFieldPackZones(zones) {
+    if (!Array.isArray(zones) || !zones.length) return;
+    const db = await openFieldDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BLE_FIELD_META_STORE, "readwrite");
+      tx.objectStore(BLE_FIELD_META_STORE).put(zones, BLE_FIELD_ZONES_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  async function hydrateBleMapZones(companyId, opts = {}) {
+    const cid = companyId ?? bleCompanyId;
+    if (!cid) return false;
+    const tryApi = opts.tryApi !== false && navigator.onLine;
+    if (tryApi) {
+      try {
+        const mapData = await bleApiFetch(`/api/v1/map/${cid}/map_data`);
+        const zones = parseMapDataZones(mapData);
+        if (zones.length) {
+          applyBleZoneDataFromParsed(zones);
+          if (isBleNativeApp()) {
+            try {
+              await commitFieldPackZones(zones);
+            } catch (e) {
+              console.warn("[ble-map] field zones save", e?.message || e);
+            }
+          }
+          return true;
+        }
+      } catch (e) {
+        if (opts.strict) throw e;
+        console.warn("[ble-map] map_data zones", e?.message || e);
+      }
+    }
+    const cached = await loadFieldPackZones();
+    if (cached?.length) {
+      applyBleZoneDataFromParsed(cached);
+      return true;
+    }
+    return false;
+  }
+
   async function resolveRawForFieldPackDownload(cid, opts = {}) {
     await yieldToMain();
     const forceFresh = !!opts.forceFresh;
+    const needsPhotos = !!opts.needsPhotos;
+    const snap = bleListSnapshot;
 
-    if (!forceFresh) {
-      const snap = bleListSnapshot;
-      if (snap?.raw?.length && Number(snap.companyId) === Number(cid)) {
-        const urls = collectPhotoUrlsFromRaw(snap.raw, { tagOnly: false });
-        const liveRecent = snap.live && Date.now() - snap.at < 25 * 60 * 1000;
-        if (urls.length >= 80 && (liveRecent || urls.length >= snap.raw.length * 0.15)) {
-          setFieldPackStatus(`Метки уже на карте (${snap.raw.length})…`, "busy");
-          await yieldToMain();
-          return snap.raw;
-        }
+    if (!forceFresh && snap?.raw?.length && Number(snap.companyId) === Number(cid)) {
+      const liveRecent = snap.live && Date.now() - snap.at < 30 * 60 * 1000;
+      const okForPhotos = !needsPhotos || rawHasFreshPhotoUrls(snap.raw);
+      if (liveRecent && okForPhotos) {
+        setFieldPackStatus(`Список меток (${snap.raw.length})…`, "busy");
+        await yieldToMain();
+        return snap.raw;
+      }
+      if (okForPhotos && rawHasFreshPhotoUrls(snap.raw)) {
+        setFieldPackStatus(`Список меток из памяти (${snap.raw.length})…`, "busy");
+        await yieldToMain();
+        return snap.raw;
       }
     }
 
@@ -4626,10 +5332,17 @@ if(cards.length)selectIdx(0);
 
     setFieldPackStatus("Загрузка списка API…", "busy");
     await yieldToMain();
-    const live = await fetchBleListLive(cid);
+    const live = await fetchBleListLiveWithTimeout(cid);
     if (live?.length) {
-      await yieldToMain();
-      return live;
+      if (!needsPhotos || rawHasFreshPhotoUrls(live)) {
+        await yieldToMain();
+        return live;
+      }
+    }
+
+    if (needsPhotos) {
+      setFieldPackStatus("Нужны свежие ссылки на фото…", "busy");
+      return null;
     }
 
     setFieldPackStatus("Резервный кэш меток…", "busy");
@@ -4663,6 +5376,54 @@ if(cards.length)selectIdx(0);
     fieldPackMetaCache = meta;
   }
 
+  function mapDataHasPhotoUrls() {
+    return bleMapData.some((p) => p.photoTag || p.photoPlace);
+  }
+
+  function collectPhotoUrlsForFieldSync(raw, route, opts = {}) {
+    const tagOnly = !!opts.tagOnly;
+    const urls = new Set();
+    const prevFilter = bleMapRouteFilter;
+    if (route?.routeId) bleMapRouteFilter = String(route.routeId);
+    for (const pt of bleMapData) {
+      if (!pointPassesRouteFilter(pt)) continue;
+      if (pt.photoTag) urls.add(pt.photoTag);
+      if (!tagOnly && pt.photoPlace) urls.add(pt.photoPlace);
+    }
+    bleMapRouteFilter = prevFilter;
+    const allowExpired = isBleNativeApp() || !!opts.allowExpired;
+    for (const u of collectPhotoUrlsFromRaw(raw, { tagOnly, allowExpired })) {
+      urls.add(u);
+    }
+    return [...urls];
+  }
+
+  async function persistFieldPhotoBlob(url, blob) {
+    if (!url || !blob?.size) return false;
+    if (await findFieldPhotoDbKey(url)) return true;
+    try {
+      const key = fieldPhotoStorageKey(url);
+      await appendFieldPackPhotosBatchQueued([[key, blob]]);
+      rememberFieldPhotoBlobUrl(url, key, URL.createObjectURL(blob));
+      return true;
+    } catch (e) {
+      console.warn("[ble-map] persist field photo", e?.message || e);
+      return false;
+    }
+  }
+
+  function scheduleFieldPhotoPersistFromNetwork(url) {
+    if (!url) return;
+    void (async () => {
+      if (await findFieldPhotoDbKey(url)) return;
+      try {
+        const blob = await fetchPhotoBlobForField(url);
+        if (blob?.size) await persistFieldPhotoBlob(url, blob);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }
   function collectPhotoUrlsFromRaw(raw, opts = {}) {
     const tagOnly = opts.tagOnly ?? false;
     const allowExpired = !!opts.allowExpired;
@@ -4680,9 +5441,10 @@ if(cards.length)selectIdx(0);
   }
 
   async function compressPhotoBlobForField(blob) {
+    if (isBleNativeApp()) return blob;
     if (!blob?.type?.startsWith("image/") || blob.size < 100 * 1024) return blob;
-    const maxSide = isCoarseMobile() ? 960 : 1280;
-    try {
+    const maxSide = isBleNativeApp() ? 1280 : isCoarseMobile() ? 960 : 1280;
+    const compress = async () => {
       const bmp = await createImageBitmap(blob);
       const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height, 1));
       const w = Math.max(1, Math.round(bmp.width * scale));
@@ -4699,6 +5461,9 @@ if(cards.length)selectIdx(0);
       bmp.close();
       const out = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.76));
       return out && out.size < blob.size ? out : blob;
+    };
+    try {
+      return await withAsyncTimeout(compress(), isBleNativeApp() ? 12000 : 20000, "compress_timeout");
     } catch {
       return blob;
     }
@@ -4722,14 +5487,23 @@ if(cards.length)selectIdx(0);
 
   async function loadFieldPhotoIntoImg(img, url) {
     if (!img || !url) return false;
-    if (fieldPhotoBlobUrls.has(url)) {
-      img.src = fieldPhotoBlobUrls.get(url);
+    const cached = fieldPhotoBlobUrls.get(url);
+    if (cached) {
+      img.src = cached;
       return true;
     }
-    const blob = await readFieldPhotoBlobFromDb(url);
+    const dbKey = await findFieldPhotoDbKey(url);
+    if (!dbKey) return false;
+    const cachedByKey = fieldPhotoBlobUrls.get(dbKey);
+    if (cachedByKey) {
+      img.src = cachedByKey;
+      rememberFieldPhotoBlobUrl(url, dbKey, cachedByKey);
+      return true;
+    }
+    const blob = await readFieldPhotoBlobFromDb(dbKey);
     if (!blob) return false;
     const blobUrl = URL.createObjectURL(blob);
-    fieldPhotoBlobUrls.set(url, blobUrl);
+    rememberFieldPhotoBlobUrl(url, dbKey, blobUrl);
     img.src = blobUrl;
     return true;
   }
@@ -4749,13 +5523,18 @@ if(cards.length)selectIdx(0);
     const viaEdge = fetchUrl.includes("ble-map-proxy") || fetchUrl.includes("functions/v1");
     const headers = viaEdge ? mergeSupabaseHeaders({}, getBleToken()) : {};
     const ctrl = new AbortController();
-    const timeoutMs = useProxy
-      ? isCoarseMobile()
-        ? 90000
-        : 70000
-      : isCoarseMobile()
-        ? 45000
-        : 35000;
+    const native = isBleNativeApp();
+    const timeoutMs = viaEdge
+      ? native
+        ? 15000
+        : isCoarseMobile()
+          ? 90000
+          : 70000
+      : native
+        ? 10000
+        : isCoarseMobile()
+          ? 45000
+          : 35000;
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     if (fieldPackAbort?.signal?.aborted) {
       ctrl.abort();
@@ -4767,6 +5546,7 @@ if(cards.length)selectIdx(0);
         headers,
         signal: ctrl.signal,
         referrerPolicy: "no-referrer",
+        cache: "no-store",
       });
       if (!res.ok) throw new Error(`photo_http_${res.status}`);
       return res.blob();
@@ -4776,6 +5556,22 @@ if(cards.length)selectIdx(0);
   }
 
   async function fetchPhotoBlobForField(url) {
+    if (isBleNativeApp()) {
+      try {
+        return await fetchPhotoBlobNativeDirect(url);
+      } catch (e1) {
+        const msg = String(e1?.message || e1 || "");
+        if (msg === "aborted") throw e1;
+        if (isYandexPhotoUrl(url)) {
+          try {
+            return await fetchPhotoBlobOnce(url, true);
+          } catch (e2) {
+            if (String(e2?.message || e2 || "") === "aborted") throw e2;
+          }
+        }
+        throw e1;
+      }
+    }
     if (!isYandexPhotoUrl(url)) return fetchPhotoBlobOnce(url, false);
     try {
       return await fetchPhotoBlobOnce(url, false);
@@ -4787,28 +5583,32 @@ if(cards.length)selectIdx(0);
   }
 
   async function fetchPhotoBlobForFieldWithRetry(url) {
-    const maxAttempts = isCoarseMobile() ? 2 : 3;
+    const native = isBleNativeApp();
+    const maxAttempts = native ? 1 : isCoarseMobile() ? 2 : 3;
     let lastErr = null;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (fieldPackAbort?.signal.aborted) throw new Error("aborted");
-      if (fieldSyncPhotosSinceAuth >= 12) {
+      if (!native && fieldSyncPhotosSinceAuth >= 12) {
         await ensureBleTokenForField();
         fieldSyncPhotosSinceAuth = 0;
       }
       try {
         const blob = await fetchPhotoBlobForField(url);
-        fieldSyncPhotosSinceAuth++;
+        if (!native) fieldSyncPhotosSinceAuth++;
         return blob;
       } catch (e) {
         lastErr = e;
         const msg = String(e?.message || e || "");
         if (msg === "aborted") throw e;
-        if (/photo_http_401|photo_http_403|auth/i.test(msg)) {
+        if (!native && /photo_http_401|photo_http_403|auth/i.test(msg)) {
           await ensureBleTokenForField();
           fieldSyncPhotosSinceAuth = 0;
         }
+        if (native && /photo_http_401|photo_http_403|auth|timeout|compress_timeout|photo_deadline/i.test(msg)) {
+          await ensureBleTokenForField();
+        }
         if (attempt < maxAttempts - 1) {
-          await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+          await new Promise((r) => setTimeout(r, native ? 350 : 700 * (attempt + 1)));
         }
       }
     }
@@ -4832,22 +5632,23 @@ if(cards.length)selectIdx(0);
   async function refreshFieldPackChrome() {
     const meta = await loadFieldPackMeta();
     const btn = document.getElementById("mapFieldPackBtn");
-    const syncHint = "Shift+клик — zip и другие опции";
+    const syncHint = "Shift+клик — zip и принудительное обновление фото";
     if (!meta?.markerCount && !meta?.raw?.length) {
       const syncState = loadFieldSyncState();
       if (syncState?.photosOk) {
-        setFieldPackStatus("Синхронизация прервана — нажмите «Подготовка к полю»", "busy");
+        setFieldPackStatus("Загрузка прервана — нажмите «Скачать фото»", "busy");
       } else {
         setFieldPackStatus("");
       }
       if (btn) {
-        btn.title = `Синхронизация выбранного маршрута перед выездом (Wi‑Fi/VPN). ${syncHint}`;
+        btn.title = `Скачать фото маршрута или всех маршрутов (Wi‑Fi/VPN). ${syncHint}`;
       }
       return;
     }
     const markerN = meta.markerCount || meta.raw?.length || 0;
     const photoTotal = meta.photoCount || 0;
-    const photoOk = meta.photosOk || 0;
+    const inDb = await countFieldPhotosInDb();
+    const photoOk = Math.max(meta.photosOk || 0, inDb);
     const routeShort = meta.routeTitle
       ? meta.routeTitle.length > 28
         ? `${meta.routeTitle.slice(0, 26)}…`
@@ -4896,18 +5697,15 @@ if(cards.length)selectIdx(0);
     const btn = document.getElementById("mapFieldPackBtn");
     const tagOnly = !!opts.tagOnly;
     const markersOnly = !!opts.markersOnly;
+    const photosOnly = !!opts.photosOnly;
     const fullReset = !!opts.fullReset;
     const route =
       opts.routeId != null
         ? {
             routeId: String(opts.routeId),
-            routeTitle: opts.routeTitle || `Маршрут ${opts.routeId}`,
+            routeTitle: opts.routeTitle || (opts.routeId ? `Маршрут ${opts.routeId}` : "Все маршруты"),
           }
-        : getActiveRouteForFieldSync();
-    if (!route?.routeId) {
-      alert("Выберите маршрут в списке «Маршрут» (не «Все маршруты»).");
-      return;
-    }
+        : getFieldSyncRouteRef();
     fieldPackDownloadActive = true;
     fieldPackAbort = new AbortController();
     fieldSyncPhotosSinceAuth = 0;
@@ -4926,10 +5724,15 @@ if(cards.length)selectIdx(0);
       }
       const cid = bleCompanyId || (await resolveCompanyId());
       await yieldToMain();
-      const rawAll = await resolveRawForFieldPackDownload(cid, { forceFresh: true });
+      const rawAll = await resolveRawForFieldPackDownload(cid, {
+        forceFresh: false,
+        needsPhotos: !markersOnly,
+      });
       if (!rawAll?.length) {
         alert(
-          "Не удалось получить список меток. Откройте карту по Wi‑Fi/VPN, дождитесь загрузки меток и повторите."
+          isBleNativeApp() && !markersOnly
+            ? "Не удалось получить свежий список меток с фото.\n\n1. Включите VPN\n2. Нажмите «Обновить» (↺) и дождитесь загрузки меток\n3. Повторите «Скачать фото»"
+            : "Не удалось получить список меток. Откройте карту по Wi‑Fi/VPN, дождитесь загрузки меток и повторите."
         );
         return;
       }
@@ -4943,48 +5746,85 @@ if(cards.length)selectIdx(0);
       const slimRaw = slimBleRawForFieldPack(raw);
       const photoUrls = markersOnly
         ? []
-        : collectPhotoUrlsFromRaw(raw, { tagOnly, allowExpired: true });
+        : collectPhotoUrlsForFieldSync(raw, route, { tagOnly });
+      if (!markersOnly && !photoUrls.length) {
+        alert(
+          isBleNativeApp()
+            ? "Не нашли ссылки на фото.\n\n1. VPN → «Обновить» (↺), дождитесь меток\n2. Откройте пару меток — фото должны открыться\n3. Повторите «Скачать фото»"
+            : "На выбранном маршруте нет фото в ответе API."
+        );
+        return;
+      }
+      const allRoutesSync = isAllRoutesFieldSync(route);
 
       if (fullReset) {
-        revokeFieldPhotoBlobUrls();
-        await resetFieldPackStorage();
-        clearFieldSyncState();
+        if (photosOnly && !allRoutesSync) {
+          revokeFieldPhotoBlobUrls();
+          await pruneFieldPhotosMatchingUrls(photoUrls);
+          clearFieldSyncState();
+        } else {
+          revokeFieldPhotoBlobUrls();
+          await resetFieldPackStorage();
+          clearFieldSyncState();
+        }
       }
 
       const prevMeta = await loadFieldPackMeta();
       const routeChanged =
-        prevMeta?.routeId && String(prevMeta.routeId) !== String(route.routeId);
-      if (routeChanged && !fullReset) {
+        String(prevMeta?.routeId || "") !== String(route.routeId || "");
+      if (routeChanged && !fullReset && !photosOnly) {
         await pruneFieldPhotosNotInUrls(photoUrls);
       }
 
       const existingKeys = opts.resume !== false ? await getFieldPhotoKeysSet() : new Set();
-      const toFetch = photoUrls.filter((u) => !existingKeys.has(u));
-      let photosOk = photoUrls.filter((u) => existingKeys.has(u)).length;
+      const toFetch = photoUrls.filter((u) => !fieldPhotoIsStored(u, existingKeys));
+      let photosOk = countStoredPhotosForUrls(photoUrls, existingKeys);
       let photosFail = 0;
       let bytesTotal = 0;
+
+      const packedMarkers = photosOnly ? await loadFieldPackMarkers() : null;
+      const markerCountForMeta = photosOnly
+        ? packedMarkers?.length ||
+          bleListSnapshot?.raw?.length ||
+          (allRoutesSync ? slimRaw.length : slimRaw.length)
+        : slimRaw.length;
 
       const partialMeta = {
         version: BLE_FIELD_PACK_VERSION,
         companyId: cid,
         savedAt: new Date().toISOString(),
-        markerCount: slimRaw.length,
+        markerCount: markerCountForMeta,
         photoCount: photoUrls.length,
         photosOk,
         photosFail: 0,
         bytesTotal: 0,
         tagOnly,
         packSource: "sync",
-        routeId: route.routeId,
+        routeId: route.routeId || null,
         routeTitle: route.routeTitle,
       };
-      setFieldPackStatus(`Метки: ${slimRaw.length} (${route.routeTitle})…`, "busy");
+      setFieldPackStatus(
+        photosOnly
+          ? allRoutesSync
+            ? "Фото всех маршрутов…"
+            : `Фото маршрута «${route.routeTitle}»…`
+          : `Метки: ${slimRaw.length} (${route.routeTitle})…`,
+        "busy"
+      );
       await yieldToMain();
-      await commitFieldPackMarkersQueued(slimRaw);
+      if (!photosOnly) {
+        await commitFieldPackMarkersQueued(slimRaw);
+      } else if (allRoutesSync && (!packedMarkers?.length || photosOnly)) {
+        await commitFieldPackMarkersQueued(slimRaw);
+      }
       await commitFieldPackMetaQueued(partialMeta);
-      if (!bleMap) initBleMap([53.038, 39.011], 15);
-      bleCompanyId = cid;
-      await applyBleListToMap(slimRaw, "");
+      if (!photosOnly) {
+        if (!bleMap) initBleMap([53.038, 39.011], 15);
+        bleCompanyId = cid;
+        await applyBleListToMap(slimRaw, "");
+      } else {
+        bleCompanyId = cid;
+      }
       setFieldPackReadyMarker(route, cid);
       try {
         sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
@@ -4992,27 +5832,46 @@ if(cards.length)selectIdx(0);
         /* ignore */
       }
 
-      if (!photoUrls.length && !markersOnly) {
+      if (!photoUrls.length && !markersOnly && !photosOnly) {
         setFieldPackReadyMarker(route, cid);
         await refreshFieldPackChrome();
         const st = summarizeRoutePhotoStats(raw);
         alert(
-          `Маршрут «${route.routeTitle}»: ${slimRaw.length} меток сохранено.\n\nНа сервере нет фото (${st.markersNoPhoto} меток, статус no_photo).\n\n«Обновить» + «Подготовка к полю» помогут только когда фото появятся в VSM.`
+          `Маршрут «${route.routeTitle}»: ${slimRaw.length} меток сохранено.\n\nНа сервере нет фото (${st.markersNoPhoto} меток, статус no_photo).\n\n«Обновить» (↺) + «Скачать фото» — когда фото появятся в VSM.`
         );
         return;
       }
 
-      if (markersOnly || !toFetch.length) {
-        partialMeta.photosOk = photosOk;
+      if (photosOnly && !photoUrls.length) {
+        setFieldPackReadyMarker(route, cid);
+        await refreshFieldPackChrome();
+        alert(`На маршруте «${route.routeTitle}» нет фото в ответе API.`);
+        return;
+      }
+
+      if (markersOnly || (photosOnly && !toFetch.length) || (!photosOnly && !toFetch.length)) {
+        partialMeta.photosOk = photosOnly
+          ? Math.max(photosOk, await countFieldPhotosInDb())
+          : photosOk;
         partialMeta.photosFail = photosFail;
         await commitFieldPackMetaQueued(partialMeta);
+        if (!markersOnly) {
+          await commitFieldPhotoRevisions(buildPhotoRevisionsFromRaw(rawAll));
+        }
         setFieldPackReadyMarker(route, cid);
         clearFieldSyncState();
         await refreshFieldPackChrome();
+        const donePhotos = partialMeta.photosOk;
         alert(
           markersOnly
             ? `Координаты сохранены: ${slimRaw.length} меток.\nМаршрут: ${route.routeTitle}\n\nФото не скачивались.`
-            : formatRouteSyncDoneMessage(route, slimRaw, raw, photosOk, photoUrls.length, photosFail)
+            : photosOnly
+              ? allRoutesSync
+                ? `Фото всех маршрутов уже в памяти (${donePhotos}).\n\nПринудительное обновление: Shift+клик → пункт 3.`
+                : `Фото «${route.routeTitle}» уже в памяти (${photosOk} из ${photoUrls.length}, всего ${donePhotos}).\n\nПринудительное обновление: Shift+клик → пункт 3.`
+              : photosOk > 0 && !toFetch.length
+                ? `Маршрут «${route.routeTitle}» готов.\n\n${photosOk} фото уже в ${fieldMemoryLabel()} — повторно не скачивались.\n\nПринудительное обновление: Shift+клик → пункт 3.`
+                : formatRouteSyncDoneMessage(route, slimRaw, raw, photosOk, photoUrls.length, photosFail)
         );
         return;
       }
@@ -5029,7 +5888,6 @@ if(cards.length)selectIdx(0);
 
       let done = 0;
       const total = toFetch.length;
-      const batchSize = fieldSyncPhotoBatchSize();
       let lastStatusAt = 0;
 
       setFieldPackStatus(
@@ -5041,7 +5899,8 @@ if(cards.length)selectIdx(0);
       const queue = [...toFetch];
       const updateSyncProgress = async (force) => {
         const now = Date.now();
-        if (!force && now - lastStatusAt < 500 && done < total) return;
+        const interval = photosOnly ? 0 : isBleNativeApp() ? 0 : 500;
+        if (!force && interval && now - lastStatusAt < interval && done < total) return;
         lastStatusAt = now;
         setFieldPackStatus(
           `Фото: ${done} / ${total} (всего ${photosOk}/${photoUrls.length}) · ${formatFieldPackMb(bytesTotal)}`,
@@ -5051,21 +5910,16 @@ if(cards.length)selectIdx(0);
         partialMeta.photosFail = photosFail;
         partialMeta.bytesTotal = bytesTotal;
         try {
-          await commitFieldPackMetaQueued(partialMeta);
+          if (photosOnly || force || done === total || done % 5 === 0) {
+            await commitFieldPackMetaQueued(partialMeta);
+          }
         } catch (e) {
           console.warn("[ble-map] field sync meta", e?.message || e);
         }
-        await yieldToMain();
+        if (!isBleNativeApp()) await yieldToMain();
       };
 
       const runPhotoWorker = async () => {
-        const pendingBatch = [];
-        const flushBatch = async () => {
-          if (!pendingBatch.length) return;
-          const chunk = pendingBatch.splice(0, pendingBatch.length);
-          await appendFieldPackPhotosBatchQueued(chunk);
-        };
-
         while (queue.length) {
           if (fieldPackAbort?.signal.aborted) return;
           const url = queue.shift();
@@ -5076,11 +5930,8 @@ if(cards.length)selectIdx(0);
             if (blob.size > BLE_FIELD_PHOTO_MAX_BYTES) {
               photosFail++;
             } else {
-              blob = await compressPhotoBlobForField(blob);
-              pendingBatch.push([url, blob]);
-              if (pendingBatch.length >= batchSize) {
-                await flushBatch();
-              }
+              if (!photosOnly) blob = await compressPhotoBlobForField(blob);
+              await appendFieldPackPhotosBatchQueued([[fieldPhotoStorageKey(url), blob]]);
               photosOk++;
               bytesTotal += blob.size || 0;
             }
@@ -5092,12 +5943,7 @@ if(cards.length)selectIdx(0);
             }
           }
           done++;
-          await updateSyncProgress(done === total);
-        }
-        try {
-          await flushBatch();
-        } catch (e) {
-          console.warn("[ble-map] field sync flush", e?.message || e);
+          await updateSyncProgress(true);
         }
       };
 
@@ -5115,7 +5961,9 @@ if(cards.length)selectIdx(0);
       }
 
       if (fieldPackAbort?.signal.aborted) {
-        partialMeta.photosOk = photosOk;
+        partialMeta.photosOk = photosOnly
+          ? Math.max(photosOk, await countFieldPhotosInDb())
+          : photosOk;
         partialMeta.photosFail = photosFail;
         partialMeta.bytesTotal = bytesTotal;
         await commitFieldPackMetaQueued(partialMeta);
@@ -5130,7 +5978,7 @@ if(cards.length)selectIdx(0);
           "busy"
         );
         alert(
-          `Синхронизация остановлена.\n\nМаршрут: ${route.routeTitle}\nМеток: ${slimRaw.length}\nФото: ${photosOk} из ${photoUrls.length}\n\nВыберите тот же маршрут и нажмите «Подготовка к полю» — докачаются недостающие.`
+          `Загрузка остановлена.\n\nМаршрут: ${route.routeTitle}\nФото: ${photosOk} из ${photoUrls.length}\n\nНажмите «Скачать фото» — докачаются недостающие.`
         );
         await refreshFieldPackChrome();
         return;
@@ -5140,28 +5988,47 @@ if(cards.length)selectIdx(0);
         version: BLE_FIELD_PACK_VERSION,
         companyId: cid,
         savedAt: new Date().toISOString(),
-        markerCount: slimRaw.length,
+        markerCount: markerCountForMeta,
         photoCount: photoUrls.length,
-        photosOk,
+        photosOk: photosOnly ? Math.max(photosOk, await countFieldPhotosInDb()) : photosOk,
         photosFail,
         bytesTotal,
         tagOnly,
         packSource: "sync",
-        routeId: route.routeId,
+        routeId: route.routeId || null,
         routeTitle: route.routeTitle,
       };
       await commitFieldPackMetaQueued(meta);
+      if (!markersOnly) {
+        await commitFieldPhotoRevisions(buildPhotoRevisionsFromRaw(rawAll));
+      }
       setFieldPackReadyMarker(route, cid);
       clearFieldSyncState();
-      setBleMapData(mergeBleMapDataFromRaw(raw));
-      updateMapStats();
-      renderBleMarkers();
+      if (!photosOnly) {
+        setBleMapData(mergeBleMapDataFromRaw(raw));
+        updateMapStats();
+        renderBleMarkers();
+      } else if (photosOnly) {
+        await ensureBleMapDataForRoutes();
+        updateMapStats();
+        renderBleMarkers();
+        await hydrateBleMapZones(cid, { tryApi: navigator.onLine });
+      }
       await refreshFieldPackChrome();
 
       if (photosOk < 1 && !markersOnly) {
-        alert(
-          `Координаты сохранены (${slimRaw.length} меток), но фото не скачались (${photosFail} ошибок). Проверьте VPN и повторите синхронизацию.`
-        );
+        if (photosOnly) {
+          alert(
+            `Фото не скачались: ${photosFail} ошибок из ${photoUrls.length}.\n\n` +
+              "1. VPN → «Обновить» (↺) — свежие ссылки на фото\n" +
+              "2. Повторите «Скачать фото»\n\n" +
+              "Сначала пробуем Yandex напрямую, при ошибке — через Supabase."
+          );
+        } else {
+          alert(
+            `Координаты сохранены (${slimRaw.length} меток), но фото не скачались (${photosFail} ошибок). Проверьте VPN и повторите синхронизацию.`
+          );
+        }
         return;
       }
 
@@ -5197,12 +6064,38 @@ if(cards.length)selectIdx(0);
     }
     setFieldPackStatus("Загрузка данных для поля…", "busy");
     await yieldToMain();
-    const raw = await loadFieldPackMarkers();
-    if (!raw?.length) return false;
-    if (!bleMap) initBleMap([53.038, 39.011], 15);
-    bleCompanyId = meta.companyId || companyId;
-    if (meta.routeId) setBleMapRouteFilter(String(meta.routeId));
-    await applyBleListToMap(raw, "");
+    const cid = meta.companyId || companyId;
+    if (!bleMap) initBleMap([59.6603, 28.3967], 16);
+    bleCompanyId = cid;
+
+    const cached = await fetchBleListOffline(cid);
+    if (cached?.data?.length) {
+      await applyBleListToMap(cached.data, "", { skipZones: true });
+    } else {
+      const raw = await loadFieldPackMarkers();
+      if (!raw?.length) return false;
+      await applyBleListToMap(raw, "", { skipZones: true });
+    }
+
+    await hydrateBleMapZones(cid, { tryApi: navigator.onLine });
+    if (!bleZoneData.length && navigator.onLine) {
+      await hydrateBleMapZones(cid, { tryApi: true });
+    }
+    if (bleMap && bleZoneData.length) drawZones(bleMap);
+
+    if (meta.routeId) {
+      const rid = String(meta.routeId);
+      bleMapRouteFilter = rid;
+      bleRouteFilterApplying = true;
+      document.querySelectorAll("select[data-ble-route-select]").forEach((sel) => {
+        if ([...sel.options].some((o) => o.value === rid)) sel.value = rid;
+      });
+      bleRouteFilterApplying = false;
+      lastRenderKey = "";
+      lastRenderKeyFS = "";
+      renderBleMarkers();
+      if (isMapFullscreenOpen()) renderFsMarkers();
+    }
     try {
       sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
     } catch {
@@ -5316,13 +6209,53 @@ if(cards.length)selectIdx(0);
       const cached = fieldPhotoBlobUrls.get(url);
       if (cached) {
         img.src = cached;
+      } else if (isBleNativeApp()) {
+        void (async () => {
+          const fromPack = await loadFieldPhotoIntoImg(img, url);
+          if (!fromPack && img.isConnected) {
+            img.addEventListener(
+              "load",
+              () => scheduleFieldPhotoPersistFromNetwork(url),
+              { once: true }
+            );
+            img.src = direct;
+            img.addEventListener(
+              "error",
+              function onNativePopupImgErr() {
+                if (this.dataset.blePhotoTried === "proxy") {
+                  this.removeAttribute("src");
+                  this.classList.add("ble-popup-photo--missing");
+                  this.alt = "Нет в памяти";
+                  return;
+                }
+                if (proxied) {
+                  this.dataset.blePhotoTried = "proxy";
+                  this.addEventListener(
+                    "load",
+                    () => scheduleFieldPhotoPersistFromNetwork(url),
+                    { once: true }
+                  );
+                  this.src = proxied;
+                }
+              },
+              { once: false }
+            );
+          }
+        })();
       } else {
         void (async () => {
           const fromPack = await loadFieldPhotoIntoImg(img, url);
-          if (!fromPack && img.isConnected) img.src = direct;
+          if (!fromPack && img.isConnected) {
+            img.addEventListener(
+              "load",
+              () => scheduleFieldPhotoPersistFromNetwork(url),
+              { once: true }
+            );
+            img.src = direct;
+          }
         })();
       }
-      img.addEventListener("error", function onImgErr() {
+      if (!isBleNativeApp()) img.addEventListener("error", function onImgErr() {
         if (this.dataset.blePhotoTried === "both") return;
         if (this.dataset.blePhotoTried === "direct") {
           if (proxied && this.src !== proxied) {
@@ -5392,28 +6325,28 @@ if(cards.length)selectIdx(0);
         .getPopup()
         ?.getElement()
         ?.querySelector(".ble-popup-photos-slot");
-      const mustRefresh = needsPhotoRefresh(current);
+      if (!slot) return;
+      let rendered = false;
       const hasPhotos = !!(current.photoTag || current.photoPlace);
       try {
-        // Уже есть свежие фото — сразу показываем (мгновенный отклик)
+        const mustRefresh = hasPhotos ? await needsPhotoRefreshAsync(current) : true;
         if (hasPhotos && !mustRefresh) {
           renderPhotosInto(slot, current);
+          rendered = true;
           return;
         }
-        // Свежих фото нет / устарели — показываем скелетон и одно обновление в фоне
-        if (slot) {
-          if (hasPhotos) {
-            renderPhotosInto(slot, current); // показываем что есть, пока освежаем
-          } else {
-            slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
-          }
+        if (hasPhotos) {
+          renderPhotosInto(slot, current);
+          rendered = true;
+        } else {
+          slot.innerHTML = '<p class="ble-popup-loading">Загрузка фото…</p>';
         }
         current = await enrichPointPhotos(current, { forceFresh: navigator.onLine });
       } catch (e) {
         console.warn("[ble-map] popup photos", e?.message || e);
         current = getPointForPopup(pt);
       } finally {
-        renderPhotosInto(slot, getPointForPopup(pt));
+        if (!rendered) renderPhotosInto(slot, getPointForPopup(pt));
       }
     });
   }
@@ -5496,7 +6429,7 @@ if(cards.length)selectIdx(0);
         /* ignore */
       }
     }
-    upsertOfflineMarkerEdit(rec);
+    if (!isBleNativeApp()) upsertOfflineMarkerEdit(rec);
     updateEditBarState();
   }
 
@@ -5800,6 +6733,42 @@ if(cards.length)selectIdx(0);
     }
   }
 
+  async function ensureBleMapDataForRoutes() {
+    const cid = bleCompanyId || (await resolveCompanyId());
+    if (bleListSnapshot?.raw?.length && Number(bleListSnapshot.companyId) === Number(cid)) {
+      setBleMapData(mergeBleMapDataFromRaw(bleListSnapshot.raw));
+      applyOfflineMarkerQueueToMapData();
+      return true;
+    }
+    const cached = await fetchBleListOffline(cid);
+    if (cached?.data?.length) {
+      setBleMapData(mergeBleMapDataFromRaw(cached.data));
+      applyOfflineMarkerQueueToMapData();
+      bleListSnapshot = {
+        at: Date.now(),
+        raw: cached.data,
+        companyId: cid,
+        live: false,
+      };
+      return true;
+    }
+    if (navigator.onLine && cid) {
+      return (await refreshBleMapFromApi(cid)) !== false;
+    }
+    return false;
+  }
+
+  function routeFilterNeedsFullData(nextRouteId) {
+    if (!bleMapData.length) return true;
+    if (nextRouteId) {
+      return !bleMapData.some(
+        (pt) => pt.routeId != null && String(pt.routeId) === String(nextRouteId)
+      );
+    }
+    const snapLen = bleListSnapshot?.raw?.length || 0;
+    return snapLen > bleMapData.length + 5;
+  }
+
   function setBleMapRouteFilter(value) {
     const next = value ? String(value) : "";
     if (next === bleMapRouteFilter) return;
@@ -5809,7 +6778,33 @@ if(cards.length)selectIdx(0);
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
     });
     bleRouteFilterApplying = false;
+
+    if (routeFilterNeedsFullData(next)) {
+      void (async () => {
+        const ok = await ensureBleMapDataForRoutes();
+        updateMapStats();
+        redrawMapLayers({ zones: false });
+        if (bleMap && bleZoneData.length) drawZones(bleMap);
+        if (
+          !ok &&
+          next &&
+          !bleMapData.some(
+            (pt) => pt.routeId != null && String(pt.routeId) === String(next)
+          )
+        ) {
+          showMapMsg(
+            isBleNativeApp()
+              ? "Нет меток этого маршрута в памяти. Нажмите «Обновить» (↺) при наличии сети."
+              : "Нет меток этого маршрута. Обновите карту по Wi‑Fi/VPN.",
+            "error"
+          );
+        }
+      })();
+      return;
+    }
     redrawMapLayers({ zones: false });
+    if (bleMap && bleZoneData.length) drawZones(bleMap);
+    if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
   }
 
   window.setBleMapRouteFilter = setBleMapRouteFilter;
@@ -5929,6 +6924,8 @@ if(cards.length)selectIdx(0);
     bleMapFSFilter = allowed;
     syncFilterUi(allowed);
     redrawMapLayers({ zones: false });
+    if (bleMap && bleZoneData.length) drawZones(bleMap);
+    if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
   }
 
   window.setBleMapFilter = setBleMapFilter;
@@ -5943,6 +6940,24 @@ if(cards.length)selectIdx(0);
     return false;
   }
 
+  function initWebFieldSyncChrome() {
+    if (isBleNativeApp()) return;
+    const packBtn = document.getElementById("mapFieldPackBtn");
+    if (packBtn) {
+      packBtn.title =
+        "Скачать фото маршрута или всех маршрутов в кэш браузера (IndexedDB). Shift+клик — zip и др.";
+      const long = packBtn.querySelector(".map-toolbar-text--long");
+      const short = packBtn.querySelector(".map-toolbar-text--short");
+      if (long) long.textContent = "Скачать фото";
+      if (short) short.textContent = "Фото";
+    }
+    const retryBtn = document.getElementById("mapRetryBtn");
+    if (retryBtn) {
+      retryBtn.title = "Обновить координаты меток и полигоны с сервера (Wi‑Fi/VPN)";
+      retryBtn.setAttribute("aria-label", "Обновить координаты и зоны");
+    }
+  }
+
   function initNativeAppChrome() {
     if (!isBleNativeApp()) return;
     document.documentElement.classList.add("ble-map-native");
@@ -5951,14 +6966,26 @@ if(cards.length)selectIdx(0);
     const back = document.getElementById("bleMapBackLink");
     if (back) back.hidden = true;
     document.getElementById("mapRouteExportBtn")?.setAttribute("hidden", "");
+    document
+      .querySelectorAll(
+        '#mapBaseLayerSelect option[value="street"], #mapBaseLayerSelect option[value="hybrid"], #mapBaseLayerSelectActions option[value="street"], #mapBaseLayerSelectActions option[value="hybrid"], #mapFsBaseLayerSelect option[value="street"], #mapFsBaseLayerSelect option[value="hybrid"]'
+      )
+      .forEach((opt) => {
+        opt.hidden = true;
+        opt.disabled = true;
+      });
     const packBtn = document.getElementById("mapFieldPackBtn");
     if (packBtn) {
-      packBtn.title =
-        "Подготовить маршрут: метки и фото в память приложения (для обхода без сети)";
+      packBtn.title = "Скачать фото выбранного маршрута или всех маршрутов в память телефона (Wi‑Fi/VPN)";
       packBtn.querySelector(".map-toolbar-text--long") &&
-        (packBtn.querySelector(".map-toolbar-text--long").textContent = "Подготовить");
+        (packBtn.querySelector(".map-toolbar-text--long").textContent = "Скачать фото");
       packBtn.querySelector(".map-toolbar-text--short") &&
-        (packBtn.querySelector(".map-toolbar-text--short").textContent = "Подг.");
+        (packBtn.querySelector(".map-toolbar-text--short").textContent = "Фото");
+    }
+    const retryBtn = document.getElementById("mapRetryBtn");
+    if (retryBtn) {
+      retryBtn.title = "Обновить координаты меток и полигоны с сервера (Wi‑Fi/VPN)";
+      retryBtn.setAttribute("aria-label", "Обновить координаты и зоны");
     }
     const logo = document.getElementById("bleMapBackLogo");
     if (logo) {
@@ -6092,36 +7119,25 @@ if(cards.length)selectIdx(0);
     return null;
   }
 
-  async function refreshBleMapFromApi(companyId) {
-    if (!companyId || bleEditMode) return;
+  async function refreshBleMapFromApi(companyId, opts = {}) {
+    if (!companyId || bleEditMode) return false;
     try {
       const rawBle = await bleApiFetch(`/api/v1/map/ble/${companyId}`);
-      if (!Array.isArray(rawBle) || !rawBle.length) return;
+      if (!Array.isArray(rawBle) || !rawBle.length) {
+        if (opts.strict) throw new Error("Пустой ответ API (метки)");
+        return false;
+      }
       bleListSnapshot = { at: Date.now(), raw: rawBle, companyId, live: true };
       setBleMapData(mergeBleMapDataFromRaw(rawBle));
+      applyOfflineMarkerQueueToMapData();
       updateMapStats();
       renderBleMarkers();
+      if (isMapFullscreenOpen()) renderFsMarkers();
+      let zonesOk = false;
       try {
-        const mapData = await bleApiFetch(`/api/v1/map/${companyId}/map_data`);
-        if (mapData.zones && mapData.points) {
-          const pointsByZone = {};
-          mapData.points.forEach((p) => {
-            if (!pointsByZone[p.zoneId]) pointsByZone[p.zoneId] = [];
-            pointsByZone[p.zoneId].push([p.latitude, p.longitude]);
-          });
-          bleZoneData = mapData.zones
-            .map((z) => ({
-              id: z.id,
-              name: z.name || "",
-              description: z.description || "",
-              color: z.color || "#0088cc",
-              pts: (pointsByZone[z.id] || []).map((p) => [...p]),
-            }))
-            .filter((z) => z.pts.length > 2);
-          drawZones(bleMap);
-        }
-      } catch {
-        /* zones optional */
+        zonesOk = await hydrateBleMapZones(companyId, { strict: opts.strict, tryApi: true });
+      } catch (e) {
+        if (opts.strict) throw new Error("Не удалось загрузить зоны: " + (e?.message || e));
       }
       try {
         sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
@@ -6131,8 +7147,60 @@ if(cards.length)selectIdx(0);
       setRetryVisible(true);
       hideMapMsg();
       scheduleDefaultMapCenter({ force: true, fromLive: true });
+      return zonesOk || true;
     } catch (e) {
       console.warn("[ble-map] API refresh failed", e?.message || e);
+      if (opts.strict) throw e;
+      return false;
+    }
+  }
+
+  async function retryBleMapRefresh() {
+    const btn = document.getElementById("mapRetryBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.dataset.busy = "1";
+    }
+    hideMapMsg();
+    try {
+      if (!navigator.onLine) {
+        alert("Нужен интернет (Wi‑Fi/VPN) для обновления координат и зон.");
+        return;
+      }
+      if (!(await ensureBleTokenForField())) {
+        alert("Нет доступа к API. Проверьте VPN и повторите.");
+        return;
+      }
+      showMapMsg("Обновление координат и зон…", "");
+      let cid = bleCompanyId || (await resolveCompanyId());
+      const apiCid = await resolveCompanyIdFromApi();
+      if (apiCid) cid = apiCid;
+      bleCompanyId = cid;
+      const ok = await refreshBleMapFromApi(cid, { strict: true });
+      if (!ok) throw new Error("Не удалось обновить данные");
+      if (!bleZoneData.length) {
+        await hydrateBleMapZones(cid, { tryApi: true });
+      }
+      if (bleMap && bleZoneData.length) drawZones(bleMap);
+      if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
+      if (!bleZoneData.length) {
+        showMapMsg(
+          "Метки обновлены, но полигоны не загрузились. Проверьте VPN и нажмите ↺ ещё раз.",
+          "error"
+        );
+        void syncChangedFieldPhotosAfterRefresh(cid);
+        return;
+      }
+      showMapMsg(`Координаты меток и ${bleZoneData.length} полигонов обновлены.`, "");
+      setTimeout(hideMapMsg, 3500);
+      void syncChangedFieldPhotosAfterRefresh(cid);
+    } catch (e) {
+      showMapMsg("Ошибка обновления: " + formatBleError(e), "error");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        delete btn.dataset.busy;
+      }
     }
   }
 
@@ -6144,26 +7212,9 @@ if(cards.length)selectIdx(0);
     }
     updateMapStats();
     renderBleMarkers();
-    if (bleCompanyId) {
+    if (bleCompanyId && !opts.skipZones) {
       try {
-        const mapData = await bleApiFetch(`/api/v1/map/${bleCompanyId}/map_data`);
-        if (mapData.zones && mapData.points) {
-          const pointsByZone = {};
-          mapData.points.forEach((p) => {
-            if (!pointsByZone[p.zoneId]) pointsByZone[p.zoneId] = [];
-            pointsByZone[p.zoneId].push([p.latitude, p.longitude]);
-          });
-          bleZoneData = mapData.zones
-            .map((z) => ({
-              id: z.id,
-              name: z.name || "",
-              description: z.description || "",
-              color: z.color || "#0088cc",
-              pts: (pointsByZone[z.id] || []).map((p) => [...p]),
-            }))
-            .filter((z) => z.pts.length > 2);
-          drawZones(bleMap);
-        }
+        await hydrateBleMapZones(bleCompanyId, { tryApi: navigator.onLine });
       } catch {
         /* zones optional */
       }
@@ -6230,8 +7281,14 @@ if(cards.length)selectIdx(0);
         const fromField = await tryLoadFieldPack(companyId);
         if (fromField) {
           if (navigator.onLine) {
-            void refreshBleMapFromApi(companyId).catch(() => {});
+            try {
+              await refreshBleMapFromApi(companyId);
+            } catch {
+              await hydrateBleMapZones(companyId, { tryApi: true });
+            }
           }
+          if (bleMap && bleZoneData.length) drawZones(bleMap);
+          if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
           return;
         }
       }
@@ -6314,25 +7371,7 @@ if(cards.length)selectIdx(0);
   }
 
   async function retryBleMap() {
-    const btn = document.getElementById("mapRetryBtn");
-    if (btn) {
-      btn.disabled = true;
-      btn.dataset.busy = "1";
-    }
-    localStorage.removeItem(BLE_TOKEN_KEY);
-    bleListSnapshot = null;
-    try {
-      sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
-    } catch {
-      /* ignore */
-    }
-    bleMapInitialized = false;
-    hideMapMsg();
-    await loadBleMap();
-    if (btn) {
-      btn.disabled = false;
-      delete btn.dataset.busy;
-    }
+    await retryBleMapRefresh();
   }
 
   window.syncFsStats = function syncFsStats() {
@@ -6513,7 +7552,12 @@ if(cards.length)selectIdx(0);
 
     document.getElementById("mapEditToggle")?.addEventListener("click", () => setEditMode(!bleEditMode));
     document.getElementById("mapEditModeBtn")?.addEventListener("click", () => setEditMode(!bleEditMode));
-    document.getElementById("mapSaveBtn")?.addEventListener("click", () => saveAllEdits());
+    document.getElementById("mapSaveBtn")?.addEventListener("click", () => {
+      void onSaveEditClick();
+    });
+    document.getElementById("mapSendPendingBtn")?.addEventListener("click", () => {
+      void sendPendingMarkerEdits();
+    });
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
@@ -6579,6 +7623,7 @@ if(cards.length)selectIdx(0);
 
   function initEmbeddedChrome() {
     initNativeAppChrome();
+    initWebFieldSyncChrome();
     bindBleMapBackLogo();
     if (window.self !== window.top) {
       document.getElementById("bleMapPageHeader")?.classList.add("is-embedded");
@@ -6599,6 +7644,7 @@ if(cards.length)selectIdx(0);
       hideMapMsg();
       setRetryVisible(true);
       updateOfflineEditChrome();
+      if (isBleNativeApp()) return;
       void (async () => {
         if (!countOfflinePendingEdits()) return;
         try {
@@ -6720,7 +7766,8 @@ if(cards.length)selectIdx(0);
   }
 
   function bootBleMapPage() {
-    bindBleMapAccessGate(() => startBleMapApp());
+    if (isBleNativeApp()) startBleMapApp();
+    else bindBleMapAccessGate(() => startBleMapApp());
   }
 
   if (document.readyState === "loading") {
