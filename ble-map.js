@@ -26,7 +26,7 @@
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523s";
+  const BLE_MAP_BUILD = "20260523t";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -47,8 +47,8 @@
   const BLE_DEFAULT_CENTER_BLE = "20";
   const BLE_DEFAULT_CENTER_ZOOM = 18;
   const BLE_MAP_MIN_ZOOM = 14;
-  /** Esri World Imagery — запрашиваем тайлы до ~19, выше только upscale */
-  const BLE_SATELLITE_NATIVE_ZOOM = 19;
+  /** Esri World Imagery: выше z18 в этом районе — заглушка «Map data not yet available» */
+  const BLE_SATELLITE_NATIVE_ZOOM = 18;
   const BLE_STREET_NATIVE_ZOOM = 19;
   const BLE_MAP_MAX_ZOOM = 19;
   const BLE_MAP_EDIT_MAX_ZOOM = 20;
@@ -3448,8 +3448,7 @@
     });
   }
 
-  function tileLayerZoomOpts(mobile, nativeZoom, opts = {}) {
-    const isSatellite = nativeZoom === BLE_SATELLITE_NATIVE_ZOOM;
+  function tileLayerZoomOpts(mobile, nativeZoom) {
     return {
       detectRetina: false,
       updateWhenIdle: mobile,
@@ -3458,8 +3457,6 @@
       minZoom: BLE_MAP_MIN_ZOOM,
       maxZoom: BLE_MAP_EDIT_MAX_ZOOM,
       maxNativeZoom: nativeZoom,
-      className: isSatellite ? "ble-esri-tile" : "",
-      ...opts,
     };
   }
 
