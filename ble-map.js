@@ -24,9 +24,12 @@
   const BLE_STATIC_CACHE_FETCH_MS = 90000;
   const BLE_TRANSPORT_KEY = "ww-ble-transport";
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
+  const BLE_FIELD_READY_KEY = "ww-ble-field-ready";
+  const ROUTE_EXPORT_TILE = 256;
+  const ROUTE_EXPORT_PHOTO_MAX_SIDE = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260523t";
+  const BLE_MAP_BUILD = "20260523u";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const M_PER_DEG_LAT = 111320;
   const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
@@ -248,6 +251,12 @@
       await yieldToMain();
       await commitFieldPackMarkers(slimRaw);
       await commitFieldPackMeta(idbMeta);
+      if (packMeta.routeId) {
+        setFieldPackReadyMarker(
+          { routeId: packMeta.routeId, routeTitle: packMeta.routeTitle || "" },
+          packMeta.companyId
+        );
+      }
       if (!bleMap) initBleMap([53.038, 39.011], 15);
       bleCompanyId = packMeta.companyId || bleCompanyId;
       await applyBleListToMap(slimRaw, "");
@@ -3965,7 +3974,484 @@
       msg += "\n\nУ части меток фото в VSM ещё нет — в поле будут только координаты.";
     }
     msg += "\n\nБез связи откройте карту — данные из памяти телефона.";
+    msg += "\n\nИли нажмите «Скачать» — автономный HTML в «Файлы» (не зависит от обновления вкладки).";
     return msg;
+  }
+
+  function readFieldPackReadyMarker() {
+    try {
+      const raw = localStorage.getItem(BLE_FIELD_READY_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.routeId) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function setFieldPackReadyMarker(route, companyId) {
+    if (!route?.routeId) return;
+    try {
+      localStorage.setItem(
+        BLE_FIELD_READY_KEY,
+        JSON.stringify({
+          routeId: String(route.routeId),
+          routeTitle: route.routeTitle || "",
+          companyId: companyId ?? bleCompanyId ?? BLE_DEFAULT_COMPANY_ID,
+          at: new Date().toISOString(),
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearFieldPackReadyMarker() {
+    try {
+      localStorage.removeItem(BLE_FIELD_READY_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function hasFieldPackInStorage() {
+    const meta = await loadFieldPackMeta();
+    if (!meta?.markerCount && !meta?.routeId) return false;
+    const raw = await loadFieldPackMarkers();
+    return !!(raw?.length);
+  }
+
+  function routeTitlePlain(routeId) {
+    const route = bleRoutes.find((r) => String(r.id) === String(routeId));
+    return route?.title || `Маршрут ${routeId}`;
+  }
+
+  function sanitizeRouteFileName(title) {
+    return String(title || "маршрут")
+      .replace(/\s+\d+\/\d+\s*$/, "")
+      .replace(/[^\p{L}\p{N}\-_]+/gu, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "маршрут";
+  }
+
+  function lngLatToWorldPx(lng, lat, zoom) {
+    const scale = ROUTE_EXPORT_TILE * Math.pow(2, zoom);
+    const x = ((lng + 180) / 360) * scale;
+    const latRad = (lat * Math.PI) / 180;
+    const y =
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale;
+    return { x, y };
+  }
+
+  function routeExportTileUrl(z, x, y, layerId) {
+    if (layerId === "street") {
+      const s = "abc"[(x + y) % 3];
+      return `https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+    }
+    return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+  }
+
+  async function loadRouteExportTileBitmap(z, x, y, layerId) {
+    const res = await fetch(routeExportTileUrl(z, x, y, layerId), { referrerPolicy: "no-referrer" });
+    if (!res.ok) throw new Error(`tile_${res.status}`);
+    return createImageBitmap(await res.blob());
+  }
+
+  async function buildRouteMapSnapshot(markers, layerId = "satellite") {
+    const pts = markers.filter((m) => m.lat && m.lng);
+    if (!pts.length) return null;
+
+    let north = Math.max(...pts.map((p) => p.lat));
+    let south = Math.min(...pts.map((p) => p.lat));
+    let east = Math.max(...pts.map((p) => p.lng));
+    let west = Math.min(...pts.map((p) => p.lng));
+    const dLat = Math.max(north - south, 0.0008);
+    const dLng = Math.max(east - west, 0.0008);
+    north += dLat * 0.18;
+    south -= dLat * 0.18;
+    east += dLng * 0.18;
+    west -= dLng * 0.18;
+
+    let zoomInfo = null;
+    for (let z = BLE_SATELLITE_NATIVE_ZOOM; z >= BLE_MAP_MIN_ZOOM; z--) {
+      const nw = lngLatToWorldPx(west, north, z);
+      const se = lngLatToWorldPx(east, south, z);
+      const w = se.x - nw.x;
+      const h = se.y - nw.y;
+      if (w <= 1400 && h <= 1050) {
+        zoomInfo = { z, nw, w, h };
+        break;
+      }
+    }
+    if (!zoomInfo) {
+      const z = 14;
+      const nw = lngLatToWorldPx(west, north, z);
+      const se = lngLatToWorldPx(east, south, z);
+      zoomInfo = { z, nw, w: se.x - nw.x, h: se.y - nw.y };
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(zoomInfo.w));
+    canvas.height = Math.max(1, Math.ceil(zoomInfo.h));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#1a2430";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const x0 = Math.floor(zoomInfo.nw.x / ROUTE_EXPORT_TILE);
+    const y0 = Math.floor(zoomInfo.nw.y / ROUTE_EXPORT_TILE);
+    const x1 = Math.floor((zoomInfo.nw.x + zoomInfo.w) / ROUTE_EXPORT_TILE);
+    const y1 = Math.floor((zoomInfo.nw.y + zoomInfo.h) / ROUTE_EXPORT_TILE);
+
+    for (let tx = x0; tx <= x1; tx++) {
+      for (let ty = y0; ty <= y1; ty++) {
+        try {
+          const bmp = await loadRouteExportTileBitmap(zoomInfo.z, tx, ty, layerId);
+          const dx = tx * ROUTE_EXPORT_TILE - zoomInfo.nw.x;
+          const dy = ty * ROUTE_EXPORT_TILE - zoomInfo.nw.y;
+          ctx.drawImage(bmp, dx, dy);
+          bmp.close();
+        } catch {
+          /* пропуск тайла */
+        }
+        await yieldToMain();
+      }
+    }
+
+    const pins = pts.map((p) => {
+      const wp = lngLatToWorldPx(p.lng, p.lat, zoomInfo.z);
+      const x = wp.x - zoomInfo.nw.x;
+      const y = wp.y - zoomInfo.nw.y;
+      ctx.beginPath();
+      ctx.arc(x, y, 13, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#37474F";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#37474F";
+      ctx.font = "bold 11px Oswald, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = String(p.ble || "").slice(0, 8);
+      ctx.fillText(label, x, y);
+      return {
+        ble: p.ble,
+        xPct: (x / canvas.width) * 100,
+        yPct: (y / canvas.height) * 100,
+      };
+    });
+
+    return {
+      dataUrl: canvas.toDataURL("image/jpeg", 0.84),
+      pins,
+      width: canvas.width,
+      height: canvas.height,
+    };
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("read_blob"));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function compressPhotoBlobForExport(blob) {
+    if (!blob?.type?.startsWith("image/") || blob.size < 80 * 1024) return blob;
+    const maxSide = ROUTE_EXPORT_PHOTO_MAX_SIDE;
+    try {
+      const bmp = await createImageBitmap(blob);
+      const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height, 1));
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bmp.close();
+        return blob;
+      }
+      ctx.drawImage(bmp, 0, 0, w, h);
+      bmp.close();
+      const out = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72));
+      return out && out.size < blob.size ? out : blob;
+    } catch {
+      return blob;
+    }
+  }
+
+  async function resolvePhotoDataUrlForExport(url) {
+    if (!url) return "";
+    const fromDb = await readFieldPhotoBlobFromDb(url);
+    if (fromDb) {
+      try {
+        return await blobToDataUrl(await compressPhotoBlobForExport(fromDb));
+      } catch {
+        /* fall through */
+      }
+    }
+    if (!navigator.onLine) return "";
+    try {
+      const blob = await fetchPhotoBlobForField(url);
+      return await blobToDataUrl(await compressPhotoBlobForExport(blob));
+    } catch {
+      return "";
+    }
+  }
+
+  function buildRouteExportHtml(route, markers, mapSnap, exportedAt) {
+    const title = routeTitlePlain(route.routeId);
+    const payload = {
+      routeTitle: title,
+      routeId: route.routeId,
+      exportedAt,
+      map: mapSnap
+        ? { width: mapSnap.width, height: mapSnap.height, pins: mapSnap.pins, dataUrl: mapSnap.dataUrl }
+        : null,
+      markers: markers.map((m, idx) => ({
+        n: idx + 1,
+        ble: m.ble,
+        lat: m.lat,
+        lng: m.lng,
+        type: m.bleType ? m.bleType.replace(/^\d+ - /, "") : "",
+        place: m.locationDesc || "",
+        recordDt: m.recordDt || "",
+        photoTag: m.photoTagData || "",
+        photoPlace: m.photoPlaceData || "",
+      })),
+    };
+    const json = JSON.stringify(payload).replace(/<\//g, "<\\/");
+    return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>${esc(title)} — обход меток</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--ink:#263238;--muted:#607d8b;--accent:#00897b;--line:#e0e0e0;--card:#fff}
+*{box-sizing:border-box}body{margin:0;background:#eceff1;color:var(--ink)}
+header{padding:12px 14px 10px;background:linear-gradient(145deg,#fff,#e3f2fd);border-bottom:1px solid var(--line)}
+header h1{margin:0 0 4px;font-family:Oswald,Arial,sans-serif;font-size:1.15rem;font-weight:700}
+header p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:0;min-height:calc(100vh - 72px)}
+@media(min-width:900px){.layout{grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr)}}
+.map-wrap{position:relative;background:#1a2430;min-height:240px}
+.map-wrap img{display:block;width:100%;height:auto;vertical-align:top}
+.map-pin{position:absolute;transform:translate(-50%,-50%);min-width:26px;height:26px;padding:0 5px;border-radius:999px;border:2px solid #37474F;background:#fff;color:#37474F;font:700 11px/22px Oswald,Arial,sans-serif;text-align:center;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.map-pin.is-active{background:#00897b;color:#fff;border-color:#00695c}
+.list-wrap{border-top:1px solid var(--line);background:var(--card);max-height:50vh;overflow:auto}
+@media(min-width:900px){.list-wrap{border-top:0;border-left:1px solid var(--line);max-height:none}}
+.list-head{position:sticky;top:0;z-index:2;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+.item{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.item.is-active{background:#e0f2f1}
+.item__title{font-family:Oswald,Arial,sans-serif;font-weight:700;font-size:.98rem}
+.item__meta{font-size:.78rem;color:var(--muted);margin-top:2px;line-height:1.35}
+.item__nav{margin-top:6px;font-size:.78rem}
+.item__nav a{color:#1565c0;text-decoration:none;font-weight:600}
+.detail{padding:12px 14px;background:#fff;border-top:1px solid var(--line)}
+.detail[hidden]{display:none}
+.detail h2{margin:0 0 6px;font-family:Oswald,Arial,sans-serif;font-size:1rem}
+.detail p{margin:0 0 8px;font-size:.85rem;color:var(--muted);line-height:1.4}
+.photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.photos img{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);background:#fafafa}
+.offline-badge{display:inline-block;margin-top:6px;padding:3px 8px;border-radius:999px;background:#e8f5e9;color:#2e7d32;font-size:.72rem;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+<h1>${esc(title)}</h1>
+<p>Автономная карта маршрута · ${esc(exportedAt.slice(0, 16).replace("T", " "))} · ${markers.length} меток<span class="offline-badge">без интернета</span></p>
+</header>
+<div class="layout">
+<section class="map-wrap" id="mapWrap"></section>
+<aside class="list-wrap">
+<div class="list-head">Список меток — нажмите для подсветки на карте и деталей</div>
+<div id="list"></div>
+</aside>
+</div>
+<section class="detail" id="detail" hidden></section>
+<script type="application/json" id="routePayload">${json}</script>
+<script>
+(function(){
+var data=JSON.parse(document.getElementById("routePayload").textContent);
+var mapWrap=document.getElementById("mapWrap");
+var listEl=document.getElementById("list");
+var detailEl=document.getElementById("detail");
+var active=-1;
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");}
+function renderMap(){
+if(!data.map||!data.map.dataUrl){mapWrap.innerHTML='<p style="color:#cfd8dc;padding:16px">Карта не встроена — используйте координаты и ссылки «Открыть в картах».</p>';return;}
+var img=document.createElement("img");
+img.src=data.map.dataUrl;img.alt="Карта маршрута";
+mapWrap.appendChild(img);
+(data.map.pins||[]).forEach(function(pin,i){
+var b=document.createElement("button");
+b.type="button";b.className="map-pin";b.textContent=pin.ble||String(i+1);
+b.style.left=pin.xPct+"%";b.style.top=pin.yPct+"%";
+b.dataset.idx=String(i);
+b.addEventListener("click",function(){selectMarker(Number(b.dataset.idx));});
+mapWrap.appendChild(b);
+});
+}
+function renderList(){
+listEl.innerHTML="";
+data.markers.forEach(function(m,i){
+var div=document.createElement("div");
+div.className="item";div.dataset.idx=String(i);
+div.innerHTML='<div class="item__title">'+esc(m.n)+'. Метка #'+esc(m.ble)+'</div>'+
+(m.type?'<div class="item__meta">'+esc(m.type)+'</div>':'')+
+(m.place?'<div class="item__meta">'+esc(m.place)+'</div>':'')+
+'<div class="item__nav"><a href="geo:'+m.lat+','+m.lng+'?q='+encodeURIComponent('#'+m.ble+' '+m.lat+','+m.lng)+'" target="_blank" rel="noopener">Открыть в картах</a></div>';
+div.addEventListener("click",function(){selectMarker(i);});
+listEl.appendChild(div);
+});
+}
+function selectMarker(i){
+active=i;
+listEl.querySelectorAll(".item").forEach(function(el,j){el.classList.toggle("is-active",j===i);});
+mapWrap.querySelectorAll(".map-pin").forEach(function(el,j){el.classList.toggle("is-active",j===i);});
+var m=data.markers[i];
+if(!m){detailEl.hidden=true;return;}
+var photos="";
+if(m.photoTag)photos+='<img src="'+m.photoTag+'" alt="Метка">';
+if(m.photoPlace)photos+='<img src="'+m.photoPlace+'" alt="Место">';
+detailEl.hidden=false;
+detailEl.innerHTML='<h2>Метка #'+esc(m.ble)+'</h2>'+
+(m.type?'<p>'+esc(m.type)+'</p>':'')+
+(m.place?'<p>'+esc(m.place)+'</p>':'')+
+'<p>'+m.lat.toFixed(6)+', '+m.lng.toFixed(6)+'</p>'+
+(photos?'<div class="photos">'+photos+'</div>':'')+
+'<p class="item__nav"><a href="geo:'+m.lat+','+m.lng+'?q='+encodeURIComponent('#'+m.ble)+'">Навигация к точке</a></p>';
+detailEl.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+renderMap();renderList();if(data.markers.length)selectMarker(0);
+})();
+</script>
+</body>
+</html>`;
+  }
+
+  function downloadTextFile(filename, text, mime) {
+    const blob = new Blob([text], { type: mime || "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  let routeExportActive = false;
+
+  async function collectRouteMarkersForExport(route) {
+    const prevFilter = bleMapRouteFilter;
+    bleMapRouteFilter = String(route.routeId);
+    let pts = bleMapData.filter((pt) => pointPassesRouteFilter(pt) && pt.lat && pt.lng);
+    bleMapRouteFilter = prevFilter;
+    if (pts.length) return pts;
+
+    const snap = bleListSnapshot?.raw;
+    if (snap?.length) {
+      const raw = filterRawByRoute(snap, route);
+      if (raw.length) {
+        return raw
+          .map((p) => classifyBle(p))
+          .filter((pt) => pt.lat && pt.lng);
+      }
+    }
+
+    const fieldRaw = await loadFieldPackMarkers();
+    if (fieldRaw?.length) {
+      const meta = await loadFieldPackMeta();
+      if (!meta?.routeId || String(meta.routeId) === String(route.routeId)) {
+        return filterRawByRoute(fieldRaw, route)
+          .map((p) => classifyBle(p))
+          .filter((pt) => pt.lat && pt.lng);
+      }
+    }
+    return [];
+  }
+
+  async function onRouteExportClick(e) {
+    if (routeExportActive || fieldPackDownloadActive) return;
+
+    const route = getActiveRouteForFieldSync();
+    if (!route) {
+      alert("Выберите маршрут в списке «Маршрут» (не «Все маршруты»), затем нажмите «Скачать».");
+      return;
+    }
+
+    const est = estimateMarkersOnRoute(route.routeId);
+    const title = routeTitlePlain(route.routeId);
+    const withPhotos = !e?.shiftKey;
+    const intro =
+      `Скачать автономный HTML для обхода без интернета?\n\n«${title}»\n~${est || "?"} меток` +
+      (withPhotos ? ", карта и фото (нужен интернет сейчас)" : ", только координаты (Shift — без фото)") +
+      `\n\nФайл откройте из «Файлы» / «Загрузки» — вкладку браузера можно закрыть.`;
+    if (!confirm(intro)) return;
+
+    if (!navigator.onLine) {
+      alert("Для сборки файла нужен интернет (качается подложка карты и фото). Координаты уже в памяти — попробуйте Shift+«Скачать» без фото или используйте ранее сохранённый HTML.");
+      return;
+    }
+
+    routeExportActive = true;
+    const btn = document.getElementById("mapRouteExportBtn");
+    if (btn) btn.disabled = true;
+    setFieldPackStatus("Подготовка HTML…", "busy");
+
+    try {
+      const markers = await collectRouteMarkersForExport(route);
+      if (!markers.length) {
+        alert("На этом маршруте нет меток с координатами. Обновите карту по Wi‑Fi/VPN.");
+        return;
+      }
+      markers.sort((a, b) => String(a.ble).localeCompare(String(b.ble), "ru", { numeric: true }));
+
+      setFieldPackStatus("Карта маршрута…", "busy");
+      await yieldToMain();
+      const layerId = bleBaseLayerCurrent === "street" ? "street" : "satellite";
+      const mapSnap = await buildRouteMapSnapshot(markers, layerId);
+
+      if (withPhotos) {
+        for (let i = 0; i < markers.length; i++) {
+          const m = markers[i];
+          setFieldPackStatus(`Фото ${i + 1} / ${markers.length}…`, "busy");
+          m.photoTagData = m.photoTag ? await resolvePhotoDataUrlForExport(m.photoTag) : "";
+          m.photoPlaceData = m.photoPlace ? await resolvePhotoDataUrlForExport(m.photoPlace) : "";
+          if ((i + 1) % 3 === 0) await yieldToMain();
+        }
+      }
+
+      const exportedAt = new Date().toISOString();
+      const html = buildRouteExportHtml(route, markers, mapSnap, exportedAt);
+      const mb = (html.length / (1024 * 1024)).toFixed(1);
+      const fname = `ble-${sanitizeRouteFileName(title)}-${exportedAt.slice(0, 10)}.html`;
+      downloadTextFile(fname, html, "text/html;charset=utf-8");
+
+      alert(
+        `Файл «${fname}» скачан (~${mb} МБ).\n\n` +
+          `Меток: ${markers.length}\n\n` +
+          "В поле откройте его из «Файлы» — интернет не нужен. " +
+          "Ссылки «Открыть в картах» запустят навигатор."
+      );
+    } catch (e) {
+      alert(`Не удалось собрать файл: ${String(e?.message || e).slice(0, 180)}`);
+    } finally {
+      routeExportActive = false;
+      if (btn) btn.disabled = false;
+      setFieldPackStatus("");
+      void refreshFieldPackChrome();
+    }
   }
 
   function createBleIcon(point, editTouchTarget = false) {
@@ -4139,6 +4625,7 @@
   async function resetFieldPackStorage() {
     revokeFieldPhotoBlobUrls();
     fieldPackMetaCache = null;
+    clearFieldPackReadyMarker();
     setFieldPackStatus("Очистка старого пакета…", "busy");
     await yieldToMain();
     try {
@@ -4600,6 +5087,7 @@
       if (!bleMap) initBleMap([53.038, 39.011], 15);
       bleCompanyId = cid;
       await applyBleListToMap(slimRaw, "");
+      setFieldPackReadyMarker(route, cid);
       try {
         sessionStorage.setItem(BLE_OFFLINE_FIRST_KEY, "1");
       } catch {
@@ -4607,6 +5095,7 @@
       }
 
       if (!photoUrls.length && !markersOnly) {
+        setFieldPackReadyMarker(route, cid);
         await refreshFieldPackChrome();
         const st = summarizeRoutePhotoStats(raw);
         alert(
@@ -4619,6 +5108,7 @@
         partialMeta.photosOk = photosOk;
         partialMeta.photosFail = photosFail;
         await commitFieldPackMetaQueued(partialMeta);
+        setFieldPackReadyMarker(route, cid);
         clearFieldSyncState();
         await refreshFieldPackChrome();
         alert(
@@ -4763,6 +5253,7 @@
         routeTitle: route.routeTitle,
       };
       await commitFieldPackMetaQueued(meta);
+      setFieldPackReadyMarker(route, cid);
       clearFieldSyncState();
       setBleMapData(mergeBleMapDataFromRaw(raw));
       updateMapStats();
@@ -5776,10 +6267,13 @@
     if (placeholder) placeholder.textContent = "Загрузка карты…";
     try {
       if (navigator.onLine) {
-        try {
-          sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
-        } catch {
-          /* ignore */
+        const fieldReady = await hasFieldPackInStorage();
+        if (!fieldReady) {
+          try {
+            sessionStorage.removeItem(BLE_OFFLINE_FIRST_KEY);
+          } catch {
+            /* ignore */
+          }
         }
       }
       bleGenplanMeta = await fetchBleGenplanMeta();
@@ -5841,6 +6335,9 @@
       await applyBleListToMap(rawBle, "", { liveApi: true });
     } catch (e) {
       const companyId = (await fetchBleCacheMeta())?.companyId || BLE_DEFAULT_COMPANY_ID;
+      if (await tryLoadFieldPack(companyId)) {
+        return;
+      }
       if (await tryLoadOfflineBleList(companyId)) {
         return;
       }
@@ -6078,6 +6575,9 @@
         return;
       }
       void onFieldPackPrimaryClick();
+    });
+    document.getElementById("mapRouteExportBtn")?.addEventListener("click", (e) => {
+      void onRouteExportClick(e);
     });
     document.getElementById("mapFieldPackFile")?.addEventListener("change", (e) => {
       const file = e.target.files?.[0];
