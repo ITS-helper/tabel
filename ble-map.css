@@ -1565,6 +1565,10 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   border-color: rgba(21, 101, 192, 0.25);
 }
 
+body:not(.ble-map--edit) .leaflet-pane svg path.leaflet-interactive {
+  cursor: default;
+}
+
 body.ble-map--zone-align .ble-zone-align-pick-handle {
   cursor: pointer;
 }

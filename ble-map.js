@@ -3171,7 +3171,7 @@
         fillOpacity: zoneStyle.fillOpacity,
         weight: zoneStyle.weight,
         dashArray: isSelected ? "6 4" : null,
-        interactive: forEdit,
+        interactive: true,
         className: inAlignSet ? "ble-zone-align-target" : "",
       });
       layer.zoneMeta = z;
