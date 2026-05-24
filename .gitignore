@@ -7,7 +7,7 @@ google_sheet_raw.csv
 
 _workarounds_src/
 
-dist/
+dist/*
 !dist/.gitkeep
 node_modules/
 mobile/www/
