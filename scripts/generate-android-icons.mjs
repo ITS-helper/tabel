@@ -1,49 +1,42 @@
 #!/usr/bin/env node
 /**
- * Иконка Android из фирменного знака WW (assets/workwatch-icon*.svg).
- * Также: assets/workwatch-mark.png для шапки сайта/APK.
+ * Toolbar mark из assets/workwatch-mark-source.png (логотип WW для шапки).
+ * Иконки лаунчера Android — готовые PNG в android/.../mipmap-* (не перегенерировать из SVG).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Resvg } from "@resvg/resvg-js";
 import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const RES = path.join(ROOT, "android", "app", "src", "main", "res");
-
-const ICON_SVG = path.join(ROOT, "assets", "workwatch-icon.svg");
-const FG_SVG = path.join(ROOT, "assets", "workwatch-icon-foreground.svg");
+const MARK_SRC = path.join(ROOT, "assets", "workwatch-mark-source.png");
 const MARK_OUT = path.join(ROOT, "assets", "workwatch-mark.png");
+const LAUNCHER_MASTER = path.join(
+  ROOT,
+  "android",
+  "app",
+  "src",
+  "main",
+  "res",
+  "mipmap-xxxhdpi",
+  "ic_launcher.png"
+);
 
-/** @type {Record<string, { launcher: number; foreground: number }>} */
-const DENSITIES = {
-  "mipmap-mdpi": { launcher: 48, foreground: 108 },
-  "mipmap-hdpi": { launcher: 72, foreground: 162 },
-  "mipmap-xhdpi": { launcher: 96, foreground: 216 },
-  "mipmap-xxhdpi": { launcher: 144, foreground: 324 },
-  "mipmap-xxxhdpi": { launcher: 192, foreground: 432 },
+/** @type {Record<string, number>} */
+const LAUNCHER_SIZES = {
+  "mipmap-mdpi": 48,
+  "mipmap-hdpi": 72,
+  "mipmap-xhdpi": 96,
+  "mipmap-xxhdpi": 144,
+  "mipmap-xxxhdpi": 192,
 };
 
-function renderSvg(svgPath, size) {
-  const svg = fs.readFileSync(svgPath, "utf8");
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: "width", value: size },
-  });
-  return resvg.render().asPng();
-}
-
-async function writePng(dir, name, png) {
-  fs.mkdirSync(dir, { recursive: true });
-  const dest = path.join(dir, name);
-  fs.writeFileSync(dest, png);
-  return dest;
-}
-
 async function buildMarkPng() {
-  const fg = renderSvg(FG_SVG, 256);
-  const { data, info } = await sharp(fg).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  if (!fs.existsSync(MARK_SRC)) {
+    throw new Error("Missing assets/workwatch-mark-source.png");
+  }
+  const { data, info } = await sharp(MARK_SRC).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -59,22 +52,35 @@ async function buildMarkPng() {
   console.log("[icons] toolbar mark →", MARK_OUT);
 }
 
+async function resizeLauncherFromMaster() {
+  if (!fs.existsSync(LAUNCHER_MASTER)) {
+    throw new Error(`Missing launcher master: ${LAUNCHER_MASTER}`);
+  }
+  for (const [folder, size] of Object.entries(LAUNCHER_SIZES)) {
+    const dir = path.join(ROOT, "android", "app", "src", "main", "res", folder);
+    const png = await sharp(LAUNCHER_MASTER).resize(size, size, { fit: "fill" }).png().toBuffer();
+    fs.mkdirSync(dir, { recursive: true });
+    for (const name of ["ic_launcher.png", "ic_launcher_round.png"]) {
+      fs.writeFileSync(path.join(dir, name), png);
+    }
+    const fgSize = Math.round(size * (108 / 48));
+    const fg = await sharp(LAUNCHER_MASTER)
+      .resize(fgSize, fgSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer();
+    fs.writeFileSync(path.join(dir, "ic_launcher_foreground.png"), fg);
+    console.log(`[icons] ${folder} ← master ${size}px`);
+  }
+}
+
 async function main() {
-  if (!fs.existsSync(ICON_SVG) || !fs.existsSync(FG_SVG)) {
-    throw new Error("Missing assets/workwatch-icon.svg or workwatch-icon-foreground.svg");
-  }
-
-  for (const [folder, sizes] of Object.entries(DENSITIES)) {
-    const dir = path.join(RES, folder);
-    const launcher = renderSvg(ICON_SVG, sizes.launcher);
-    const foreground = renderSvg(FG_SVG, sizes.foreground);
-    await writePng(dir, "ic_launcher.png", launcher);
-    await writePng(dir, "ic_launcher_round.png", launcher);
-    await writePng(dir, "ic_launcher_foreground.png", foreground);
-    console.log(`[icons] ${folder} → ${sizes.launcher}px / fg ${sizes.foreground}px`);
-  }
-
+  const launcher = process.argv.includes("--launcher");
   await buildMarkPng();
+  if (launcher) {
+    await resizeLauncherFromMaster();
+  } else {
+    console.log("[icons] launcher PNGs не тронуты (добавьте --launcher для масштабирования из xxxhdpi)");
+  }
   console.log("[icons] done");
 }
 
