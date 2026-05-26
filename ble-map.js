@@ -29,7 +29,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260524s";
+  const BLE_MAP_BUILD = "20260525a";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -4588,10 +4588,10 @@
   }
 
   async function hasFieldPackInStorage() {
-    const meta = await loadFieldPackMeta();
-    if (!meta?.markerCount && !meta?.routeId) return false;
     const raw = await loadFieldPackMarkers();
-    return !!(raw?.length);
+    if (raw?.length) return true;
+    const meta = await loadFieldPackMeta();
+    return !!(meta?.markerCount || meta?.routeId);
   }
 
   function routeTitlePlain(routeId) {
@@ -5376,6 +5376,34 @@ if(cards.length)selectIdx(0);
     fieldPackMetaCache = meta;
   }
 
+  async function persistLiveMarkersAfterApiRefresh(rawBle, companyId) {
+    if (!isBleNativeApp() || !Array.isArray(rawBle) || !rawBle.length) return;
+    const slim = slimBleRawForFieldPack(rawBle);
+    if (!slim.length) return;
+    try {
+      await commitFieldPackMarkersQueued(slim);
+      const prev = await loadFieldPackMeta();
+      await commitFieldPackMetaQueued({
+        ...(prev || {}),
+        version: BLE_FIELD_PACK_VERSION,
+        companyId: companyId ?? prev?.companyId ?? bleCompanyId,
+        savedAt: new Date().toISOString(),
+        markerCount: slim.length,
+        lastLiveRefreshAt: new Date().toISOString(),
+        photoCount: prev?.photoCount ?? 0,
+        photosOk: prev?.photosOk ?? 0,
+        photosFail: prev?.photosFail ?? 0,
+        bytesTotal: prev?.bytesTotal ?? 0,
+        tagOnly: prev?.tagOnly ?? false,
+        packSource: prev?.packSource ?? "liveRefresh",
+        routeId: prev?.routeId ?? null,
+        routeTitle: prev?.routeTitle ?? null,
+      });
+    } catch (e) {
+      console.warn("[ble-map] persist live markers", e?.message || e);
+    }
+  }
+
   function mapDataHasPhotoUrls() {
     return bleMapData.some((p) => p.photoTag || p.photoPlace);
   }
@@ -6058,7 +6086,8 @@ if(cards.length)selectIdx(0);
 
   async function tryLoadFieldPack(companyId) {
     const meta = await loadFieldPackMeta();
-    if (!meta?.markerCount && !meta?.raw?.length) return false;
+    const packedMarkers = await loadFieldPackMarkers();
+    if (!packedMarkers?.length && !meta?.markerCount && !meta?.raw?.length) return false;
     if (companyId && meta.companyId && Number(meta.companyId) !== Number(companyId)) {
       return false;
     }
@@ -6069,12 +6098,12 @@ if(cards.length)selectIdx(0);
     bleCompanyId = cid;
 
     const cached = await fetchBleListOffline(cid);
-    if (cached?.data?.length) {
+    if (packedMarkers?.length) {
+      await applyBleListToMap(packedMarkers, "", { skipZones: true });
+    } else if (cached?.data?.length) {
       await applyBleListToMap(cached.data, "", { skipZones: true });
     } else {
-      const raw = await loadFieldPackMarkers();
-      if (!raw?.length) return false;
-      await applyBleListToMap(raw, "", { skipZones: true });
+      return false;
     }
 
     await hydrateBleMapZones(cid, { tryApi: navigator.onLine });
@@ -7126,6 +7155,7 @@ if(cards.length)selectIdx(0);
       updateMapStats();
       renderBleMarkers();
       if (isMapFullscreenOpen()) renderFsMarkers();
+      void persistLiveMarkersAfterApiRefresh(rawBle, companyId);
       let zonesOk = false;
       try {
         zonesOk = await hydrateBleMapZones(companyId, { strict: opts.strict, tryApi: true });
@@ -7275,7 +7305,9 @@ if(cards.length)selectIdx(0);
         if (fromField) {
           if (navigator.onLine) {
             try {
-              await refreshBleMapFromApi(companyId);
+              if (await ensureBleTokenForField()) {
+                await refreshBleMapFromApi(companyId);
+              }
             } catch {
               await hydrateBleMapZones(companyId, { tryApi: true });
             }

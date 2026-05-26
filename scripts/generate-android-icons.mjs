@@ -73,9 +73,28 @@ async function resizeLauncherFromMaster() {
   }
 }
 
+async function buildWebFavicons() {
+  if (!fs.existsSync(LAUNCHER_MASTER)) {
+    console.warn("[icons] нет launcher master — пропуск favicon для сайта");
+    return;
+  }
+  const assets = path.join(ROOT, "assets");
+  const sizes = [
+    ["favicon-32.png", 32],
+    ["favicon-192.png", 192],
+    ["apple-touch-icon.png", 180],
+  ];
+  for (const [name, size] of sizes) {
+    const dest = path.join(assets, name);
+    await sharp(LAUNCHER_MASTER).resize(size, size, { fit: "fill" }).png().toFile(dest);
+    console.log(`[icons] web ${name} → ${size}px`);
+  }
+}
+
 async function main() {
   const launcher = process.argv.includes("--launcher");
   await buildMarkPng();
+  await buildWebFavicons();
   if (launcher) {
     await resizeLauncherFromMaster();
   } else {
