@@ -1408,13 +1408,29 @@
     const closeBtn = el.querySelector(".map-msg__close");
     if (closeBtn) closeBtn.hidden = !isError;
     el.hidden = false;
+    if (!fsOpen) syncMainMapMsgPosition();
   }
 
   function hideMapMsg() {
     const main = document.getElementById("mapMsg");
     const fs = document.getElementById("mapFsMsg");
-    if (main) main.hidden = true;
+    if (main) {
+      main.hidden = true;
+      main.style.removeProperty("top");
+    }
     if (fs) fs.hidden = true;
+  }
+
+  function syncMainMapMsgPosition() {
+    const msg = document.getElementById("mapMsg");
+    if (!msg || msg.hidden) return;
+    const dock = document.getElementById("mapFloatDock");
+    if (!dock || dock.hidden) {
+      msg.style.removeProperty("top");
+      return;
+    }
+    const top = Math.max(0, dock.offsetTop + dock.offsetHeight + 8);
+    msg.style.top = `${top}px`;
   }
 
   function wireMapMsgDismiss() {
@@ -5650,11 +5666,13 @@ if(cards.length)selectIdx(0);
       el.hidden = true;
       el.textContent = "";
       el.className = "map-field-pack-status";
+      syncMainMapMsgPosition();
       return;
     }
     el.hidden = false;
     el.textContent = text;
     el.className = `map-field-pack-status${kind ? ` map-field-pack-status--${kind}` : ""}`;
+    syncMainMapMsgPosition();
   }
 
   async function refreshFieldPackChrome() {
