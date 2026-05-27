@@ -34,6 +34,8 @@ supabase functions deploy google-sheet-fetch --project-ref <ваш-project-ref>
 
 Сайт: `https://its-helper.github.io/tabel/`
 
+**Частая причина 404:** в Settings → Pages выбрано **Deploy from a branch**, а в репозитории деплой идёт через **workflow** `.github/workflows/pages.yml`. CI зелёный, но сайт пустой. Нужен источник **GitHub Actions**, не ветка `main / (root)`.
+
 ### Вариант B — только ветка, без Actions
 
 1. **Settings** → **Pages** → Source: **Deploy from a branch**.
