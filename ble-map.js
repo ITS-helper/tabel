@@ -5417,21 +5417,6 @@ if(cards.length)selectIdx(0);
       }));
   }
 
-  function markerCoordsByZoneFromMapData(mapData) {
-    const byZone = new Map();
-    if (!mapData?.points?.length) return byZone;
-    mapData.points.forEach((p) => {
-      const zid = p.zoneId ?? p.zone_id;
-      if (zid == null) return;
-      const lat = Number(p.latitude);
-      const lng = Number(p.longitude);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      if (!byZone.has(zid)) byZone.set(zid, []);
-      byZone.get(zid).push([lat, lng]);
-    });
-    return byZone;
-  }
-
   const bleZonePolygonCache = new Map();
 
   function isApiZonePolygon(z) {
