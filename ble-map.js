@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260528a";
+  const BLE_MAP_BUILD = "20260528b";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -7082,10 +7082,6 @@ if(cards.length)selectIdx(0);
   }
 
   function loadClusterTogglePref() {
-    if (!isBleNativeApp()) {
-      bleClusterEnabled = true;
-      return;
-    }
     try {
       const raw = localStorage.getItem(BLE_CLUSTER_TOGGLE_KEY);
       bleClusterEnabled = raw == null ? true : raw !== "0";
@@ -7097,7 +7093,7 @@ if(cards.length)selectIdx(0);
   function updateClusterToggleUi() {
     const btn = document.getElementById("mapClusterToggleBtn");
     if (!btn) return;
-    btn.hidden = !isBleNativeApp();
+    btn.hidden = false;
     btn.dataset.state = bleClusterEnabled ? "on" : "off";
     btn.textContent = bleClusterEnabled ? "Кластеры: вкл" : "Кластеры: выкл";
     btn.setAttribute("aria-pressed", bleClusterEnabled ? "true" : "false");
@@ -7111,7 +7107,7 @@ if(cards.length)selectIdx(0);
       return;
     }
     bleClusterEnabled = on;
-    if (opts.persist !== false && isBleNativeApp()) {
+    if (opts.persist !== false) {
       try {
         localStorage.setItem(BLE_CLUSTER_TOGGLE_KEY, bleClusterEnabled ? "1" : "0");
       } catch {

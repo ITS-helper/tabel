@@ -792,10 +792,6 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   display: none !important;
 }
 
-body:not(.ble-map-native) .map-cluster-toggle {
-  display: none !important;
-}
-
 .map-retry-btn {
   font-family: Oswald, sans-serif;
   font-size: 0.72em;
