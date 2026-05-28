@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260529b";
+  const BLE_MAP_BUILD = "20260529c";
   const BLE_ZONE_FETCH_CONCURRENCY = 10;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
@@ -832,12 +832,10 @@
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
   let bleClusterGroupFS = null;
-  let bleClusterNormalizeBound = false;
-  let bleClusterNormalizeBoundFS = false;
   let bleMarkerSpillLayer = null;
   let bleMarkerSpillLayerFS = null;
-  let bleClusterEnforceTimer = null;
-  let bleClusterEnforceTimerFS = null;
+  let bleClusterZoomBound = false;
+  let bleClusterZoomBoundFS = false;
   let bleMarkerLayerFS = null;
 
   let bleCompanyId = null;
@@ -6685,6 +6683,33 @@ if(cards.length)selectIdx(0);
     });
   }
 
+  function gridKeyForMarker(marker, zoom) {
+    const ll = marker.getLatLng();
+    const cell = Math.max(0.00006, 0.0018 / Math.pow(2, Math.max(0, zoom - 14)));
+    return `${Math.floor(ll.lat / cell)}:${Math.floor(ll.lng / cell)}`;
+  }
+
+  /** Метки в «ячейке» < BLE_CLUSTER_MIN_COUNT — отдельно, остальные — в кластеризатор. */
+  function splitMarkersByMinCluster(markers, map) {
+    const buckets = new Map();
+    const zoom = map?.getZoom?.() ?? 16;
+    for (const m of markers) {
+      const key = gridKeyForMarker(m, zoom);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(m);
+    }
+    const forCluster = [];
+    const forPlain = [];
+    for (const list of buckets.values()) {
+      if (list.length >= BLE_CLUSTER_MIN_COUNT) {
+        forCluster.push(...list);
+      } else {
+        forPlain.push(...list);
+      }
+    }
+    return { forCluster, forPlain };
+  }
+
   function getBleMarkerSpillLayer(map, fs = false) {
     if (!map) return null;
     if (fs) {
@@ -6710,89 +6735,8 @@ if(cards.length)selectIdx(0);
     else bleMarkerSpillLayer = null;
   }
 
-  function collectSmallVisibleClusters(group) {
-    const tiny = [];
-    const fg = group?._featureGroup;
-    if (!fg?.eachLayer) return tiny;
-    fg.eachLayer((layer) => {
-      if (typeof layer?.getChildCount !== "function") return;
-      const count = layer.getChildCount();
-      if (count >= 2 && count < BLE_CLUSTER_MIN_COUNT) tiny.push(layer);
-    });
-    return tiny;
-  }
-
-  function detachMarkersToSpill(group, markers, spillLayer) {
-    if (!group || !spillLayer || !markers?.length) return;
-    markers.forEach((m) => {
-      try {
-        if (group.hasLayer(m)) group.removeLayer(m);
-      } catch {
-        /* ignore */
-      }
-      if (m.clusterShow) m.clusterShow();
-      if (!spillLayer.hasLayer(m)) spillLayer.addLayer(m);
-    });
-  }
-
-  function explodeSmallCluster(group, cluster, spillLayer) {
-    if (!group || !cluster || !spillLayer) return;
-    const children = cluster.getAllChildMarkers?.() || [];
-    if (!children.length) return;
-    try {
-      group.removeLayer(cluster);
-    } catch {
-      /* ignore */
-    }
-    detachMarkersToSpill(group, children, spillLayer);
-  }
-
-  function enforceClusterMinSize(group, spill, map, fs = false) {
-    if (!group || !map || !bleClusterEnabled) return;
-    const spillLayer = spill || getBleMarkerSpillLayer(map, fs);
-    if (!spillLayer) return;
-
-    const tiny = collectSmallVisibleClusters(group);
-    if (!tiny.length) return;
-
-    tiny.forEach((cluster) => explodeSmallCluster(group, cluster, spillLayer));
-  }
-
-  function enforceClusterMinSizeDeep(group, spill, map, fs = false) {
-    if (!group || !map || !bleClusterEnabled) return;
-    let guard = 0;
-    const tick = () => {
-      enforceClusterMinSize(group, spill, map, fs);
-      guard += 1;
-      if (guard < 6 && collectSmallVisibleClusters(group).length) {
-        requestAnimationFrame(tick);
-      }
-    };
-    tick();
-  }
-
-  function scheduleEnforceClusterMinSize(group, spill, map, fs = false) {
-    if (!group || !map) return;
-    const timer = fs ? bleClusterEnforceTimerFS : bleClusterEnforceTimer;
-    if (timer) clearTimeout(timer);
-    const delays = [0, 100, 280, 600];
-    let step = 0;
-    const run = () => {
-      enforceClusterMinSizeDeep(group, spill, map, fs);
-      step += 1;
-      if (step < delays.length) {
-        const wait = delays[step] - delays[step - 1];
-        const id = setTimeout(run, wait);
-        if (fs) bleClusterEnforceTimerFS = id;
-        else bleClusterEnforceTimer = id;
-      } else if (fs) bleClusterEnforceTimerFS = null;
-      else bleClusterEnforceTimer = null;
-    };
-    run();
-  }
-
-  function makeClusterGroup(map, fs = false) {
-    const group = L.markerClusterGroup({
+  function makeClusterGroup() {
+    return L.markerClusterGroup({
       maxClusterRadius(zoom) {
         if (zoom < 17) return 120;
         if (zoom < 19) return 40;
@@ -6807,34 +6751,8 @@ if(cards.length)selectIdx(0);
       chunkInterval: 80,
       chunkDelay: 16,
       removeOutsideVisibleBounds: true,
-      chunkProgress(processed, total) {
-        if (processed >= total && bleClusterEnabled) {
-          scheduleEnforceClusterMinSize(
-            group,
-            fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer,
-            map,
-            fs
-          );
-        }
-      },
       iconCreateFunction(cluster) {
         const count = cluster.getChildCount();
-        if (count >= 2 && count < BLE_CLUSTER_MIN_COUNT) {
-          queueMicrotask(() => {
-            const spillLayer = fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer;
-            if (!spillLayer) getBleMarkerSpillLayer(map, fs);
-            explodeSmallCluster(
-              group,
-              cluster,
-              spillLayer || getBleMarkerSpillLayer(map, fs)
-            );
-          });
-          return L.divIcon({
-            html: "",
-            className: "marker-cluster marker-cluster--rejected",
-            iconSize: L.point(1, 1),
-          });
-        }
         const size = count < 10 ? "small" : count < 50 ? "medium" : "large";
         return L.divIcon({
           html: `<div><span>${count}</span></div>`,
@@ -6843,35 +6761,29 @@ if(cards.length)selectIdx(0);
         });
       },
     });
-    group.on("animationend", () => {
-      if (!bleClusterEnabled) return;
-      scheduleEnforceClusterMinSize(
-        group,
-        fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer,
-        map,
-        fs
-      );
-    });
-    return group;
   }
 
-  function bindClusterNormalization(map, fs = false) {
+  function bindClusterZoomRerender(map, fs = false) {
     if (!map) return;
-    if (fs ? bleClusterNormalizeBoundFS : bleClusterNormalizeBound) return;
-    map.on("zoomend", () => onClusterMapViewChange(map, fs));
-    map.on("moveend", () => {
+    if (fs ? bleClusterZoomBoundFS : bleClusterZoomBound) return;
+    map.on("zoomend", () => {
       if (!bleClusterEnabled) return;
-      const group = fs ? bleClusterGroupFS : bleClusterGroup;
-      if (!group) return;
-      scheduleEnforceClusterMinSize(
-        group,
-        fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer,
-        map,
-        fs
-      );
+      if (fs) lastRenderKeyFS = "";
+      else lastRenderKey = "";
+      if (fs) renderFsMarkers();
+      else renderBleMarkers();
     });
-    if (fs) bleClusterNormalizeBoundFS = true;
-    else bleClusterNormalizeBound = true;
+    if (fs) bleClusterZoomBoundFS = true;
+    else bleClusterZoomBound = true;
+  }
+
+  function addMarkersWithMinClusterRule(map, clusterGroup, markers, fs = false) {
+    const spill = getBleMarkerSpillLayer(map, fs);
+    if (!clusterGroup || !spill) return;
+    spill.clearLayers();
+    const { forCluster, forPlain } = splitMarkersByMinCluster(markers, map);
+    if (forCluster.length) clusterGroup.addLayers(forCluster);
+    forPlain.forEach((m) => spill.addLayer(m));
   }
 
   function getOrCreateMarkerForPt(pt) {
@@ -7360,16 +7272,15 @@ if(cards.length)selectIdx(0);
       bleMarkerLayer = null;
     }
 
-    clearBleMarkerSpillLayer(bleMap, false);
     if (!bleClusterGroup) {
-      bleClusterGroup = makeClusterGroup(bleMap, false);
+      bleClusterGroup = makeClusterGroup();
       bleMap.addLayer(bleClusterGroup);
-      bindClusterNormalization(bleMap, false);
+      bindClusterZoomRerender(bleMap, false);
     } else {
       bleClusterGroup.clearLayers();
     }
-    bleClusterGroup.addLayers(visible);
-    scheduleEnforceClusterMinSize(bleClusterGroup, getBleMarkerSpillLayer(bleMap, false), bleMap, false);
+    getBleMarkerSpillLayer(bleMap, false);
+    addMarkersWithMinClusterRule(bleMap, bleClusterGroup, visible, false);
   }
 
   function renderFsMarkers() {
@@ -7418,21 +7329,15 @@ if(cards.length)selectIdx(0);
       bleMarkerLayerFS = null;
     }
 
-    clearBleMarkerSpillLayer(bleMapFS, true);
     if (!bleClusterGroupFS) {
-      bleClusterGroupFS = makeClusterGroup(bleMapFS, true);
+      bleClusterGroupFS = makeClusterGroup();
       bleMapFS.addLayer(bleClusterGroupFS);
-      bindClusterNormalization(bleMapFS, true);
+      bindClusterZoomRerender(bleMapFS, true);
     } else {
       bleClusterGroupFS.clearLayers();
     }
-    bleClusterGroupFS.addLayers(visible);
-    scheduleEnforceClusterMinSize(
-      bleClusterGroupFS,
-      getBleMarkerSpillLayer(bleMapFS, true),
-      bleMapFS,
-      true
-    );
+    getBleMarkerSpillLayer(bleMapFS, true);
+    addMarkersWithMinClusterRule(bleMapFS, bleClusterGroupFS, visible, true);
   }
 
   function updateMapStats() {
