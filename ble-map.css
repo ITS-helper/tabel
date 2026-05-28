@@ -722,14 +722,74 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
 
 .map-msg {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   text-align: left;
-  padding: 14px;
+  padding: 12px 14px;
   font-size: 13px;
-  color: var(--muted);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: #0d47a1;
+  border: 1px solid rgba(21, 101, 192, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 10px 28px rgba(15, 23, 42, 0.14),
+    0 2px 8px rgba(21, 101, 192, 0.08);
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+  transition:
+    opacity 0.32s ease,
+    transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.32s ease;
+  pointer-events: auto;
+}
+
+.map-msg--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.map-msg__icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(21, 101, 192, 0.12);
+  color: #1565c0;
+}
+
+.map-msg--busy .map-msg__icon {
+  font-size: 0;
+}
+
+.map-msg--busy .map-msg__icon::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(21, 101, 192, 0.25);
+  border-top-color: #1565c0;
+  border-radius: 50%;
+  animation: map-msg-spin 0.85s linear infinite;
+}
+
+.map-msg--success .map-msg__icon::before {
+  content: "✓";
+}
+
+.map-msg--error .map-msg__icon::before {
+  content: "!";
+}
+
+.map-msg--info .map-msg__icon::before {
+  content: "i";
+  font-style: italic;
 }
 
 .map-msg__text {
@@ -740,27 +800,58 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
 .map-msg__close {
   flex: 0 0 auto;
   border: none;
-  background: transparent;
+  background: rgba(15, 23, 42, 0.06);
   color: inherit;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
-  padding: 2px 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   cursor: pointer;
-  opacity: 0.72;
+  opacity: 0.85;
 }
 
 .map-msg__close:hover {
   opacity: 1;
+  background: rgba(15, 23, 42, 0.1);
 }
 
 .map-msg__close[hidden] {
   display: none;
 }
 
-.map-msg.error {
-  color: var(--danger);
-  border-color: rgba(239, 68, 68, 0.3);
-  background: #fef2f2;
+.map-msg--success {
+  color: #1b5e20;
+  border-color: rgba(46, 125, 50, 0.28);
+  background: rgba(232, 245, 233, 0.96);
+}
+
+.map-msg--success .map-msg__icon {
+  background: rgba(46, 125, 50, 0.14);
+  color: #2e7d32;
+}
+
+.map-msg--error {
+  color: #b71c1c;
+  border-color: rgba(211, 47, 47, 0.28);
+  background: rgba(255, 235, 238, 0.96);
+}
+
+.map-msg--error .map-msg__icon {
+  background: rgba(211, 47, 47, 0.12);
+  color: #c62828;
+}
+
+.map-msg--busy {
+  color: #0d47a1;
+  border-color: rgba(21, 101, 192, 0.28);
+  background: rgba(227, 242, 253, 0.96);
+}
+
+@keyframes map-msg-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .map-cluster-toggle {
@@ -2660,10 +2751,9 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     left: 8px;
     right: 8px;
     z-index: 800;
-    padding: 10px 12px;
+    padding: 11px 13px;
     font-size: 12px;
     line-height: 1.4;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   }
 
   .map-retry-btn {

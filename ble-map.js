@@ -30,9 +30,9 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260529e";
+  const BLE_MAP_BUILD = "20260530a";
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
-  const BLE_ZONE_REFINE_CONCURRENCY = 4;
+  const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -1399,7 +1399,7 @@
     return raw.trim().toLowerCase().replace(/^ble/i, "");
   }
 
-  function showMapMsg(text, type = "") {
+  function showMapMsg(text, type = "info") {
     if (!text) return;
     const fsOpen = isMapFullscreenOpen();
     const el = fsOpen ? document.getElementById("mapFsMsg") : document.getElementById("mapMsg");
@@ -1407,23 +1407,34 @@
     const textEl = el.querySelector(".map-msg__text");
     if (textEl) textEl.textContent = text;
     else el.textContent = text;
-    const isError = type === "error";
-    el.className =
-      (el.id === "mapFsMsg" ? "map-msg map-fs-msg" : "map-msg") + (isError ? " error" : "");
+    const state = type === "error" ? "error" : type === "success" ? "success" : type === "busy" ? "busy" : "info";
+    const base = el.id === "mapFsMsg" ? "map-msg map-fs-msg" : "map-msg";
+    el.className = `${base} map-msg--${state}`;
+    const iconEl = el.querySelector(".map-msg__icon");
+    if (iconEl) iconEl.textContent = "";
     const closeBtn = el.querySelector(".map-msg__close");
-    if (closeBtn) closeBtn.hidden = !isError;
+    if (closeBtn) closeBtn.hidden = state === "busy";
     el.hidden = false;
+    el.classList.remove("map-msg--visible");
+    void el.offsetWidth;
+    el.classList.add("map-msg--visible");
     if (!fsOpen) syncMainMapMsgPosition();
   }
 
   function hideMapMsg() {
-    const main = document.getElementById("mapMsg");
-    const fs = document.getElementById("mapFsMsg");
-    if (main) {
-      main.hidden = true;
-      main.style.removeProperty("top");
+    for (const id of ["mapMsg", "mapFsMsg"]) {
+      const el = document.getElementById(id);
+      if (!el || el.hidden) continue;
+      el.classList.remove("map-msg--visible");
+      const done = () => {
+        el.hidden = true;
+        el.classList.remove("map-msg--visible");
+        if (id === "mapMsg") el.style.removeProperty("top");
+        el.removeEventListener("transitionend", done);
+      };
+      el.addEventListener("transitionend", done);
+      setTimeout(done, 400);
     }
-    if (fs) fs.hidden = true;
   }
 
   function syncMainMapMsgPosition() {
@@ -5420,7 +5431,22 @@ if(cards.length)selectIdx(0);
   const bleZonePolygonCache = new Map();
 
   function isApiZonePolygon(z) {
-    return Boolean(z) && z.ptsSource === "api" && Array.isArray(z.pts) && z.pts.length >= 3;
+    if (!z || !Array.isArray(z.pts) || z.pts.length < 3) return false;
+    if (z.ptsSource === "hull") return false;
+    return true;
+  }
+
+  function normalizeZoneRecords(zones) {
+    return (zones || [])
+      .filter((z) => z?.pts?.length >= 3 && z.ptsSource !== "hull")
+      .map((z) => ({
+        id: z.id,
+        name: z.name || "",
+        description: z.description || "",
+        color: z.color || "#0088cc",
+        pts: z.pts.map((p) => [...p]),
+        ptsSource: "api",
+      }));
   }
 
   async function fetchBleZonePolygonPts(zoneId) {
@@ -5484,12 +5510,13 @@ if(cards.length)selectIdx(0);
     return out;
   }
 
-  async function refineZonePolygonsInBackground(metas, companyId) {
-    if (!metas?.length || !navigator.onLine) return;
+  async function refineZonePolygonsInBackground(metas, companyId, opts = {}) {
+    if (!metas?.length || !navigator.onLine) return 0;
     const gen = ++bleZonePolygonFetchGen;
     const haveApi = new Set(
       bleZoneData.filter(isApiZonePolygon).map((z) => Number(z.id))
     );
+    const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : null;
     let cursor = 0;
     let redrawPending = false;
     const scheduleRedraw = () => {
@@ -5524,6 +5551,7 @@ if(cards.length)selectIdx(0);
           else bleZoneData.push(record);
           haveApi.add(Number(meta.id));
           bleZonePolygonCache.set(Number(meta.id), record.pts);
+          if (onProgress) onProgress(haveApi.size, metas.length);
           if (idx % 20 === 0) scheduleRedraw();
         } catch {
           /* skip zone until next refresh */
@@ -5532,9 +5560,9 @@ if(cards.length)selectIdx(0);
     };
     const n = Math.min(BLE_ZONE_REFINE_CONCURRENCY, metas.length);
     await Promise.all(Array.from({ length: n }, () => worker()));
-    if (gen !== bleZonePolygonFetchGen) return;
+    if (gen !== bleZonePolygonFetchGen) return haveApi.size;
     const zones = bleZoneData.filter(isApiZonePolygon);
-    if (!zones.length) return;
+    if (!zones.length) return 0;
     applyBleZoneDataFromParsed(zones);
     saveZonesToLocalCache(companyId, zones);
     if (isBleNativeApp()) {
@@ -5544,6 +5572,8 @@ if(cards.length)selectIdx(0);
         console.warn("[ble-map] field zones save", e?.message || e);
       }
     }
+    if (onProgress) onProgress(zones.length, metas.length);
+    return zones.length;
   }
 
   function parseMapDataZones(mapData) {
@@ -5551,7 +5581,7 @@ if(cards.length)selectIdx(0);
   }
 
   function applyBleZoneDataFromParsed(zones) {
-    bleZoneData = (Array.isArray(zones) ? zones : []).filter(isApiZonePolygon);
+    bleZoneData = normalizeZoneRecords(zones);
     bleZoneData.forEach((z) => {
       bleZonePolygonCache.set(Number(z.id), z.pts.map((p) => [...p]));
     });
@@ -5601,25 +5631,37 @@ if(cards.length)selectIdx(0);
     }
 
     const tryApi = opts.tryApi !== false && navigator.onLine;
-    if (!tryApi) return !!cached?.length;
+    if (!tryApi) return bleZoneData.length > 0;
 
+    const awaitPolygons = opts.awaitPolygons ?? Boolean(opts.strict);
+    let metas = [];
     try {
       const mapData = await bleApiFetch(`/api/v1/map/${cid}/map_data`);
-      const metas = parseMapDataZoneMetas(mapData);
+      metas = parseMapDataZoneMetas(mapData);
       const zones = buildZonesFromMapDataFast(mapData);
       if (zones.length) {
         applyBleZoneDataFromParsed(zones);
-        saveZonesToLocalCache(cid, zones);
-        if (opts.refinePolygons !== false) {
-          void refineZonePolygonsInBackground(metas, cid);
-        }
-        return true;
+        saveZonesToLocalCache(cid, bleZoneData);
       }
     } catch (e) {
       if (opts.strict) throw e;
       console.warn("[ble-map] map_data zones", e?.message || e);
     }
-    return !!cached?.length;
+
+    const missing = metas.filter((m) => !bleZoneData.some((z) => Number(z.id) === Number(m.id)));
+    if (missing.length && opts.refinePolygons !== false) {
+      const progress = (n, total) => {
+        if (opts.silent) return;
+        showMapMsg(`Загрузка полигонов ${n}/${total}…`, "busy");
+      };
+      if (awaitPolygons) {
+        await refineZonePolygonsInBackground(metas, cid, { onProgress: progress });
+      } else {
+        void refineZonePolygonsInBackground(metas, cid);
+      }
+    }
+
+    return bleZoneData.length > 0;
   }
 
   async function resolveRawForFieldPackDownload(cid, opts = {}) {
@@ -7561,7 +7603,11 @@ if(cards.length)selectIdx(0);
       void persistLiveMarkersAfterApiRefresh(rawBle, companyId);
       let zonesOk = false;
       try {
-        zonesOk = await hydrateBleMapZones(companyId, { strict: opts.strict, tryApi: true });
+        zonesOk = await hydrateBleMapZones(companyId, {
+          strict: opts.strict,
+          tryApi: true,
+          awaitPolygons: opts.strict,
+        });
       } catch (e) {
         if (opts.strict) throw new Error("Не удалось загрузить зоны: " + (e?.message || e));
       }
@@ -7597,16 +7643,13 @@ if(cards.length)selectIdx(0);
         alert("Нет доступа к API. Проверьте VPN и повторите.");
         return;
       }
-      showMapMsg("Обновление координат и зон…", "");
+      showMapMsg("Обновление координат и зон…", "busy");
       let cid = bleCompanyId || (await resolveCompanyId());
       const apiCid = await resolveCompanyIdFromApi();
       if (apiCid) cid = apiCid;
       bleCompanyId = cid;
       const ok = await refreshBleMapFromApi(cid, { strict: true });
       if (!ok) throw new Error("Не удалось обновить данные");
-      if (!bleZoneData.length) {
-        await hydrateBleMapZones(cid, { tryApi: true });
-      }
       if (bleMap && bleZoneData.length) drawZones(bleMap);
       if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
       if (!bleZoneData.length) {
@@ -7617,8 +7660,8 @@ if(cards.length)selectIdx(0);
         void syncChangedFieldPhotosAfterRefresh(cid);
         return;
       }
-      showMapMsg(`Координаты меток и ${bleZoneData.length} полигонов обновлены.`, "");
-      setTimeout(hideMapMsg, 3500);
+      showMapMsg(`Координаты меток и ${bleZoneData.length} полигонов обновлены.`, "success");
+      setTimeout(hideMapMsg, 4000);
       void syncChangedFieldPhotosAfterRefresh(cid);
     } catch (e) {
       showMapMsg("Ошибка обновления: " + formatBleError(e), "error");
