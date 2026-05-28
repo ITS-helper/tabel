@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260528e";
+  const BLE_MAP_BUILD = "20260528f";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -833,6 +833,10 @@
   let bleClusterGroupFS = null;
   let bleClusterNormalizeBound = false;
   let bleClusterNormalizeBoundFS = false;
+  let bleMarkerSpillLayer = null;
+  let bleMarkerSpillLayerFS = null;
+  let bleClusterEnforceTimer = null;
+  let bleClusterEnforceTimerFS = null;
   let bleMarkerLayerFS = null;
 
   let bleCompanyId = null;
@@ -6551,8 +6555,85 @@ if(cards.length)selectIdx(0);
     });
   }
 
-  function makeClusterGroup() {
-    return L.markerClusterGroup({
+  function getBleMarkerSpillLayer(map, fs = false) {
+    if (!map) return null;
+    if (fs) {
+      if (!bleMarkerSpillLayerFS) {
+        bleMarkerSpillLayerFS = L.layerGroup();
+        map.addLayer(bleMarkerSpillLayerFS);
+      }
+      return bleMarkerSpillLayerFS;
+    }
+    if (!bleMarkerSpillLayer) {
+      bleMarkerSpillLayer = L.layerGroup();
+      map.addLayer(bleMarkerSpillLayer);
+    }
+    return bleMarkerSpillLayer;
+  }
+
+  function clearBleMarkerSpillLayer(map, fs = false) {
+    const spill = fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer;
+    if (!spill) return;
+    spill.clearLayers();
+    if (map) map.removeLayer(spill);
+    if (fs) bleMarkerSpillLayerFS = null;
+    else bleMarkerSpillLayer = null;
+  }
+
+  function enforceClusterMinSize(group, spill, map, fs = false) {
+    if (!group || !map || !bleClusterEnabled) return;
+    const spillLayer = spill || getBleMarkerSpillLayer(map, fs);
+    if (!spillLayer) return;
+
+    const fromSpill = [];
+    spillLayer.eachLayer((m) => fromSpill.push(m));
+    if (fromSpill.length) {
+      spillLayer.clearLayers();
+      fromSpill.forEach((m) => {
+        if (!group.hasLayer(m)) group.addLayer(m);
+      });
+      if (typeof group.refreshClusters === "function") group.refreshClusters();
+    }
+
+    const tiny = [];
+    group.eachLayer((layer) => {
+      if (typeof layer?.getChildCount !== "function") return;
+      const count = layer.getChildCount();
+      if (count >= 2 && count < BLE_CLUSTER_MIN_COUNT) tiny.push(layer);
+    });
+    if (!tiny.length) return;
+
+    tiny.forEach((cluster) => {
+      const children = cluster.getAllChildMarkers?.() || [];
+      group.removeLayer(cluster);
+      children.forEach((m) => {
+        if (!spillLayer.hasLayer(m)) spillLayer.addLayer(m);
+      });
+    });
+  }
+
+  function scheduleEnforceClusterMinSize(group, spill, map, fs = false) {
+    if (!group || !map) return;
+    const timer = fs ? bleClusterEnforceTimerFS : bleClusterEnforceTimer;
+    if (timer) clearTimeout(timer);
+    const delays = [0, 80, 200, 450];
+    let step = 0;
+    const run = () => {
+      enforceClusterMinSize(group, spill, map, fs);
+      step += 1;
+      if (step < delays.length) {
+        const wait = delays[step] - delays[step - 1];
+        const id = setTimeout(run, wait);
+        if (fs) bleClusterEnforceTimerFS = id;
+        else bleClusterEnforceTimer = id;
+      } else if (fs) bleClusterEnforceTimerFS = null;
+      else bleClusterEnforceTimer = null;
+    };
+    run();
+  }
+
+  function makeClusterGroup(map, fs = false) {
+    const group = L.markerClusterGroup({
       maxClusterRadius(zoom) {
         if (zoom < 17) return 120;
         if (zoom < 19) return 40;
@@ -6567,6 +6648,16 @@ if(cards.length)selectIdx(0);
       chunkInterval: 80,
       chunkDelay: 16,
       removeOutsideVisibleBounds: true,
+      chunkProgress(processed, total) {
+        if (processed >= total && bleClusterEnabled) {
+          scheduleEnforceClusterMinSize(
+            group,
+            fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer,
+            map,
+            fs
+          );
+        }
+      },
       iconCreateFunction(cluster) {
         const count = cluster.getChildCount();
         const size = count < 10 ? "small" : count < 50 ? "medium" : "large";
@@ -6577,25 +6668,16 @@ if(cards.length)selectIdx(0);
         });
       },
     });
-  }
-
-  function normalizeSmallClusters(group) {
-    if (!group?.eachLayer) return;
-    const tiny = [];
-    group.eachLayer((layer) => {
-      const canExpand =
-        typeof layer?.getChildCount === "function" &&
-        typeof layer?.getAllChildMarkers === "function";
-      if (!canExpand) return;
-      const count = layer.getChildCount();
-      if (count > 1 && count < BLE_CLUSTER_MIN_COUNT) tiny.push(layer);
+    group.on("animationend", () => {
+      if (!bleClusterEnabled) return;
+      scheduleEnforceClusterMinSize(
+        group,
+        fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer,
+        map,
+        fs
+      );
     });
-    if (!tiny.length) return;
-    tiny.forEach((cluster) => {
-      const children = cluster.getAllChildMarkers?.() || [];
-      group.removeLayer(cluster);
-      children.forEach((m) => group.addLayer(m));
-    });
+    return group;
   }
 
   function bindClusterNormalization(map, fs = false) {
@@ -6603,7 +6685,12 @@ if(cards.length)selectIdx(0);
     if (fs ? bleClusterNormalizeBoundFS : bleClusterNormalizeBound) return;
     map.on("zoomend moveend", () => {
       if (!bleClusterEnabled) return;
-      normalizeSmallClusters(fs ? bleClusterGroupFS : bleClusterGroup);
+      scheduleEnforceClusterMinSize(
+        fs ? bleClusterGroupFS : bleClusterGroup,
+        fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer,
+        map,
+        fs
+      );
     });
     if (fs) bleClusterNormalizeBoundFS = true;
     else bleClusterNormalizeBound = true;
@@ -6944,6 +7031,7 @@ if(cards.length)selectIdx(0);
       bleMapFS.removeLayer(bleClusterGroupFS);
       bleClusterGroupFS = null;
     }
+    clearBleMarkerSpillLayer(bleMapFS, true);
     if (bleMarkerLayerFS) {
       bleMarkerLayerFS.clearLayers();
       bleMapFS.removeLayer(bleMarkerLayerFS);
@@ -7077,6 +7165,7 @@ if(cards.length)selectIdx(0);
         bleMap.removeLayer(bleClusterGroup);
         bleClusterGroup = null;
       }
+      clearBleMarkerSpillLayer(bleMap, false);
       if (!bleMarkerLayer) {
         bleMarkerLayer = L.layerGroup();
         bleMap.addLayer(bleMarkerLayer);
@@ -7093,14 +7182,15 @@ if(cards.length)selectIdx(0);
     }
 
     if (!bleClusterGroup) {
-      bleClusterGroup = makeClusterGroup();
+      bleClusterGroup = makeClusterGroup(bleMap, false);
       bleMap.addLayer(bleClusterGroup);
       bindClusterNormalization(bleMap, false);
     } else {
       bleClusterGroup.clearLayers();
+      if (bleMarkerSpillLayer) bleMarkerSpillLayer.clearLayers();
     }
     bleClusterGroup.addLayers(visible);
-    normalizeSmallClusters(bleClusterGroup);
+    scheduleEnforceClusterMinSize(bleClusterGroup, bleMarkerSpillLayer, bleMap, false);
   }
 
   function renderFsMarkers() {
@@ -7133,6 +7223,7 @@ if(cards.length)selectIdx(0);
         bleMapFS.removeLayer(bleClusterGroupFS);
         bleClusterGroupFS = null;
       }
+      clearBleMarkerSpillLayer(bleMapFS, true);
       if (!bleMarkerLayerFS) {
         bleMarkerLayerFS = L.layerGroup();
         bleMapFS.addLayer(bleMarkerLayerFS);
@@ -7149,14 +7240,15 @@ if(cards.length)selectIdx(0);
     }
 
     if (!bleClusterGroupFS) {
-      bleClusterGroupFS = makeClusterGroup();
+      bleClusterGroupFS = makeClusterGroup(bleMapFS, true);
       bleMapFS.addLayer(bleClusterGroupFS);
       bindClusterNormalization(bleMapFS, true);
     } else {
       bleClusterGroupFS.clearLayers();
+      if (bleMarkerSpillLayerFS) bleMarkerSpillLayerFS.clearLayers();
     }
     bleClusterGroupFS.addLayers(visible);
-    normalizeSmallClusters(bleClusterGroupFS);
+    scheduleEnforceClusterMinSize(bleClusterGroupFS, bleMarkerSpillLayerFS, bleMapFS, true);
   }
 
   function updateMapStats() {
