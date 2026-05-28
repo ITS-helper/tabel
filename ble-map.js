@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260528d";
+  const BLE_MAP_BUILD = "20260528e";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -3861,36 +3861,17 @@
     return `\uFEFF${lines.join("\r\n")}`;
   }
 
-  async function deliverCsvExportFile(filename, csvText, shareTitle) {
+  function downloadCsvFile(filename, csvText) {
     const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
-    const file = new File([blob], filename, { type: "text/csv" });
-
-    if (typeof navigator.canShare === "function") {
-      try {
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: shareTitle,
-            text: "Метки по полигонам",
-          });
-          return "share";
-        }
-      } catch (e) {
-        if (e?.name === "AbortError") return "cancel";
-      }
-    }
-
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
-    a.type = "text/csv";
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 120000);
-    return "download";
   }
 
   let polygonExportActive = false;
@@ -3932,23 +3913,16 @@
       const routeSlug = route ? `-${sanitizeRouteFileName(routeTitlePlain(route.routeId))}` : "";
       const fname = `ble-polygons${routeSlug}-${date}.csv`;
 
-      setRouteExportStatus("Сохранение CSV…", "busy");
-      const mode = await deliverCsvExportFile(fname, csv, "Метки по полигонам");
-
-      if (mode === "cancel") return;
-
-      const kb = Math.max(1, Math.round(csv.length / 1024));
-      if (mode === "share") {
-        alert(`Файл «${fname}» (~${kb} КБ) · ${rows.length} меток.\n\nСохраните через «Файлы».`);
-      } else {
-        alert(`Файл «${fname}» (~${kb} КБ) · ${rows.length} меток скачан.`);
-      }
+      setRouteExportStatus("Скачивание CSV…", "busy");
+      downloadCsvFile(fname, csv);
+      setRouteExportStatus(`Скачан ${fname} · ${rows.length} меток`);
+      setTimeout(() => setRouteExportStatus(""), 5000);
     } catch (err) {
       alert(`Не удалось выгрузить: ${String(err?.message || err).slice(0, 180)}`);
+      setRouteExportStatus("");
     } finally {
       polygonExportActive = false;
       if (btn) btn.disabled = false;
-      setRouteExportStatus("");
     }
   }
 
