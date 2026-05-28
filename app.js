@@ -2985,6 +2985,16 @@ function renderObjectSummary() {
 }
 
 const APP_PAGE_STORAGE_KEY = "ww-app-page";
+/** Должен совпадать с ?v= в ble-map.html (см. BLE_MAP_BUILD). */
+const BLE_MAP_IFRAME_BUILD = "20260528d";
+
+function ensureBleMapIframeCurrent() {
+  const iframe = document.querySelector("#page-blemap iframe");
+  if (!iframe) return;
+  const want = `ble-map.html?v=${BLE_MAP_IFRAME_BUILD}`;
+  const cur = iframe.getAttribute("src") || "";
+  if (!cur.includes(BLE_MAP_IFRAME_BUILD)) iframe.src = want;
+}
 
 function showAppPage(pageId) {
   const valid = pageId === "blemap" ? "blemap" : "tabel";
@@ -2997,6 +3007,7 @@ function showAppPage(pageId) {
   document.documentElement.classList.toggle("app--blemap-tab", valid === "blemap");
   document.body.classList.toggle("app--blemap-tab", valid === "blemap");
   if (valid === "blemap") {
+    ensureBleMapIframeCurrent();
     const iframe = document.querySelector("#page-blemap iframe");
     if (iframe?.contentWindow) {
       try {
