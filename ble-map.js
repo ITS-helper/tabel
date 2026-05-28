@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260528c";
+  const BLE_MAP_BUILD = "20260528d";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -3788,6 +3788,168 @@
   function isMainSitePolygonZone(z) {
     const label = `${z.name || ""} ${z.description || ""}`.toLowerCase();
     return label.includes("spg_tsb") || label.includes("spg-tsb");
+  }
+
+  const POLYGON_EXPORT_LABEL_NONE = "Без полигона";
+  const POLYGON_EXPORT_LABEL_MAIN = "Основной полигон";
+
+  function polygonAreaSqDeg(ring) {
+    if (!ring || ring.length < 3) return 0;
+    let area = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const yi = ring[i][0];
+      const xi = ring[i][1];
+      const yj = ring[j][0];
+      const xj = ring[j][1];
+      area += (xj + xi) * (yj - yi);
+    }
+    return Math.abs(area / 2);
+  }
+
+  function getZonesForPolygonExport() {
+    const out = [];
+    for (const z of bleZoneData) {
+      const pts = getZoneDisplayPts(z);
+      if (!pts || pts.length < 3) continue;
+      out.push({
+        zone: z,
+        pts,
+        area: polygonAreaSqDeg(pts),
+        isMain: isMainSitePolygonZone(z),
+        name: normalizeZoneName(z.name) || `Зона ${z.id}`,
+      });
+    }
+    return out;
+  }
+
+  function resolveMarkerPolygonLabel(pt) {
+    if (pt?.lat == null || pt?.lng == null) return POLYGON_EXPORT_LABEL_NONE;
+    const containing = [];
+    for (const z of getZonesForPolygonExport()) {
+      if (pointInPolygon(pt.lat, pt.lng, z.pts)) containing.push(z);
+    }
+    if (!containing.length) return POLYGON_EXPORT_LABEL_NONE;
+    const nonMain = containing.filter((z) => !z.isMain);
+    const pool = nonMain.length ? nonMain : containing;
+    pool.sort((a, b) => a.area - b.area);
+    const pick = pool[0];
+    if (pick.isMain && !nonMain.length) return POLYGON_EXPORT_LABEL_MAIN;
+    return pick.name;
+  }
+
+  function collectMarkersForPolygonExport() {
+    return bleMapData
+      .filter((pt) => pt.lat != null && pt.lng != null && pointPassesRouteFilter(pt))
+      .map((pt) => ({
+        ble: String(pt.ble || pt.id || "").trim(),
+        polygon: resolveMarkerPolygonLabel(pt),
+      }))
+      .filter((row) => row.ble);
+  }
+
+  function csvEscapeCell(value) {
+    const v = String(value ?? "");
+    if (/[",;\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+    return v;
+  }
+
+  function buildPolygonMarkersCsv(rows) {
+    const lines = ["№ метки;Полигон"];
+    for (const row of rows) {
+      lines.push(`${csvEscapeCell(row.ble)};${csvEscapeCell(row.polygon)}`);
+    }
+    return `\uFEFF${lines.join("\r\n")}`;
+  }
+
+  async function deliverCsvExportFile(filename, csvText, shareTitle) {
+    const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+    const file = new File([blob], filename, { type: "text/csv" });
+
+    if (typeof navigator.canShare === "function") {
+      try {
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: shareTitle,
+            text: "Метки по полигонам",
+          });
+          return "share";
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") return "cancel";
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.type = "text/csv";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    return "download";
+  }
+
+  let polygonExportActive = false;
+
+  async function onPolygonMarkersExportClick(e) {
+    if (polygonExportActive || routeExportActive || fieldPackDownloadActive) return;
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
+    const route = getActiveRouteForFieldSync();
+    const routeNote = route
+      ? `Только маршрут «${routeTitlePlain(route.routeId)}».`
+      : "Все маршруты (фильтр «Все»).";
+    if (
+      !confirm(
+        `Выгрузить CSV: № метки и полигон, в котором она находится?\n\n${routeNote}\n\n` +
+          "«Без полигона» — вне зон; «Основной полигон» — внутри контура площадки без вложенной зоны."
+      )
+    ) {
+      return;
+    }
+
+    polygonExportActive = true;
+    const btn = document.getElementById("mapPolygonExportBtn");
+    if (btn) btn.disabled = true;
+    setRouteExportStatus("Подготовка выгрузки по полигонам…", "busy");
+
+    try {
+      const rows = collectMarkersForPolygonExport();
+      if (!rows.length) {
+        alert("Нет меток с координатами для выгрузки. Нажмите «Обновить» по Wi‑Fi/VPN.");
+        return;
+      }
+      rows.sort((a, b) => String(a.ble).localeCompare(String(b.ble), "ru", { numeric: true }));
+
+      await yieldToMain();
+      const csv = buildPolygonMarkersCsv(rows);
+      const date = new Date().toISOString().slice(0, 10);
+      const routeSlug = route ? `-${sanitizeRouteFileName(routeTitlePlain(route.routeId))}` : "";
+      const fname = `ble-polygons${routeSlug}-${date}.csv`;
+
+      setRouteExportStatus("Сохранение CSV…", "busy");
+      const mode = await deliverCsvExportFile(fname, csv, "Метки по полигонам");
+
+      if (mode === "cancel") return;
+
+      const kb = Math.max(1, Math.round(csv.length / 1024));
+      if (mode === "share") {
+        alert(`Файл «${fname}» (~${kb} КБ) · ${rows.length} меток.\n\nСохраните через «Файлы».`);
+      } else {
+        alert(`Файл «${fname}» (~${kb} КБ) · ${rows.length} меток скачан.`);
+      }
+    } catch (err) {
+      alert(`Не удалось выгрузить: ${String(err?.message || err).slice(0, 180)}`);
+    } finally {
+      polygonExportActive = false;
+      if (btn) btn.disabled = false;
+      setRouteExportStatus("");
+    }
   }
 
   function isMarkerClusterZone(z, ptCount) {
@@ -7742,6 +7904,9 @@ if(cards.length)selectIdx(0);
     });
     document.getElementById("mapRouteExportBtn")?.addEventListener("click", (e) => {
       void onRouteExportClick(e);
+    });
+    document.getElementById("mapPolygonExportBtn")?.addEventListener("click", (e) => {
+      void onPolygonMarkersExportClick(e);
     });
     document.getElementById("mapFieldPackFile")?.addEventListener("change", (e) => {
       const file = e.target.files?.[0];

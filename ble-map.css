@@ -868,6 +868,33 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   border-color: #1565c0;
 }
 
+.map-polygon-export-btn {
+  font-family: Oswald, sans-serif;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #00695c 45%, var(--accent));
+  background: linear-gradient(145deg, #e0f2f1, #b2dfdb);
+  color: #004d40;
+  cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.map-polygon-export-btn:hover {
+  background: linear-gradient(145deg, #b2dfdb, #80cbc4);
+  border-color: #00695c;
+}
+
+.map-polygon-export-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 body.ble-map-native .map-route-export-btn {
   display: none !important;
 }
@@ -2696,6 +2723,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-route-export-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-polygon-export-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
     height: 38px !important;
     min-height: 38px !important;
@@ -2919,11 +2947,13 @@ body:not(.ble-map-embedded) .map-float-dock > * {
   html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-edit-mode-btn,
   html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn,
   html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-route-export-btn,
+  html.ble-map-embedded body:not(.ble-map--edit) .map-toolbar-row--actions .map-polygon-export-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-filter-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-retry-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-edit-mode-btn,
   body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-field-pack-btn,
-  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-route-export-btn {
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-route-export-btn,
+  body.ble-map-mobile:not(.ble-map--edit) .map-toolbar-row--actions .map-polygon-export-btn {
     min-height: 48px !important;
     padding: 10px 18px !important;
     font-family: Oswald, sans-serif;
@@ -3097,6 +3127,7 @@ body:not(.ble-map-embedded) .map-float-dock > * {
 .map-toolbar .map-retry-btn,
 .map-toolbar .map-field-pack-btn,
 .map-toolbar .map-route-export-btn,
+.map-toolbar .map-polygon-export-btn,
 .map-toolbar .map-edit-mode-btn {
   height: var(--ctl-h);
   min-height: var(--ctl-h);
@@ -3375,6 +3406,7 @@ body.ble-map--edit .map-toolbar .map-edit-mode-btn {
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-retry-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-field-pack-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-route-export-btn,
+  body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-polygon-export-btn,
   body:not(.ble-map--edit) .map-toolbar .map-toolbar-row--actions .map-edit-mode-btn {
     height: var(--ctl-h-mobile);
     min-height: var(--ctl-h-mobile);
