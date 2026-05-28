@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260528b";
+  const BLE_MAP_BUILD = "20260528c";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -61,6 +61,7 @@
   const BLE_MAP_EDIT_MAX_ZOOM = 20;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
   const BLE_DEFAULT_CENTER_MAX_ATTEMPTS = 18;
+  const BLE_CLUSTER_MIN_COUNT = 5;
   const BLE_ZONE_NEON = "#00e5ff";
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
@@ -830,6 +831,8 @@
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
   let bleClusterGroupFS = null;
+  let bleClusterNormalizeBound = false;
+  let bleClusterNormalizeBoundFS = false;
   let bleMarkerLayerFS = null;
 
   let bleCompanyId = null;
@@ -6422,8 +6425,8 @@ if(cards.length)selectIdx(0);
       disableClusteringAtZoom: 20,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
-      animate: false,
-      animateAddingMarkers: false,
+      animate: true,
+      animateAddingMarkers: true,
       chunkedLoading: true,
       chunkInterval: 80,
       chunkDelay: 16,
@@ -6438,6 +6441,36 @@ if(cards.length)selectIdx(0);
         });
       },
     });
+  }
+
+  function normalizeSmallClusters(group) {
+    if (!group?.eachLayer) return;
+    const tiny = [];
+    group.eachLayer((layer) => {
+      const canExpand =
+        typeof layer?.getChildCount === "function" &&
+        typeof layer?.getAllChildMarkers === "function";
+      if (!canExpand) return;
+      const count = layer.getChildCount();
+      if (count > 1 && count < BLE_CLUSTER_MIN_COUNT) tiny.push(layer);
+    });
+    if (!tiny.length) return;
+    tiny.forEach((cluster) => {
+      const children = cluster.getAllChildMarkers?.() || [];
+      group.removeLayer(cluster);
+      children.forEach((m) => group.addLayer(m));
+    });
+  }
+
+  function bindClusterNormalization(map, fs = false) {
+    if (!map) return;
+    if (fs ? bleClusterNormalizeBoundFS : bleClusterNormalizeBound) return;
+    map.on("zoomend moveend", () => {
+      if (!bleClusterEnabled) return;
+      normalizeSmallClusters(fs ? bleClusterGroupFS : bleClusterGroup);
+    });
+    if (fs) bleClusterNormalizeBoundFS = true;
+    else bleClusterNormalizeBound = true;
   }
 
   function getOrCreateMarkerForPt(pt) {
@@ -6926,10 +6959,12 @@ if(cards.length)selectIdx(0);
     if (!bleClusterGroup) {
       bleClusterGroup = makeClusterGroup();
       bleMap.addLayer(bleClusterGroup);
+      bindClusterNormalization(bleMap, false);
     } else {
       bleClusterGroup.clearLayers();
     }
     bleClusterGroup.addLayers(visible);
+    normalizeSmallClusters(bleClusterGroup);
   }
 
   function renderFsMarkers() {
@@ -6980,10 +7015,12 @@ if(cards.length)selectIdx(0);
     if (!bleClusterGroupFS) {
       bleClusterGroupFS = makeClusterGroup();
       bleMapFS.addLayer(bleClusterGroupFS);
+      bindClusterNormalization(bleMapFS, true);
     } else {
       bleClusterGroupFS.clearLayers();
     }
     bleClusterGroupFS.addLayers(visible);
+    normalizeSmallClusters(bleClusterGroupFS);
   }
 
   function updateMapStats() {
