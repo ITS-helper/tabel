@@ -763,6 +763,39 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   background: #fef2f2;
 }
 
+.map-cluster-toggle {
+  position: absolute;
+  left: 8px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 760;
+  border: 1px solid rgba(21, 101, 192, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0d47a1;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  font-family: Oswald, sans-serif;
+  font-size: 0.68em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.map-cluster-toggle[data-state="off"] {
+  color: #455a64;
+  border-color: rgba(69, 90, 100, 0.28);
+}
+
+.map-cluster-toggle[hidden] {
+  display: none !important;
+}
+
+body:not(.ble-map-native) .map-cluster-toggle {
+  display: none !important;
+}
+
 .map-retry-btn {
   font-family: Oswald, sans-serif;
   font-size: 0.72em;

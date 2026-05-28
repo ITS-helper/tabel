@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260525a" />
+  <link rel="stylesheet" href="ble-map.css?v=20260528a" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -57,6 +57,17 @@
         <div id="bleMap">
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
         </div>
+        <button
+          type="button"
+          class="map-cluster-toggle"
+          id="mapClusterToggleBtn"
+          title="Отключить кластеры меток"
+          aria-label="Переключить кластеры меток"
+          aria-pressed="true"
+          hidden
+        >
+          Кластеры: вкл
+        </button>
         <div class="map-float-dock" id="mapFloatDock" hidden>
           <div class="map-toolbar" id="mapToolbar">
             <div class="map-toolbar-row map-toolbar-row--fields">
@@ -331,7 +342,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
   <script src="ble-genplan-mask.js?v=20260520m"></script>
-  <script src="ble-map.js?v=20260525a"></script>
+  <script src="ble-map.js?v=20260528a"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

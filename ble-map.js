@@ -23,13 +23,14 @@
   const BLE_LIST_FETCH_TIMEOUT_MS = 22000;
   const BLE_STATIC_CACHE_FETCH_MS = 90000;
   const BLE_TRANSPORT_KEY = "ww-ble-transport";
+  const BLE_CLUSTER_TOGGLE_KEY = "ww-ble-cluster-enabled";
   const BLE_OFFLINE_FIRST_KEY = "ww-ble-offline-first";
   const BLE_FIELD_READY_KEY = "ww-ble-field-ready";
   const ROUTE_EXPORT_SVG_W = 1000;
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260525a";
+  const BLE_MAP_BUILD = "20260528a";
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -804,6 +805,7 @@
     }
   }
   let bleClusterGroup = null;
+  let bleClusterEnabled = true;
 
   let bleMapFS = null;
   let bleMapFSFilter = "all";
@@ -6894,11 +6896,32 @@ if(cards.length)selectIdx(0);
       bleMarkerLayer = null;
     }
 
-    const key = `view:${bleMapFilter}:${bleMapRouteFilter}:${q}:${bleMapData.length}`;
-    if (key === lastRenderKey && bleClusterGroup) return;
+    const key = `view:${bleMapFilter}:${bleMapRouteFilter}:${q}:${bleMapData.length}:${bleClusterEnabled ? "cluster" : "plain"}`;
+    if (key === lastRenderKey && (bleClusterEnabled ? !!bleClusterGroup : !!bleMarkerLayer)) return;
     lastRenderKey = key;
 
     const visible = collectVisibleMarkers(bleMapFilter, q);
+
+    if (!bleClusterEnabled) {
+      if (bleClusterGroup) {
+        bleClusterGroup.clearLayers();
+        bleMap.removeLayer(bleClusterGroup);
+        bleClusterGroup = null;
+      }
+      if (!bleMarkerLayer) {
+        bleMarkerLayer = L.layerGroup();
+        bleMap.addLayer(bleMarkerLayer);
+      } else {
+        bleMarkerLayer.clearLayers();
+      }
+      visible.forEach((m) => bleMarkerLayer.addLayer(m));
+      return;
+    }
+
+    if (bleMarkerLayer) {
+      bleMap.removeLayer(bleMarkerLayer);
+      bleMarkerLayer = null;
+    }
 
     if (!bleClusterGroup) {
       bleClusterGroup = makeClusterGroup();
@@ -6927,11 +6950,32 @@ if(cards.length)selectIdx(0);
       bleMarkerLayerFS = null;
     }
 
-    const key = `view:${bleMapFSFilter}:${bleMapRouteFilter}:${q}:${bleMapData.length}`;
-    if (key === lastRenderKeyFS && bleClusterGroupFS) return;
+    const key = `view:${bleMapFSFilter}:${bleMapRouteFilter}:${q}:${bleMapData.length}:${bleClusterEnabled ? "cluster" : "plain"}`;
+    if (key === lastRenderKeyFS && (bleClusterEnabled ? !!bleClusterGroupFS : !!bleMarkerLayerFS)) return;
     lastRenderKeyFS = key;
 
     const visible = collectVisibleMarkers(bleMapFSFilter, q);
+
+    if (!bleClusterEnabled) {
+      if (bleClusterGroupFS) {
+        bleClusterGroupFS.clearLayers();
+        bleMapFS.removeLayer(bleClusterGroupFS);
+        bleClusterGroupFS = null;
+      }
+      if (!bleMarkerLayerFS) {
+        bleMarkerLayerFS = L.layerGroup();
+        bleMapFS.addLayer(bleMarkerLayerFS);
+      } else {
+        bleMarkerLayerFS.clearLayers();
+      }
+      visible.forEach((m) => bleMarkerLayerFS.addLayer(m));
+      return;
+    }
+
+    if (bleMarkerLayerFS) {
+      bleMapFS.removeLayer(bleMarkerLayerFS);
+      bleMarkerLayerFS = null;
+    }
 
     if (!bleClusterGroupFS) {
       bleClusterGroupFS = makeClusterGroup();
@@ -7027,12 +7071,57 @@ if(cards.length)selectIdx(0);
       retryBtn.title = "Обновить координаты меток и полигоны с сервера (Wi‑Fi/VPN)";
       retryBtn.setAttribute("aria-label", "Обновить координаты и зоны");
     }
+    const clusterBtn = document.getElementById("mapClusterToggleBtn");
+    if (clusterBtn) clusterBtn.hidden = false;
     const logo = document.getElementById("bleMapBackLogo");
     if (logo) {
       logo.disabled = true;
       logo.style.pointerEvents = "none";
       logo.style.opacity = "0.85";
     }
+  }
+
+  function loadClusterTogglePref() {
+    if (!isBleNativeApp()) {
+      bleClusterEnabled = true;
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(BLE_CLUSTER_TOGGLE_KEY);
+      bleClusterEnabled = raw == null ? true : raw !== "0";
+    } catch {
+      bleClusterEnabled = true;
+    }
+  }
+
+  function updateClusterToggleUi() {
+    const btn = document.getElementById("mapClusterToggleBtn");
+    if (!btn) return;
+    btn.hidden = !isBleNativeApp();
+    btn.dataset.state = bleClusterEnabled ? "on" : "off";
+    btn.textContent = bleClusterEnabled ? "Кластеры: вкл" : "Кластеры: выкл";
+    btn.setAttribute("aria-pressed", bleClusterEnabled ? "true" : "false");
+    btn.title = bleClusterEnabled ? "Отключить кластеры меток" : "Включить кластеры меток";
+  }
+
+  function setClusterEnabled(next, opts = {}) {
+    const on = !!next;
+    if (on === bleClusterEnabled && !opts.force) {
+      updateClusterToggleUi();
+      return;
+    }
+    bleClusterEnabled = on;
+    if (opts.persist !== false && isBleNativeApp()) {
+      try {
+        localStorage.setItem(BLE_CLUSTER_TOGGLE_KEY, bleClusterEnabled ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+    }
+    updateClusterToggleUi();
+    lastRenderKey = "";
+    lastRenderKeyFS = "";
+    redrawMapLayers({ zones: false });
   }
 
   function isCoarseMobile() {
@@ -7543,6 +7632,8 @@ if(cards.length)selectIdx(0);
     wireZonePanel();
     wireZoneAlignPanel();
     wireMapMsgDismiss();
+    loadClusterTogglePref();
+    updateClusterToggleUi();
     syncBaseLayerPickers(readStoredBaseLayer());
     const onFilterTap = (e) => {
       const btn = e.target.closest(".map-filter-btn[data-filter], .map-filter-btn[data-fsfilter]");
@@ -7576,6 +7667,8 @@ if(cards.length)selectIdx(0);
           const target = bleMarkerRegistry.get(found.id)?.marker;
           if (target && bleClusterGroup?.zoomToShowLayer) {
             bleClusterGroup.zoomToShowLayer(target, () => target.openPopup());
+          } else if (target) {
+            target.openPopup();
           }
         }
       };
@@ -7604,6 +7697,9 @@ if(cards.length)selectIdx(0);
     document.getElementById("mapCancelEditBtn")?.addEventListener("click", () => setEditMode(false));
     document.getElementById("mapFullscreenClose")?.addEventListener("click", closeFullscreenMap);
     document.getElementById("mapRetryBtn")?.addEventListener("click", retryBleMap);
+    document.getElementById("mapClusterToggleBtn")?.addEventListener("click", () => {
+      setClusterEnabled(!bleClusterEnabled);
+    });
     document.getElementById("mapFieldPackBtn")?.addEventListener("click", (e) => {
       if (e.shiftKey) {
         void onFieldPackAdvancedMenu();
