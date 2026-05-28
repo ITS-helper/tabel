@@ -30,7 +30,8 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260529a";
+  const BLE_MAP_BUILD = "20260529b";
+  const BLE_ZONE_FETCH_CONCURRENCY = 10;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -3717,8 +3718,17 @@
     requestAnimationFrame(updateMapFloatDockTopInset);
   }
 
+  function ensureBleZonePane(targetMap) {
+    if (!targetMap?.createPane) return;
+    if (!targetMap.getPane("bleZones")) {
+      const pane = targetMap.createPane("bleZones");
+      pane.style.zIndex = "405";
+    }
+  }
+
   function drawZones(targetMap, opts = {}) {
     if (!targetMap) return;
+    ensureBleZonePane(targetMap);
     const forEdit =
       isZoneEditAllowed() && targetMap === getActiveMap() && opts.forEdit !== false;
     const zoneFocused = forEdit && bleSelectedZoneId != null && !bleZoneAlignMode;
@@ -3726,6 +3736,7 @@
     if (!group) {
       group = L.layerGroup().addTo(targetMap);
       bleZoneGroups.set(targetMap, group);
+      if (group.bringToBack) group.bringToBack();
     }
     clearZoneVertexHandles(targetMap);
     group.clearLayers();
@@ -3750,6 +3761,7 @@
         ptCount: pts.length,
       });
       const layer = L.polygon(pts, {
+        pane: "bleZones",
         color: zoneStyle.color,
         fillColor: zoneStyle.fillColor,
         opacity: zoneStyle.opacity,
@@ -5385,26 +5397,131 @@ if(cards.length)selectIdx(0);
     db.close();
   }
 
-  function parseMapDataZones(mapData) {
-    if (!mapData?.zones || !mapData?.points) return [];
-    const pointsByZone = {};
-    mapData.points.forEach((p) => {
-      if (!pointsByZone[p.zoneId]) pointsByZone[p.zoneId] = [];
-      pointsByZone[p.zoneId].push([p.latitude, p.longitude]);
-    });
+  function apiPointsToPts(points) {
+    if (!Array.isArray(points)) return [];
+    return points
+      .map((p) => {
+        const lat = Number(p?.latitude ?? p?.lat);
+        const lng = Number(p?.longitude ?? p?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return [lat, lng];
+      })
+      .filter(Boolean);
+  }
+
+  function parseMapDataZoneMetas(mapData) {
+    if (!mapData?.zones?.length) return [];
     return mapData.zones
+      .filter((z) => z?.id != null && !z.deleted)
       .map((z) => ({
         id: z.id,
         name: z.name || "",
         description: z.description || "",
         color: z.color || "#0088cc",
-        pts: (pointsByZone[z.id] || []).map((p) => [...p]),
-      }))
-      .filter((z) => z.pts.length > 2);
+        pts: apiPointsToPts(z.points),
+      }));
+  }
+
+  function markerCoordsByZoneFromMapData(mapData) {
+    const byZone = new Map();
+    if (!mapData?.points?.length) return byZone;
+    mapData.points.forEach((p) => {
+      const zid = p.zoneId ?? p.zone_id;
+      if (zid == null) return;
+      const lat = Number(p.latitude);
+      const lng = Number(p.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      if (!byZone.has(zid)) byZone.set(zid, []);
+      byZone.get(zid).push([lat, lng]);
+    });
+    return byZone;
+  }
+
+  function convexHullPts(points) {
+    if (!points?.length) return [];
+    if (points.length <= 3) return points.map((p) => [...p]);
+    const pts = points
+      .map((p) => ({ x: p[1], y: p[0] }))
+      .sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [];
+    for (const p of pts) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+        lower.pop();
+      }
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const p = pts[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+        upper.pop();
+      }
+      upper.push(p);
+    }
+    upper.pop();
+    lower.pop();
+    return lower.concat(upper).map((p) => [p.y, p.x]);
+  }
+
+  const bleZonePolygonCache = new Map();
+
+  async function fetchBleZonePolygonPts(zoneId) {
+    const id = Number(zoneId);
+    if (!Number.isFinite(id)) return [];
+    if (bleZonePolygonCache.has(id)) return bleZonePolygonCache.get(id);
+    const data = await bleApiFetch(`/api/v1/ble_zone/${id}`);
+    const pts = apiPointsToPts(data?.points);
+    bleZonePolygonCache.set(id, pts);
+    return pts;
+  }
+
+  async function hydrateBleZonePolygonsFromApi(zoneMetas, markerCoordsByZone = null) {
+    if (!zoneMetas?.length) return [];
+    const out = zoneMetas.map((z) => ({
+      id: z.id,
+      name: z.name || "",
+      description: z.description || "",
+      color: z.color || "#0088cc",
+      pts: z.pts?.length >= 3 ? z.pts.map((p) => [...p]) : [],
+    }));
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < out.length) {
+        const idx = cursor++;
+        const z = out[idx];
+        if (z.pts.length >= 3) continue;
+        try {
+          const pts = await fetchBleZonePolygonPts(z.id);
+          if (pts.length >= 3) {
+            z.pts = pts.map((p) => [...p]);
+            continue;
+          }
+        } catch {
+          /* fallback below */
+        }
+        const fallback = markerCoordsByZone?.get(z.id) || markerCoordsByZone?.get(Number(z.id));
+        if (fallback?.length >= 3) {
+          z.pts = convexHullPts(fallback);
+        }
+      }
+    };
+    const n = Math.min(BLE_ZONE_FETCH_CONCURRENCY, out.length);
+    await Promise.all(Array.from({ length: n }, () => worker()));
+    return out.filter((z) => z.pts.length >= 3);
+  }
+
+  function parseMapDataZones(mapData) {
+    return parseMapDataZoneMetas(mapData).filter((z) => z.pts.length >= 3);
   }
 
   function applyBleZoneDataFromParsed(zones) {
     bleZoneData = Array.isArray(zones) ? zones : [];
+    bleZoneData.forEach((z) => {
+      if (z?.id != null && z.pts?.length >= 3) {
+        bleZonePolygonCache.set(Number(z.id), z.pts.map((p) => [...p]));
+      }
+    });
     if (bleMap) drawZones(bleMap);
     if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
   }
@@ -5441,21 +5558,34 @@ if(cards.length)selectIdx(0);
     if (tryApi) {
       try {
         const mapData = await bleApiFetch(`/api/v1/map/${cid}/map_data`);
-        const zones = parseMapDataZones(mapData);
-        if (zones.length) {
-          applyBleZoneDataFromParsed(zones);
-          if (isBleNativeApp()) {
-            try {
-              await commitFieldPackZones(zones);
-            } catch (e) {
-              console.warn("[ble-map] field zones save", e?.message || e);
-            }
+        const metas = parseMapDataZoneMetas(mapData);
+        if (metas.length) {
+          if (!opts.silent) {
+            showMapMsg(`Загрузка полигонов (0/${metas.length})…`, "busy");
           }
-          return true;
+          const markerByZone = markerCoordsByZoneFromMapData(mapData);
+          const zones = await hydrateBleZonePolygonsFromApi(metas, markerByZone);
+          if (zones.length) {
+            applyBleZoneDataFromParsed(zones);
+            if (isBleNativeApp()) {
+              try {
+                await commitFieldPackZones(zones);
+              } catch (e) {
+                console.warn("[ble-map] field zones save", e?.message || e);
+              }
+            }
+            if (!opts.silent) showMapMsg(`Полигонов на карте: ${zones.length}`, "");
+            return true;
+          }
         }
       } catch (e) {
         if (opts.strict) throw e;
         console.warn("[ble-map] map_data zones", e?.message || e);
+      } finally {
+        if (!opts.silent) {
+          const msg = document.querySelector("#mapMsg .map-msg__text")?.textContent || "";
+          if (msg.startsWith("Загрузка полигонов")) showMapMsg("", "");
+        }
       }
     }
     const cached = await loadFieldPackZones();
@@ -6592,6 +6722,19 @@ if(cards.length)selectIdx(0);
     return tiny;
   }
 
+  function detachMarkersToSpill(group, markers, spillLayer) {
+    if (!group || !spillLayer || !markers?.length) return;
+    markers.forEach((m) => {
+      try {
+        if (group.hasLayer(m)) group.removeLayer(m);
+      } catch {
+        /* ignore */
+      }
+      if (m.clusterShow) m.clusterShow();
+      if (!spillLayer.hasLayer(m)) spillLayer.addLayer(m);
+    });
+  }
+
   function explodeSmallCluster(group, cluster, spillLayer) {
     if (!group || !cluster || !spillLayer) return;
     const children = cluster.getAllChildMarkers?.() || [];
@@ -6601,19 +6744,7 @@ if(cards.length)selectIdx(0);
     } catch {
       /* ignore */
     }
-    children.forEach((m) => {
-      if (!spillLayer.hasLayer(m)) spillLayer.addLayer(m);
-    });
-  }
-
-  function mergeSpillIntoClusterGroup(group, spill) {
-    if (!group || !spill) return;
-    const fromSpill = [];
-    spill.eachLayer((m) => fromSpill.push(m));
-    if (!fromSpill.length) return;
-    spill.clearLayers();
-    group.addLayers(fromSpill);
-    if (typeof group.refreshClusters === "function") group.refreshClusters();
+    detachMarkersToSpill(group, children, spillLayer);
   }
 
   function enforceClusterMinSize(group, spill, map, fs = false) {
@@ -6658,15 +6789,6 @@ if(cards.length)selectIdx(0);
       else bleClusterEnforceTimer = null;
     };
     run();
-  }
-
-  function onClusterMapViewChange(map, fs = false) {
-    if (!bleClusterEnabled) return;
-    const group = fs ? bleClusterGroupFS : bleClusterGroup;
-    if (!group) return;
-    const spill = getBleMarkerSpillLayer(map, fs);
-    mergeSpillIntoClusterGroup(group, spill);
-    scheduleEnforceClusterMinSize(group, spill, map, fs);
   }
 
   function makeClusterGroup(map, fs = false) {
@@ -7194,6 +7316,7 @@ if(cards.length)selectIdx(0);
         bleMap.removeLayer(bleClusterGroup);
         bleClusterGroup = null;
       }
+      clearBleMarkerSpillLayer(bleMap, false);
       if (bleMarkerLayer) {
         bleMap.removeLayer(bleMarkerLayer);
       }
@@ -7237,16 +7360,16 @@ if(cards.length)selectIdx(0);
       bleMarkerLayer = null;
     }
 
+    clearBleMarkerSpillLayer(bleMap, false);
     if (!bleClusterGroup) {
       bleClusterGroup = makeClusterGroup(bleMap, false);
       bleMap.addLayer(bleClusterGroup);
       bindClusterNormalization(bleMap, false);
     } else {
       bleClusterGroup.clearLayers();
-      if (bleMarkerSpillLayer) bleMarkerSpillLayer.clearLayers();
     }
     bleClusterGroup.addLayers(visible);
-    scheduleEnforceClusterMinSize(bleClusterGroup, bleMarkerSpillLayer, bleMap, false);
+    scheduleEnforceClusterMinSize(bleClusterGroup, getBleMarkerSpillLayer(bleMap, false), bleMap, false);
   }
 
   function renderFsMarkers() {
@@ -7295,16 +7418,21 @@ if(cards.length)selectIdx(0);
       bleMarkerLayerFS = null;
     }
 
+    clearBleMarkerSpillLayer(bleMapFS, true);
     if (!bleClusterGroupFS) {
       bleClusterGroupFS = makeClusterGroup(bleMapFS, true);
       bleMapFS.addLayer(bleClusterGroupFS);
       bindClusterNormalization(bleMapFS, true);
     } else {
       bleClusterGroupFS.clearLayers();
-      if (bleMarkerSpillLayerFS) bleMarkerSpillLayerFS.clearLayers();
     }
     bleClusterGroupFS.addLayers(visible);
-    scheduleEnforceClusterMinSize(bleClusterGroupFS, bleMarkerSpillLayerFS, bleMapFS, true);
+    scheduleEnforceClusterMinSize(
+      bleClusterGroupFS,
+      getBleMarkerSpillLayer(bleMapFS, true),
+      bleMapFS,
+      true
+    );
   }
 
   function updateMapStats() {
