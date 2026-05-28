@@ -2986,7 +2986,7 @@ function renderObjectSummary() {
 
 const APP_PAGE_STORAGE_KEY = "ww-app-page";
 /** Должен совпадать с ?v= в ble-map.html (см. BLE_MAP_BUILD). */
-const BLE_MAP_IFRAME_BUILD = "20260529c";
+const BLE_MAP_IFRAME_BUILD = "20260529d";
 
 function ensureBleMapIframeCurrent() {
   const iframe = document.querySelector("#page-blemap iframe");

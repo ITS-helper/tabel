@@ -30,8 +30,9 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260529c";
-  const BLE_ZONE_FETCH_CONCURRENCY = 10;
+  const BLE_MAP_BUILD = "20260529d";
+  const BLE_ZONES_LS_KEY = "ww-ble-zones-v1";
+  const BLE_ZONE_REFINE_CONCURRENCY = 4;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
@@ -62,7 +63,6 @@
   const BLE_MAP_EDIT_MAX_ZOOM = 20;
   const BLE_DEFAULT_CENTER_RETRY_MS = 220;
   const BLE_DEFAULT_CENTER_MAX_ATTEMPTS = 18;
-  const BLE_CLUSTER_MIN_COUNT = 5;
   const BLE_ZONE_NEON = "#00e5ff";
   const BLE_ZONE_NEON_FILL = "#66f0ff";
   const BLE_ZONE_SMALL_MAX_PTS = 12;
@@ -832,11 +832,8 @@
   let fsTileLayers = null;
   let fsTileLayerCurrent = "street";
   let bleClusterGroupFS = null;
-  let bleMarkerSpillLayer = null;
-  let bleMarkerSpillLayerFS = null;
-  let bleClusterZoomBound = false;
-  let bleClusterZoomBoundFS = false;
   let bleMarkerLayerFS = null;
+  let bleZonePolygonFetchGen = 0;
 
   let bleCompanyId = null;
   let bleEditMode = false;
@@ -5474,43 +5471,112 @@ if(cards.length)selectIdx(0);
     return pts;
   }
 
-  async function hydrateBleZonePolygonsFromApi(zoneMetas, markerCoordsByZone = null) {
-    if (!zoneMetas?.length) return [];
-    const out = zoneMetas.map((z) => ({
-      id: z.id,
-      name: z.name || "",
-      description: z.description || "",
-      color: z.color || "#0088cc",
-      pts: z.pts?.length >= 3 ? z.pts.map((p) => [...p]) : [],
-    }));
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < out.length) {
-        const idx = cursor++;
-        const z = out[idx];
-        if (z.pts.length >= 3) continue;
-        try {
-          const pts = await fetchBleZonePolygonPts(z.id);
-          if (pts.length >= 3) {
-            z.pts = pts.map((p) => [...p]);
-            continue;
-          }
-        } catch {
-          /* fallback below */
+  function loadZonesFromLocalCache(companyId) {
+    try {
+      const raw = localStorage.getItem(BLE_ZONES_LS_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Number(parsed.companyId) !== Number(companyId)) return null;
+      if (!Array.isArray(parsed.zones) || !parsed.zones.length) return null;
+      return parsed.zones;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveZonesToLocalCache(companyId, zones) {
+    try {
+      localStorage.setItem(
+        BLE_ZONES_LS_KEY,
+        JSON.stringify({ companyId: Number(companyId), savedAt: Date.now(), zones })
+      );
+    } catch {
+      /* ignore quota */
+    }
+  }
+
+  function buildZonesFromMapDataFast(mapData) {
+    const metas = parseMapDataZoneMetas(mapData);
+    const markerByZone = markerCoordsByZoneFromMapData(mapData);
+    const out = [];
+    for (const meta of metas) {
+      let pts =
+        meta.pts?.length >= 3
+          ? meta.pts.map((p) => [...p])
+          : (bleZonePolygonCache.get(Number(meta.id)) || []).map((p) => [...p]);
+      let ptsSource = meta.pts?.length >= 3 || bleZonePolygonCache.has(Number(meta.id)) ? "api" : "";
+      if (pts.length < 3) {
+        const fb = markerByZone.get(meta.id) || markerByZone.get(Number(meta.id));
+        if (fb?.length >= 3) {
+          pts = convexHullPts(fb);
+          ptsSource = "hull";
         }
-        const fallback = markerCoordsByZone?.get(z.id) || markerCoordsByZone?.get(Number(z.id));
-        if (fallback?.length >= 3) {
-          z.pts = convexHullPts(fallback);
+      }
+      if (pts.length < 3) continue;
+      out.push({
+        id: meta.id,
+        name: meta.name,
+        description: meta.description,
+        color: meta.color,
+        pts,
+        ptsSource,
+      });
+    }
+    return out;
+  }
+
+  async function refineZonePolygonsInBackground(metas, companyId) {
+    if (!metas?.length || !navigator.onLine) return;
+    const gen = ++bleZonePolygonFetchGen;
+    let cursor = 0;
+    let changed = false;
+    const worker = async () => {
+      while (cursor < metas.length) {
+        if (gen !== bleZonePolygonFetchGen) return;
+        const idx = cursor++;
+        const meta = metas[idx];
+        const z = bleZoneData.find((x) => Number(x.id) === Number(meta.id));
+        if (z?.ptsSource === "api") continue;
+        try {
+          const pts = await fetchBleZonePolygonPts(meta.id);
+          if (pts.length < 3) continue;
+          if (z) {
+            z.pts = pts.map((p) => [...p]);
+            z.ptsSource = "api";
+          } else {
+            bleZoneData.push({
+              id: meta.id,
+              name: meta.name || "",
+              description: meta.description || "",
+              color: meta.color || "#0088cc",
+              pts: pts.map((p) => [...p]),
+              ptsSource: "api",
+            });
+          }
+          changed = true;
+        } catch {
+          /* keep hull / cache */
         }
       }
     };
-    const n = Math.min(BLE_ZONE_FETCH_CONCURRENCY, out.length);
+    const n = Math.min(BLE_ZONE_REFINE_CONCURRENCY, metas.length);
     await Promise.all(Array.from({ length: n }, () => worker()));
-    return out.filter((z) => z.pts.length >= 3);
+    if (changed && gen === bleZonePolygonFetchGen) {
+      const zones = bleZoneData.filter((x) => x.pts?.length >= 3);
+      applyBleZoneDataFromParsed(zones);
+      saveZonesToLocalCache(companyId, zones);
+      if (isBleNativeApp()) {
+        try {
+          await commitFieldPackZones(zones);
+        } catch (e) {
+          console.warn("[ble-map] field zones save", e?.message || e);
+        }
+      }
+    }
   }
 
   function parseMapDataZones(mapData) {
-    return parseMapDataZoneMetas(mapData).filter((z) => z.pts.length >= 3);
+    return buildZonesFromMapDataFast(mapData);
   }
 
   function applyBleZoneDataFromParsed(zones) {
@@ -5552,46 +5618,34 @@ if(cards.length)selectIdx(0);
   async function hydrateBleMapZones(companyId, opts = {}) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return false;
-    const tryApi = opts.tryApi !== false && navigator.onLine;
-    if (tryApi) {
-      try {
-        const mapData = await bleApiFetch(`/api/v1/map/${cid}/map_data`);
-        const metas = parseMapDataZoneMetas(mapData);
-        if (metas.length) {
-          if (!opts.silent) {
-            showMapMsg(`Загрузка полигонов (0/${metas.length})…`, "busy");
-          }
-          const markerByZone = markerCoordsByZoneFromMapData(mapData);
-          const zones = await hydrateBleZonePolygonsFromApi(metas, markerByZone);
-          if (zones.length) {
-            applyBleZoneDataFromParsed(zones);
-            if (isBleNativeApp()) {
-              try {
-                await commitFieldPackZones(zones);
-              } catch (e) {
-                console.warn("[ble-map] field zones save", e?.message || e);
-              }
-            }
-            if (!opts.silent) showMapMsg(`Полигонов на карте: ${zones.length}`, "");
-            return true;
-          }
-        }
-      } catch (e) {
-        if (opts.strict) throw e;
-        console.warn("[ble-map] map_data zones", e?.message || e);
-      } finally {
-        if (!opts.silent) {
-          const msg = document.querySelector("#mapMsg .map-msg__text")?.textContent || "";
-          if (msg.startsWith("Загрузка полигонов")) showMapMsg("", "");
-        }
-      }
-    }
-    const cached = await loadFieldPackZones();
+
+    const cachedLs = loadZonesFromLocalCache(cid);
+    const cachedIdb = cachedLs?.length ? null : await loadFieldPackZones();
+    const cached = cachedLs?.length ? cachedLs : cachedIdb;
     if (cached?.length) {
       applyBleZoneDataFromParsed(cached);
-      return true;
     }
-    return false;
+
+    const tryApi = opts.tryApi !== false && navigator.onLine;
+    if (!tryApi) return !!cached?.length;
+
+    try {
+      const mapData = await bleApiFetch(`/api/v1/map/${cid}/map_data`);
+      const metas = parseMapDataZoneMetas(mapData);
+      const zones = buildZonesFromMapDataFast(mapData);
+      if (zones.length) {
+        applyBleZoneDataFromParsed(zones);
+        saveZonesToLocalCache(cid, zones);
+        if (opts.refinePolygons !== false) {
+          void refineZonePolygonsInBackground(metas, cid);
+        }
+        return true;
+      }
+    } catch (e) {
+      if (opts.strict) throw e;
+      console.warn("[ble-map] map_data zones", e?.message || e);
+    }
+    return !!cached?.length;
   }
 
   async function resolveRawForFieldPackDownload(cid, opts = {}) {
@@ -6683,59 +6737,8 @@ if(cards.length)selectIdx(0);
     });
   }
 
-  function gridKeyForMarker(marker, zoom) {
-    const ll = marker.getLatLng();
-    const cell = Math.max(0.00006, 0.0018 / Math.pow(2, Math.max(0, zoom - 14)));
-    return `${Math.floor(ll.lat / cell)}:${Math.floor(ll.lng / cell)}`;
-  }
-
-  /** Метки в «ячейке» < BLE_CLUSTER_MIN_COUNT — отдельно, остальные — в кластеризатор. */
-  function splitMarkersByMinCluster(markers, map) {
-    const buckets = new Map();
-    const zoom = map?.getZoom?.() ?? 16;
-    for (const m of markers) {
-      const key = gridKeyForMarker(m, zoom);
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key).push(m);
-    }
-    const forCluster = [];
-    const forPlain = [];
-    for (const list of buckets.values()) {
-      if (list.length >= BLE_CLUSTER_MIN_COUNT) {
-        forCluster.push(...list);
-      } else {
-        forPlain.push(...list);
-      }
-    }
-    return { forCluster, forPlain };
-  }
-
-  function getBleMarkerSpillLayer(map, fs = false) {
-    if (!map) return null;
-    if (fs) {
-      if (!bleMarkerSpillLayerFS) {
-        bleMarkerSpillLayerFS = L.layerGroup();
-        map.addLayer(bleMarkerSpillLayerFS);
-      }
-      return bleMarkerSpillLayerFS;
-    }
-    if (!bleMarkerSpillLayer) {
-      bleMarkerSpillLayer = L.layerGroup();
-      map.addLayer(bleMarkerSpillLayer);
-    }
-    return bleMarkerSpillLayer;
-  }
-
-  function clearBleMarkerSpillLayer(map, fs = false) {
-    const spill = fs ? bleMarkerSpillLayerFS : bleMarkerSpillLayer;
-    if (!spill) return;
-    spill.clearLayers();
-    if (map) map.removeLayer(spill);
-    if (fs) bleMarkerSpillLayerFS = null;
-    else bleMarkerSpillLayer = null;
-  }
-
   function makeClusterGroup() {
+    const lite = isCoarseMobile() || isBleNativeApp();
     return L.markerClusterGroup({
       maxClusterRadius(zoom) {
         if (zoom < 17) return 120;
@@ -6745,11 +6748,11 @@ if(cards.length)selectIdx(0);
       disableClusteringAtZoom: 20,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
-      animate: true,
-      animateAddingMarkers: true,
+      animate: !lite,
+      animateAddingMarkers: false,
       chunkedLoading: true,
-      chunkInterval: 80,
-      chunkDelay: 16,
+      chunkInterval: lite ? 120 : 80,
+      chunkDelay: lite ? 24 : 16,
       removeOutsideVisibleBounds: true,
       iconCreateFunction(cluster) {
         const count = cluster.getChildCount();
@@ -6761,29 +6764,6 @@ if(cards.length)selectIdx(0);
         });
       },
     });
-  }
-
-  function bindClusterZoomRerender(map, fs = false) {
-    if (!map) return;
-    if (fs ? bleClusterZoomBoundFS : bleClusterZoomBound) return;
-    map.on("zoomend", () => {
-      if (!bleClusterEnabled) return;
-      if (fs) lastRenderKeyFS = "";
-      else lastRenderKey = "";
-      if (fs) renderFsMarkers();
-      else renderBleMarkers();
-    });
-    if (fs) bleClusterZoomBoundFS = true;
-    else bleClusterZoomBound = true;
-  }
-
-  function addMarkersWithMinClusterRule(map, clusterGroup, markers, fs = false) {
-    const spill = getBleMarkerSpillLayer(map, fs);
-    if (!clusterGroup || !spill) return;
-    spill.clearLayers();
-    const { forCluster, forPlain } = splitMarkersByMinCluster(markers, map);
-    if (forCluster.length) clusterGroup.addLayers(forCluster);
-    forPlain.forEach((m) => spill.addLayer(m));
   }
 
   function getOrCreateMarkerForPt(pt) {
@@ -7121,7 +7101,6 @@ if(cards.length)selectIdx(0);
       bleMapFS.removeLayer(bleClusterGroupFS);
       bleClusterGroupFS = null;
     }
-    clearBleMarkerSpillLayer(bleMapFS, true);
     if (bleMarkerLayerFS) {
       bleMarkerLayerFS.clearLayers();
       bleMapFS.removeLayer(bleMarkerLayerFS);
@@ -7228,7 +7207,6 @@ if(cards.length)selectIdx(0);
         bleMap.removeLayer(bleClusterGroup);
         bleClusterGroup = null;
       }
-      clearBleMarkerSpillLayer(bleMap, false);
       if (bleMarkerLayer) {
         bleMap.removeLayer(bleMarkerLayer);
       }
@@ -7256,7 +7234,6 @@ if(cards.length)selectIdx(0);
         bleMap.removeLayer(bleClusterGroup);
         bleClusterGroup = null;
       }
-      clearBleMarkerSpillLayer(bleMap, false);
       if (!bleMarkerLayer) {
         bleMarkerLayer = L.layerGroup();
         bleMap.addLayer(bleMarkerLayer);
@@ -7275,12 +7252,10 @@ if(cards.length)selectIdx(0);
     if (!bleClusterGroup) {
       bleClusterGroup = makeClusterGroup();
       bleMap.addLayer(bleClusterGroup);
-      bindClusterZoomRerender(bleMap, false);
     } else {
       bleClusterGroup.clearLayers();
     }
-    getBleMarkerSpillLayer(bleMap, false);
-    addMarkersWithMinClusterRule(bleMap, bleClusterGroup, visible, false);
+    bleClusterGroup.addLayers(visible);
   }
 
   function renderFsMarkers() {
@@ -7313,7 +7288,6 @@ if(cards.length)selectIdx(0);
         bleMapFS.removeLayer(bleClusterGroupFS);
         bleClusterGroupFS = null;
       }
-      clearBleMarkerSpillLayer(bleMapFS, true);
       if (!bleMarkerLayerFS) {
         bleMarkerLayerFS = L.layerGroup();
         bleMapFS.addLayer(bleMarkerLayerFS);
@@ -7332,12 +7306,10 @@ if(cards.length)selectIdx(0);
     if (!bleClusterGroupFS) {
       bleClusterGroupFS = makeClusterGroup();
       bleMapFS.addLayer(bleClusterGroupFS);
-      bindClusterZoomRerender(bleMapFS, true);
     } else {
       bleClusterGroupFS.clearLayers();
     }
-    getBleMarkerSpillLayer(bleMapFS, true);
-    addMarkersWithMinClusterRule(bleMapFS, bleClusterGroupFS, visible, true);
+    bleClusterGroupFS.addLayers(visible);
   }
 
   function updateMapStats() {
