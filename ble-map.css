@@ -1152,6 +1152,11 @@ body.ble-map-native #bleMapBackLogo {
   }
 }
 
+.marker-cluster--rejected {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 .marker-cluster-small {
   background-color: rgba(10, 186, 181, 0.2);
 }
