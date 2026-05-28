@@ -30,8 +30,8 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260529d";
-  const BLE_ZONES_LS_KEY = "ww-ble-zones-v1";
+  const BLE_MAP_BUILD = "20260529e";
+  const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 4;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
@@ -5432,34 +5432,11 @@ if(cards.length)selectIdx(0);
     return byZone;
   }
 
-  function convexHullPts(points) {
-    if (!points?.length) return [];
-    if (points.length <= 3) return points.map((p) => [...p]);
-    const pts = points
-      .map((p) => ({ x: p[1], y: p[0] }))
-      .sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
-    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    const lower = [];
-    for (const p of pts) {
-      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
-        lower.pop();
-      }
-      lower.push(p);
-    }
-    const upper = [];
-    for (let i = pts.length - 1; i >= 0; i--) {
-      const p = pts[i];
-      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
-        upper.pop();
-      }
-      upper.push(p);
-    }
-    upper.pop();
-    lower.pop();
-    return lower.concat(upper).map((p) => [p.y, p.x]);
-  }
-
   const bleZonePolygonCache = new Map();
+
+  function isApiZonePolygon(z) {
+    return Boolean(z) && z.ptsSource === "api" && Array.isArray(z.pts) && z.pts.length >= 3;
+  }
 
   async function fetchBleZonePolygonPts(zoneId) {
     const id = Number(zoneId);
@@ -5478,48 +5455,45 @@ if(cards.length)selectIdx(0);
       const parsed = JSON.parse(raw);
       if (Number(parsed.companyId) !== Number(companyId)) return null;
       if (!Array.isArray(parsed.zones) || !parsed.zones.length) return null;
-      return parsed.zones;
+      return parsed.zones.filter(isApiZonePolygon);
     } catch {
       return null;
     }
   }
 
   function saveZonesToLocalCache(companyId, zones) {
+    const apiOnly = (zones || []).filter(isApiZonePolygon);
+    if (!apiOnly.length) return;
     try {
       localStorage.setItem(
         BLE_ZONES_LS_KEY,
-        JSON.stringify({ companyId: Number(companyId), savedAt: Date.now(), zones })
+        JSON.stringify({ companyId: Number(companyId), savedAt: Date.now(), zones: apiOnly })
       );
     } catch {
       /* ignore quota */
     }
   }
 
+  /** Только контуры из API (map_data.points или кэш), без «оболочек» по меткам. */
   function buildZonesFromMapDataFast(mapData) {
     const metas = parseMapDataZoneMetas(mapData);
-    const markerByZone = markerCoordsByZoneFromMapData(mapData);
     const out = [];
     for (const meta of metas) {
-      let pts =
-        meta.pts?.length >= 3
-          ? meta.pts.map((p) => [...p])
-          : (bleZonePolygonCache.get(Number(meta.id)) || []).map((p) => [...p]);
-      let ptsSource = meta.pts?.length >= 3 || bleZonePolygonCache.has(Number(meta.id)) ? "api" : "";
-      if (pts.length < 3) {
-        const fb = markerByZone.get(meta.id) || markerByZone.get(Number(meta.id));
-        if (fb?.length >= 3) {
-          pts = convexHullPts(fb);
-          ptsSource = "hull";
-        }
+      let pts = null;
+      if (meta.pts?.length >= 3) {
+        pts = meta.pts.map((p) => [...p]);
+      } else {
+        const cached = bleZonePolygonCache.get(Number(meta.id));
+        if (cached?.length >= 3) pts = cached.map((p) => [...p]);
       }
-      if (pts.length < 3) continue;
+      if (!pts || pts.length < 3) continue;
       out.push({
         id: meta.id,
         name: meta.name,
         description: meta.description,
         color: meta.color,
         pts,
-        ptsSource,
+        ptsSource: "api",
       });
     }
     return out;
@@ -5528,49 +5502,61 @@ if(cards.length)selectIdx(0);
   async function refineZonePolygonsInBackground(metas, companyId) {
     if (!metas?.length || !navigator.onLine) return;
     const gen = ++bleZonePolygonFetchGen;
+    const haveApi = new Set(
+      bleZoneData.filter(isApiZonePolygon).map((z) => Number(z.id))
+    );
     let cursor = 0;
-    let changed = false;
+    let redrawPending = false;
+    const scheduleRedraw = () => {
+      if (redrawPending) return;
+      redrawPending = true;
+      requestAnimationFrame(() => {
+        redrawPending = false;
+        if (gen !== bleZonePolygonFetchGen) return;
+        if (bleMap) drawZones(bleMap);
+        if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
+      });
+    };
     const worker = async () => {
       while (cursor < metas.length) {
         if (gen !== bleZonePolygonFetchGen) return;
         const idx = cursor++;
         const meta = metas[idx];
-        const z = bleZoneData.find((x) => Number(x.id) === Number(meta.id));
-        if (z?.ptsSource === "api") continue;
+        if (haveApi.has(Number(meta.id))) continue;
         try {
           const pts = await fetchBleZonePolygonPts(meta.id);
           if (pts.length < 3) continue;
-          if (z) {
-            z.pts = pts.map((p) => [...p]);
-            z.ptsSource = "api";
-          } else {
-            bleZoneData.push({
-              id: meta.id,
-              name: meta.name || "",
-              description: meta.description || "",
-              color: meta.color || "#0088cc",
-              pts: pts.map((p) => [...p]),
-              ptsSource: "api",
-            });
-          }
-          changed = true;
+          const record = {
+            id: meta.id,
+            name: meta.name || "",
+            description: meta.description || "",
+            color: meta.color || "#0088cc",
+            pts: pts.map((p) => [...p]),
+            ptsSource: "api",
+          };
+          const zi = bleZoneData.findIndex((x) => Number(x.id) === Number(meta.id));
+          if (zi >= 0) bleZoneData[zi] = record;
+          else bleZoneData.push(record);
+          haveApi.add(Number(meta.id));
+          bleZonePolygonCache.set(Number(meta.id), record.pts);
+          if (idx % 20 === 0) scheduleRedraw();
         } catch {
-          /* keep hull / cache */
+          /* skip zone until next refresh */
         }
       }
     };
     const n = Math.min(BLE_ZONE_REFINE_CONCURRENCY, metas.length);
     await Promise.all(Array.from({ length: n }, () => worker()));
-    if (changed && gen === bleZonePolygonFetchGen) {
-      const zones = bleZoneData.filter((x) => x.pts?.length >= 3);
-      applyBleZoneDataFromParsed(zones);
-      saveZonesToLocalCache(companyId, zones);
-      if (isBleNativeApp()) {
-        try {
-          await commitFieldPackZones(zones);
-        } catch (e) {
-          console.warn("[ble-map] field zones save", e?.message || e);
-        }
+    if (gen !== bleZonePolygonFetchGen) return;
+    const zones = bleZoneData.filter(isApiZonePolygon);
+    if (!zones.length) return;
+    applyBleZoneDataFromParsed(zones);
+    saveZonesToLocalCache(companyId, zones);
+    if (isBleNativeApp()) {
+      try {
+        await commitFieldPackZones(zones);
+      } catch (e) {
+        console.warn("[ble-map] field zones save", e?.message || e);
       }
     }
   }
@@ -5580,11 +5566,9 @@ if(cards.length)selectIdx(0);
   }
 
   function applyBleZoneDataFromParsed(zones) {
-    bleZoneData = Array.isArray(zones) ? zones : [];
+    bleZoneData = (Array.isArray(zones) ? zones : []).filter(isApiZonePolygon);
     bleZoneData.forEach((z) => {
-      if (z?.id != null && z.pts?.length >= 3) {
-        bleZonePolygonCache.set(Number(z.id), z.pts.map((p) => [...p]));
-      }
+      bleZonePolygonCache.set(Number(z.id), z.pts.map((p) => [...p]));
     });
     if (bleMap) drawZones(bleMap);
     if (bleMapFS && isMapFullscreenOpen()) drawZones(bleMapFS);
@@ -5618,6 +5602,11 @@ if(cards.length)selectIdx(0);
   async function hydrateBleMapZones(companyId, opts = {}) {
     const cid = companyId ?? bleCompanyId;
     if (!cid) return false;
+    try {
+      localStorage.removeItem("ww-ble-zones-v1");
+    } catch {
+      /* ignore */
+    }
 
     const cachedLs = loadZonesFromLocalCache(cid);
     const cachedIdb = cachedLs?.length ? null : await loadFieldPackZones();
