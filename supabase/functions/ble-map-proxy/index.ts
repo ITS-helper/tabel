@@ -40,7 +40,8 @@ function buildUpstreamRequestHeaders(req: Request): Headers {
   const ct = req.headers.get("content-type");
   if (ct) h.set("Content-Type", ct);
   h.set("Accept", req.headers.get("accept") || "application/json,*/*");
-  h.set("Accept-Encoding", "gzip, br");
+  // Не навязываем Accept-Encoding: пусть Deno сам декодирует ответ upstream.
+  // Иначе тело приходит сжатым (br/gzip), а при ре-стриминге Edge падает в 500.
   h.set(
     "User-Agent",
     req.headers.get("user-agent") ||
@@ -155,7 +156,11 @@ Deno.serve(async (req) => {
     const cc = upstreamRes.headers.get("cache-control");
     if (cc) out.set("Cache-Control", cc);
 
-    return new Response(upstreamRes.body, {
+    // Буферизуем тело целиком (как в ble-map-sync). Ре-стриминг чужого body
+    // на Supabase Edge даёт 500 на ответах upstream со сжатием — поэтому читаем
+    // в память (список меток ~1.5 МБ помещается без проблем).
+    const buf = await upstreamRes.arrayBuffer();
+    return new Response(buf, {
       status: upstreamRes.status,
       headers: out,
     });

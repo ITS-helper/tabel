@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260530a";
+  const BLE_MAP_BUILD = "20260530b";
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
@@ -7627,6 +7627,35 @@ if(cards.length)selectIdx(0);
     }
   }
 
+  function bleSnapshotMessage(updatedAt) {
+    const age = formatCacheAge(updatedAt);
+    return age
+      ? `Живые данные недоступны без VPN — показан сохранённый снимок от ${age}.`
+      : "Живые данные недоступны без VPN — показан сохранённый снимок меток.";
+  }
+
+  /**
+   * Фолбэк без VPN: берём свежайший доступный снимок меток и зон из
+   * Supabase-кэша (ble_map_cache, REST) → статического data/ble-map-cache.json
+   * и применяем его на карту. Возвращает { updatedAt } или null.
+   */
+  async function refreshBleMapFromCacheSnapshot(companyId) {
+    const cid = companyId || bleCompanyId || (await resolveCompanyId());
+    try {
+      const cached = await fetchBleListOffline(cid);
+      if (!cached?.data?.length) return null;
+      bleCompanyId = cid;
+      await applyBleListToMap(cached.data, "");
+      if (bleMap && bleZoneData.length) drawZones(bleMap);
+      if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
+      setRetryVisible(true);
+      return { updatedAt: cached.updatedAt || "" };
+    } catch (e) {
+      console.warn("[ble-map] cache snapshot fallback", e?.message || e);
+      return null;
+    }
+  }
+
   async function retryBleMapRefresh() {
     const btn = document.getElementById("mapRetryBtn");
     if (btn) {
@@ -7639,11 +7668,22 @@ if(cards.length)selectIdx(0);
         alert("Нужен интернет (Wi‑Fi/VPN) для обновления координат и зон.");
         return;
       }
+      showMapMsg("Обновление координат и зон…", "busy");
+      // Без VPN живой API меток (workers.dev / тяжёлый список через Edge)
+      // часто недоступен. Если токен не получить — отдаём кэш-снимок.
       if (!(await ensureBleTokenForField())) {
-        alert("Нет доступа к API. Проверьте VPN и повторите.");
+        const snap = await refreshBleMapFromCacheSnapshot();
+        if (snap) {
+          showMapMsg(bleSnapshotMessage(snap.updatedAt), "info");
+          setTimeout(hideMapMsg, 6000);
+        } else {
+          showMapMsg(
+            "Нет доступа к API без VPN и нет сохранённого снимка меток. Включите VPN и повторите.",
+            "error"
+          );
+        }
         return;
       }
-      showMapMsg("Обновление координат и зон…", "busy");
       let cid = bleCompanyId || (await resolveCompanyId());
       const apiCid = await resolveCompanyIdFromApi();
       if (apiCid) cid = apiCid;
@@ -7664,7 +7704,15 @@ if(cards.length)selectIdx(0);
       setTimeout(hideMapMsg, 4000);
       void syncChangedFieldPhotosAfterRefresh(cid);
     } catch (e) {
-      showMapMsg("Ошибка обновления: " + formatBleError(e), "error");
+      // Живой запрос упал (например, тяжёлый список отдаёт 500 из региона
+      // Supabase, а workers.dev заблокирован без VPN) — пробуем кэш-снимок.
+      const snap = await refreshBleMapFromCacheSnapshot(bleCompanyId);
+      if (snap) {
+        showMapMsg(bleSnapshotMessage(snap.updatedAt), "info");
+        setTimeout(hideMapMsg, 6000);
+      } else {
+        showMapMsg("Ошибка обновления: " + formatBleError(e), "error");
+      }
     } finally {
       if (btn) {
         btn.disabled = false;
