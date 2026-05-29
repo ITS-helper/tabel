@@ -382,6 +382,11 @@
       a.destroy();
       this.attachments.delete(map);
     }
+    if (this.tileLayers?.has(map)) {
+      const layer = this.tileLayers.get(map);
+      if (map.hasLayer(layer)) map.removeLayer(layer);
+      this.tileLayers.delete(map);
+    }
     this.visibleOnMaps.delete(map);
   };
 
@@ -407,9 +412,146 @@
       if (img.naturalHeight > 0) {
         this.state.aspectRatio = img.naturalWidth / img.naturalHeight;
         this.renderAll();
+        this.redrawTiles();
       }
     };
     img.src = this.state.imageSrc;
+  };
+
+  // --- Тайловый рендер генплана (canvas) ---------------------------------
+  // Один <img> на 24000px при зуме z19+ растягивается до >16384px и превышает
+  // лимит текстуры браузера (на мобильных GPU — 4096–8192px), из‑за чего
+  // рисуется «лоскутами». В обычном просмотре генплан рисуется тайлами 256px
+  // через L.GridLayer: ни один холст не превышает лимит. Перетаскиваемое
+  // изображение (MapAttachment) остаётся только для режима калибровки.
+
+  GenplanMaskController.prototype.ensureGridImage = function () {
+    const src = this.state?.imageSrc;
+    if (!src) return;
+    if (this._gridImg && this._gridImgSrc === src) return;
+    const img = new Image();
+    img.decoding = "async";
+    this._gridImg = img;
+    this._gridImgSrc = src;
+    this._gridImgReady = false;
+    img.onload = () => {
+      this._gridImgReady = true;
+      if (img.naturalHeight > 0 && this.state) {
+        this.state.aspectRatio = img.naturalWidth / img.naturalHeight;
+      }
+      this.redrawTiles();
+    };
+    img.src = src;
+  };
+
+  // Геометрия прямоугольника генплана в географических координатах
+  // (не зависит от зума). Считается один раз при показе тайлов / после правок.
+  GenplanMaskController.prototype.refreshGridGeo = function () {
+    const map = this.getMap() || this.getMapFs();
+    const s = this.state;
+    if (!map || !s || !s.center) return;
+    const refZoom = map.getZoom();
+    const c = map.project(s.center, refZoom);
+    const hw = s.width / 2;
+    const hh = s.width / (s.aspectRatio || 1) / 2;
+    this._gridGeo = {
+      nw: map.unproject(L.point(c.x - hw, c.y - hh), refZoom),
+      se: map.unproject(L.point(c.x + hw, c.y + hh), refZoom),
+      center: s.center,
+      rotation: s.rotation || 0,
+    };
+  };
+
+  GenplanMaskController.prototype.buildTileLayer = function () {
+    const controller = this;
+    const Grid = L.GridLayer.extend({
+      createTile: function (coords) {
+        const size = this.getTileSize();
+        const canvas = document.createElement("canvas");
+        canvas.width = size.x;
+        canvas.height = size.y;
+        const map = this._map;
+        const img = controller._gridImg;
+        const g = controller._gridGeo;
+        if (map && img && controller._gridImgReady && g) {
+          const ctx = canvas.getContext("2d");
+          const z = coords.z;
+          const nw = map.project(g.nw, z);
+          const se = map.project(g.se, z);
+          const center = map.project(g.center, z);
+          const dispW = se.x - nw.x;
+          const dispH = se.y - nw.y;
+          const ox = coords.x * size.x;
+          const oy = coords.y * size.y;
+          ctx.save();
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.translate(center.x - ox, center.y - oy);
+          if (g.rotation) ctx.rotate((g.rotation * Math.PI) / 180);
+          try {
+            ctx.drawImage(img, -dispW / 2, -dispH / 2, dispW, dispH);
+          } catch {
+            /* ignore draw errors */
+          }
+          ctx.restore();
+        }
+        return canvas;
+      },
+    });
+    return new Grid({
+      pane: "tilePane",
+      zIndex: 250,
+      keepBuffer: 2,
+      updateWhenZooming: false,
+      className: "genplan-grid-layer",
+    });
+  };
+
+  GenplanMaskController.prototype.getTileLayer = function (map) {
+    if (!this.tileLayers) this.tileLayers = new Map();
+    let layer = this.tileLayers.get(map);
+    if (!layer) {
+      layer = this.buildTileLayer();
+      this.tileLayers.set(map, layer);
+    }
+    return layer;
+  };
+
+  GenplanMaskController.prototype.applyTileStyle = function (layer) {
+    const s = this.state;
+    if (!s || !layer) return;
+    try {
+      layer.setOpacity(typeof s.opacity === "number" ? s.opacity : DEFAULT_VIEW_OPACITY);
+      const el = layer.getContainer && layer.getContainer();
+      if (el) el.style.mixBlendMode = s.blendMode || "normal";
+    } catch {
+      /* ignore */
+    }
+  };
+
+  GenplanMaskController.prototype.setTileVisibleOnMap = function (map, on) {
+    if (!map) return;
+    const layer = this.getTileLayer(map);
+    if (on) {
+      this.ensureGridImage();
+      this.refreshGridGeo();
+      if (!map.hasLayer(layer)) layer.addTo(map);
+      this.applyTileStyle(layer);
+      layer.redraw();
+    } else if (map.hasLayer(layer)) {
+      map.removeLayer(layer);
+    }
+  };
+
+  GenplanMaskController.prototype.redrawTiles = function () {
+    if (!this.tileLayers) return;
+    this.refreshGridGeo();
+    this.tileLayers.forEach((layer, map) => {
+      if (map && map.hasLayer(layer)) {
+        this.applyTileStyle(layer);
+        layer.redraw();
+      }
+    });
   };
 
   GenplanMaskController.prototype.syncUi = function () {

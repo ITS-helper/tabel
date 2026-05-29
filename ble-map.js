@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260530b";
+  const BLE_MAP_BUILD = "20260530c";
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
@@ -4071,16 +4071,18 @@
 
   function updateGenplanMaskVisibility() {
     if (!bleGenplanMask) return;
-    if (bleMap) {
-      bleGenplanMask.attachMap(bleMap);
-      const show = bleGenplanCalibMode || bleBaseLayerCurrent === "genplan";
-      bleGenplanMask.setVisibleOnMap(bleMap, show);
-    }
-    if (bleMapFS) {
-      bleGenplanMask.attachMap(bleMapFS);
-      const show = bleGenplanCalibMode || fsTileLayerCurrent === "genplan";
-      bleGenplanMask.setVisibleOnMap(bleMapFS, show);
-    }
+    // Просмотр генплана — тайловый рендер (canvas, без лимита текстуры).
+    // Перетаскиваемое изображение показываем только в режиме калибровки.
+    const applyFor = (map, baseIsGenplan) => {
+      if (!map) return;
+      bleGenplanMask.attachMap(map);
+      const showImg = bleGenplanCalibMode;
+      const showTiles = baseIsGenplan && !bleGenplanCalibMode;
+      bleGenplanMask.setVisibleOnMap(map, showImg);
+      bleGenplanMask.setTileVisibleOnMap(map, showTiles);
+    };
+    applyFor(bleMap, bleBaseLayerCurrent === "genplan");
+    applyFor(bleMapFS, fsTileLayerCurrent === "genplan");
     bleGenplanMask.renderAll();
   }
 
