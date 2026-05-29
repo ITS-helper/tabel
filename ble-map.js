@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260530d";
+  const BLE_MAP_BUILD = "20260530e";
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
@@ -86,6 +86,11 @@
   let bleDefaultCenterLocked = false;
   let bleZoneData = [];
   const fieldPhotoBlobUrls = new Map();
+  // LRU порядок живых object URL фото (по dbKey/url). Держим в памяти только
+  // недавно показанные фото, остальные revoke'аем, иначе блобы копятся и WebView
+  // падает по памяти (например, при сворачивании на звонок).
+  const fieldPhotoBlobLru = [];
+  const BLE_PHOTO_BLOB_CACHE_MAX = 24;
   let fieldPackDownloadActive = false;
   let fieldPhotoRefreshActive = false;
   let fieldPackMetaCache = null;
@@ -1192,6 +1197,35 @@
   function rememberFieldPhotoBlobUrl(sourceUrl, dbKey, blobUrl) {
     if (dbKey) fieldPhotoBlobUrls.set(dbKey, blobUrl);
     if (sourceUrl) fieldPhotoBlobUrls.set(String(sourceUrl), blobUrl);
+  }
+
+  function revokeFieldPhotoBlobByLruKey(lruKey) {
+    const blobUrl = fieldPhotoBlobUrls.get(lruKey);
+    if (!blobUrl) return;
+    try {
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      /* ignore */
+    }
+    for (const [k, v] of fieldPhotoBlobUrls) {
+      if (v === blobUrl) fieldPhotoBlobUrls.delete(k);
+    }
+  }
+
+  // Кладём object URL фото в кэш показа с ограничением размера (LRU).
+  // Только так создаются «живые» URL для просмотра; при переполнении самые
+  // старые освобождаются, чтобы не держать сотни блобов фото в памяти.
+  function cacheDisplayPhotoBlobUrl(sourceUrl, dbKey, blobUrl) {
+    rememberFieldPhotoBlobUrl(sourceUrl, dbKey, blobUrl);
+    const lruKey = dbKey || String(sourceUrl || "");
+    if (!lruKey) return;
+    const at = fieldPhotoBlobLru.indexOf(lruKey);
+    if (at !== -1) fieldPhotoBlobLru.splice(at, 1);
+    fieldPhotoBlobLru.push(lruKey);
+    while (fieldPhotoBlobLru.length > BLE_PHOTO_BLOB_CACHE_MAX) {
+      const old = fieldPhotoBlobLru.shift();
+      if (old) revokeFieldPhotoBlobByLruKey(old);
+    }
   }
 
   function mergeBleMapDataFromRaw(rawBle) {
@@ -5250,6 +5284,21 @@ if(cards.length)selectIdx(0);
       }
     });
     fieldPhotoBlobUrls.clear();
+    fieldPhotoBlobLru.length = 0;
+  }
+
+  // После возврата из фона blob URL фото были освобождены — если открыт попап
+  // с фото, пересоздаём их источник из IndexedDB, чтобы не было «битой» картинки.
+  function reloadOpenPopupPhotos() {
+    const imgs = document.querySelectorAll("img.ble-popup-photo");
+    imgs.forEach((img) => {
+      if (!img.isConnected) return;
+      const src = img.getAttribute("src") || "";
+      if (!src.startsWith("blob:")) return;
+      const url = img.closest("a.ble-popup-photo-link")?.dataset?.blePhoto;
+      if (!url) return;
+      void loadFieldPhotoIntoImg(img, url);
+    });
   }
 
   function openFieldDb() {
@@ -5801,7 +5850,9 @@ if(cards.length)selectIdx(0);
     try {
       const key = fieldPhotoStorageKey(url);
       await appendFieldPackPhotosBatchQueued([[key, blob]]);
-      rememberFieldPhotoBlobUrl(url, key, URL.createObjectURL(blob));
+      // НЕ создаём object URL здесь: фото уже в IndexedDB и будет открыто лениво
+      // при показе (loadFieldPhotoIntoImg). Иначе при скачивании сотен фото все
+      // блобы зависают в памяти и WebView падает (OOM) при сворачивании на звонок.
       return true;
     } catch (e) {
       console.warn("[ble-map] persist field photo", e?.message || e);
@@ -5894,13 +5945,13 @@ if(cards.length)selectIdx(0);
     const cachedByKey = fieldPhotoBlobUrls.get(dbKey);
     if (cachedByKey) {
       img.src = cachedByKey;
-      rememberFieldPhotoBlobUrl(url, dbKey, cachedByKey);
+      cacheDisplayPhotoBlobUrl(url, dbKey, cachedByKey);
       return true;
     }
     const blob = await readFieldPhotoBlobFromDb(dbKey);
     if (!blob) return false;
     const blobUrl = URL.createObjectURL(blob);
-    rememberFieldPhotoBlobUrl(url, dbKey, blobUrl);
+    cacheDisplayPhotoBlobUrl(url, dbKey, blobUrl);
     img.src = blobUrl;
     return true;
   }
@@ -8171,6 +8222,27 @@ if(cards.length)selectIdx(0);
     }
     applyMapLayoutClasses();
     bindMapResizeHandlers();
+    // При сворачивании приложения (звонок, переключение задач) ОС может убить
+    // WebView из-за памяти. Освобождаем object URL фото — они легко пересоздаются
+    // из IndexedDB при показе, зато резко падает потребление памяти в фоне.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        try {
+          revokeFieldPhotoBlobUrls();
+        } catch {
+          /* ignore */
+        }
+      } else if (document.visibilityState === "visible") {
+        reloadOpenPopupPhotos();
+      }
+    });
+    window.addEventListener("pagehide", () => {
+      try {
+        revokeFieldPhotoBlobUrls();
+      } catch {
+        /* ignore */
+      }
+    });
     window.addEventListener("offline", () => {
       updateOfflineEditChrome();
       void (async () => {
