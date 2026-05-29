@@ -254,13 +254,24 @@ body.ble-map-tools-menu-open .map-toolbar {
   isolation: isolate;
 }
 
-/* Фон под спутником — тёмный, без подгонки размеров тайлов (257px/calc ломали карту) */
+/* Фон карты: по умолчанию (схема/OSM) — светлый, чтобы недогруженные плитки
+   не выглядели «тёмной темой». Тёмный фон оставляем только под спутником/
+   гибридом/генпланом, где он естественен для незагруженных областей. */
 #bleMap.leaflet-container,
-#bleMapFS.leaflet-container {
-  background: #1a2430;
+#bleMapFS.leaflet-container,
+.leaflet-tile-pane {
+  background: #e7ebee;
 }
 
-.leaflet-tile-pane {
+body.ble-map--layer-satellite #bleMap.leaflet-container,
+body.ble-map--layer-satellite #bleMapFS.leaflet-container,
+body.ble-map--layer-satellite .leaflet-tile-pane,
+body.ble-map--layer-hybrid #bleMap.leaflet-container,
+body.ble-map--layer-hybrid #bleMapFS.leaflet-container,
+body.ble-map--layer-hybrid .leaflet-tile-pane,
+body.ble-map--layer-genplan #bleMap.leaflet-container,
+body.ble-map--layer-genplan #bleMapFS.leaflet-container,
+body.ble-map--layer-genplan .leaflet-tile-pane {
   background: #1a2430;
 }
 
