@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260530c";
+  const BLE_MAP_BUILD = "20260530d";
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
@@ -4542,6 +4542,14 @@
       updateGenplanMaskVisibility();
     } else if (tileLayers[nextId]) {
       tileLayers[nextId].addTo(map);
+    }
+    if (nextId !== "genplan" && bleGenplanMask) {
+      try {
+        bleGenplanMask.setTileVisibleOnMap(map, false);
+        bleGenplanMask.setVisibleOnMap(map, false);
+      } catch {
+        /* ignore */
+      }
     }
     return nextId;
   }
