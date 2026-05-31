@@ -344,6 +344,7 @@
     this.compactControl = null;
     this.attachments = new Map();
     this.visibleOnMaps = new Set();
+    this.tileVisibleOnMaps = new Set();
     this.dragState = null;
     this.disabledHandlers = null;
     this._boundPointerMove = (e) => this.onPointerMove(e);
@@ -382,12 +383,26 @@
       a.destroy();
       this.attachments.delete(map);
     }
-    if (this.tileLayers?.has(map)) {
-      const layer = this.tileLayers.get(map);
-      if (map.hasLayer(layer)) map.removeLayer(layer);
+    this.hideTileLayerOnMap(map);
+    this.visibleOnMaps.delete(map);
+  };
+
+  GenplanMaskController.prototype.isTileVisibleOnMap = function (map) {
+    return !!map && this.tileVisibleOnMaps?.has(map);
+  };
+
+  GenplanMaskController.prototype.hideTileLayerOnMap = function (map) {
+    if (!map) return;
+    this.tileVisibleOnMaps?.delete(map);
+    const layer = this.tileLayers?.get(map);
+    if (layer) {
+      try {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+      } catch {
+        /* ignore */
+      }
       this.tileLayers.delete(map);
     }
-    this.visibleOnMaps.delete(map);
   };
 
   GenplanMaskController.prototype.isShownOnMap = function (map) {
@@ -471,6 +486,7 @@
         canvas.width = size.x;
         canvas.height = size.y;
         const map = this._map;
+        if (!controller.isTileVisibleOnMap(map)) return canvas;
         const img = controller._gridImg;
         const g = controller._gridGeo;
         if (map && img && controller._gridImgReady && g) {
@@ -531,26 +547,27 @@
 
   GenplanMaskController.prototype.setTileVisibleOnMap = function (map, on) {
     if (!map) return;
-    const layer = this.getTileLayer(map);
+    if (!this.tileVisibleOnMaps) this.tileVisibleOnMaps = new Set();
     if (on) {
+      this.tileVisibleOnMaps.add(map);
+      const layer = this.getTileLayer(map);
       this.ensureGridImage();
       this.refreshGridGeo();
       if (!map.hasLayer(layer)) layer.addTo(map);
       this.applyTileStyle(layer);
       layer.redraw();
-    } else if (map.hasLayer(layer)) {
-      map.removeLayer(layer);
+      return;
     }
+    this.hideTileLayerOnMap(map);
   };
 
   GenplanMaskController.prototype.redrawTiles = function () {
     if (!this.tileLayers) return;
     this.refreshGridGeo();
     this.tileLayers.forEach((layer, map) => {
-      if (map && map.hasLayer(layer)) {
-        this.applyTileStyle(layer);
-        layer.redraw();
-      }
+      if (!map || !this.isTileVisibleOnMap(map) || !map.hasLayer(layer)) return;
+      this.applyTileStyle(layer);
+      layer.redraw();
     });
   };
 

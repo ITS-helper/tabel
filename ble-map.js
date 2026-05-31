@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260530e";
+  const BLE_MAP_BUILD = "20260530s";
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
@@ -71,6 +71,9 @@
   const BLE_SATELLITE_ONLINE_URL =
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const BLE_SATELLITE_BUNDLED_URL = "assets/tiles/satellite/{z}/{x}/{y}.jpg";
+  const BLE_STREET_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const BLE_STREET_ERROR_TILE =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
   const BLE_TOKEN_KEY = "accessToken";
   const BLE_AUTO_USER = "impl_dept";
@@ -1938,7 +1941,6 @@
       throw new Error("auth_failed");
     }
 
-    const prevDirty = bleDirtyMarkers;
     bleDirtyMarkers = new Map();
     for (const e of q.edits) {
       let pt = bleMapData.find((p) => p.id === e.id);
@@ -1963,7 +1965,10 @@
 
     try {
       const n = await saveDirtyMarkers();
-      saveOfflineMarkerQueue({ version: 1, companyId: bleCompanyId ?? q.companyId, edits: [] });
+      const left = loadOfflineMarkerQueue().edits.length;
+      if (!left) {
+        saveOfflineMarkerQueue({ version: 1, companyId: bleCompanyId ?? q.companyId, edits: [] });
+      }
       updateOfflineEditChrome();
       if (!opts.silent && n > 0) {
         showMapMsg(`Отправлено на сервер: ${n} ${n === 1 ? "метка" : "меток"}`, "");
@@ -1971,7 +1976,29 @@
       }
       return n;
     } catch (e) {
-      bleDirtyMarkers = prevDirty;
+      bleDirtyMarkers = new Map();
+      const remaining = loadOfflineMarkerQueue();
+      for (const ed of remaining.edits) {
+        let pt = bleMapData.find((p) => p.id === ed.id);
+        if (!pt) {
+          pt = {
+            id: ed.id,
+            ble: ed.ble || String(ed.id),
+            lat: ed.lat,
+            lng: ed.lng,
+            origLat: ed.origLat,
+            origLng: ed.origLng,
+          };
+        }
+        bleDirtyMarkers.set(ed.id, {
+          point: pt,
+          lat: ed.lat,
+          lng: ed.lng,
+          origLat: ed.origLat,
+          origLng: ed.origLng,
+        });
+      }
+      updateOfflineEditChrome();
       throw e;
     }
   }
@@ -3420,28 +3447,30 @@
   async function saveDirtyMarkers() {
     const entries = [...bleDirtyMarkers.entries()];
     if (!entries.length) return 0;
-    const savedIds = entries.map(([, { point }]) => point.id);
-    if (entries.length === 1) {
-      const [, { lat, lng, point }] = entries[0];
-      await bleApiMutate("PUT", `/api/v1/ble/${point.id}`, { latitude: lat, longitude: lng });
-    } else if (bleCompanyId) {
-      const payload = entries.map(([, { point, lat, lng }]) => ({
-        ble: point.ble || String(point.id),
-        coords: [lat, lng],
-      }));
-      await bleApiMutate("PUT", `/api/v1/map/ble/${bleCompanyId}/bulk`, payload);
-    } else {
-      for (const [, { lat, lng, point }] of entries) {
+    const savedIds = [];
+    const failures = [];
+    for (const [, { lat, lng, point }] of entries) {
+      try {
         await bleApiMutate("PUT", `/api/v1/ble/${point.id}`, { latitude: lat, longitude: lng });
+        point.lat = lat;
+        point.lng = lng;
+        savedIds.push(point.id);
+        bleDirtyMarkers.delete(point.id);
+      } catch (e) {
+        failures.push({ ble: point.ble || point.id, message: e?.message || String(e) });
       }
     }
-    entries.forEach(([, { point, lat, lng }]) => {
-      point.lat = lat;
-      point.lng = lng;
-    });
-    bleDirtyMarkers.clear();
-    clearOfflineMarkerEditsByIds(savedIds);
-    return entries.length;
+    if (savedIds.length) clearOfflineMarkerEditsByIds(savedIds);
+    if (failures.length) {
+      const hint = failures[0].message?.slice(0, 120) || "ошибка API";
+      if (savedIds.length) {
+        throw new Error(
+          `Отправлено ${savedIds.length} из ${entries.length}. Не удалось: #${failures[0].ble} (${hint})`
+        );
+      }
+      throw new Error(`Не удалось отправить метки: ${hint}`);
+    }
+    return savedIds.length;
   }
 
   function formatZoneSaveError(err) {
@@ -4276,13 +4305,17 @@
     }
   }
 
+  function buildBleStreetTileLayer(mobile) {
+    return L.tileLayer(BLE_STREET_TILE_URL, {
+      attribution: "© OpenStreetMap",
+      ...tileLayerZoomOpts(mobile, BLE_STREET_NATIVE_ZOOM),
+      errorTileUrl: BLE_STREET_ERROR_TILE,
+    });
+  }
+
   function buildBleTileLayers(mobile) {
     const satellite = L.tileLayer(satelliteTileUrlTemplate(), satelliteTileLayerOpts(mobile));
-    const street = useBundledSatelliteTiles()
-      ? satellite
-      : L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          ...tileLayerZoomOpts(mobile, BLE_STREET_NATIVE_ZOOM),
-        });
+    const street = useBundledSatelliteTiles() ? satellite : buildBleStreetTileLayer(mobile);
     const layers = { satellite, street, hybrid: satellite, satelliteUnderlay: null };
     if (bleGenplanMeta) {
       layers.genplan = buildGenplanOverlay();
@@ -4550,13 +4583,25 @@
   window.syncBaseLayerPickers = syncBaseLayerPickers;
 
   function syncBaseLayerBodyClass(layerId) {
+    document.body.classList.toggle("ble-map--layer-street", layerId === "street");
     document.body.classList.toggle("ble-map--layer-hybrid", layerId === "hybrid");
     document.body.classList.toggle("ble-map--layer-satellite", layerId === "satellite");
     document.body.classList.toggle("ble-map--layer-genplan", layerId === "genplan");
   }
 
+  function hideGenplanOverlaysOnMap(map) {
+    if (!map || !bleGenplanMask) return;
+    try {
+      bleGenplanMask.setTileVisibleOnMap(map, false);
+      bleGenplanMask.setVisibleOnMap(map, false);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function applyBleBaseLayerToMap(map, tileLayers, nextId, prevId) {
     if (!map || !tileLayers || nextId === prevId) return prevId;
+    if (nextId !== "genplan") hideGenplanOverlaysOnMap(map);
     if (tileLayers[prevId]) map.removeLayer(tileLayers[prevId]);
     if (map._bleGenplanUnderlay) {
       try {
@@ -4577,14 +4622,7 @@
     } else if (tileLayers[nextId]) {
       tileLayers[nextId].addTo(map);
     }
-    if (nextId !== "genplan" && bleGenplanMask) {
-      try {
-        bleGenplanMask.setTileVisibleOnMap(map, false);
-        bleGenplanMask.setVisibleOnMap(map, false);
-      } catch {
-        /* ignore */
-      }
-    }
+    if (nextId !== "genplan") hideGenplanOverlaysOnMap(map);
     return nextId;
   }
 
@@ -4692,7 +4730,14 @@
       charge: point.charge_value,
       locationDesc: point.location_desc || "",
       bleType: point.ble_type_desc || "",
+      bleTypeNum: point.ble_type ?? null,
+      movabilityType: point.movability_type ?? 1,
+      power: point.power ?? 6,
+      frequency: point.frequency ?? 3,
+      statusCode: point.status ?? 4,
+      firmwareVersion: point.firmware_version || point.hardware_version || "bt1",
       mac: point.mac_address || "",
+      chipUuid: point.chip_uuid || "",
       isInspected,
       isLowBattery,
       recordDt,
@@ -6063,6 +6108,44 @@ if(cards.length)selectIdx(0);
     throw lastErr || new Error("photo_fetch_failed");
   }
 
+  function getRouteInspectionStats(routeId) {
+    const rid = String(routeId ?? bleMapRouteFilter ?? "");
+    if (!rid) return null;
+    const route = bleRoutes.find((r) => String(r.id) === rid);
+    const markers = bleMapData.filter((pt) => pointPassesRouteFilter(pt));
+    const toCount = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    if (!route) {
+      if (!markers.length) return null;
+      return {
+        done: markers.filter((pt) => pt.status !== "inspection").length,
+        total: markers.length,
+      };
+    }
+    const total = toCount(route.total) ?? (markers.length || null);
+    let done = toCount(route.inspectedToday ?? route.inspected_today);
+    if (done == null) {
+      done = markers.filter((pt) => pt.status !== "inspection").length;
+    }
+    return { done, total };
+  }
+
+  function patrolStatsMapPrefix() {
+    if (!isBleNativeApp() || !bleMapRouteFilter) return "";
+    const total = bleMapData.filter((pt) => pointPassesRouteFilter(pt)).length;
+    if (!total) return "";
+    const st = window.WwBleField?.getPatrolStats?.(String(bleMapRouteFilter), total);
+    if (!st) return "";
+    return `обход ${st.done}/${st.total} (ост. ${st.left}) · `;
+  }
+
+  function withPatrolFieldStatus(text) {
+    const prefix = patrolStatsMapPrefix();
+    return prefix ? `${prefix}${text}` : text;
+  }
+
   function setFieldPackStatus(text, kind = "") {
     const el = document.getElementById("mapFieldPackStatus");
     if (!el) return;
@@ -6074,7 +6157,7 @@ if(cards.length)selectIdx(0);
       return;
     }
     el.hidden = false;
-    el.textContent = text;
+    el.textContent = withPatrolFieldStatus(text);
     el.className = `map-field-pack-status${kind ? ` map-field-pack-status--${kind}` : ""}`;
     syncMainMapMsgPosition();
   }
@@ -6626,7 +6709,10 @@ if(cards.length)selectIdx(0);
     const routeLine = pt.routeTitle
       ? `<div style="color:#1565C0;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.routeTitle)}</div>`
       : "";
-    return `<div class="ble-popup-body" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}<div class="ble-popup-photos-slot"></div></div>`;
+    const patrolBtn = isBleNativeApp()
+      ? `<button type="button" class="ble-popup-patrol-btn" data-ble-patrol="${esc(String(pt.ble))}">Обход (BLE)</button>`
+      : "";
+    return `<div class="ble-popup-body" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}<div class="ble-popup-photos-slot"></div>${patrolBtn}</div>`;
   }
 
   function renderPhotosInto(container, pt) {
@@ -6777,6 +6863,21 @@ if(cards.length)selectIdx(0);
         ?.getElement()
         ?.querySelector(".ble-popup-photos-slot");
       if (!slot) return;
+      const popupEl = marker.getPopup()?.getElement();
+      const patrolBtn = popupEl?.querySelector("[data-ble-patrol]");
+      if (patrolBtn) {
+        patrolBtn.addEventListener(
+          "click",
+          (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const tag = findBlePointByNumber(patrolBtn.dataset.blePatrol) || current;
+            window.WwBleField?.openForTag?.(tag);
+            marker.closePopup();
+          },
+          { once: true }
+        );
+      }
       let rendered = false;
       const hasPhotos = !!(current.photoTag || current.photoPlace);
       try {
@@ -7225,6 +7326,7 @@ if(cards.length)selectIdx(0);
     const next = value ? String(value) : "";
     if (next === bleMapRouteFilter) return;
     bleMapRouteFilter = next;
+    window.WwBleField?.onRouteChanged?.();
     bleRouteFilterApplying = true;
     document.querySelectorAll("select[data-ble-route-select]").forEach((sel) => {
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
@@ -7445,6 +7547,53 @@ if(cards.length)selectIdx(0);
     }
   }
 
+  function buildBleInspectionBody(checkin, tag) {
+    const recordDt = checkin?.checkedAt || new Date().toISOString();
+    const bleNum = Number(tag?.ble ?? checkin?.bleNumber ?? 0);
+    return {
+      bleId: tag?.id ?? checkin?.ble_id ?? null,
+      ble_number: bleNum,
+      bleNumber: bleNum,
+      mac_address: checkin?.mac_address || tag?.mac || "",
+      macAddress: checkin?.mac_address || tag?.mac || "",
+      latitude: tag?.lat ?? checkin?.latitude ?? null,
+      longitude: tag?.lng ?? checkin?.longitude ?? null,
+      movabilityType: tag?.movabilityType ?? checkin?.movabilityType ?? 1,
+      recordDt,
+      chargeValue: tag?.charge ?? checkin?.chargeValue ?? 100,
+      status: tag?.statusCode ?? checkin?.statusCode ?? 4,
+      power: tag?.power ?? checkin?.power ?? 6,
+      frequency: tag?.frequency ?? checkin?.frequency ?? 3,
+      bleType: tag?.bleTypeNum ?? checkin?.bleType ?? 10,
+      firmwareVersion: tag?.firmwareVersion || checkin?.firmwareVersion || "bt1",
+      rssi: checkin?.rssi ?? null,
+    };
+  }
+
+  function initBleFieldModule() {
+    if (!isBleNativeApp() || !window.WwBleField?.init) return;
+    window.WwBleField.init({
+      isNative: isBleNativeApp,
+      apiFetch: bleApiFetch,
+      apiMutate: bleApiMutate,
+      findTag: findBlePointByNumber,
+      buildInspectionBody: buildBleInspectionBody,
+      loadPhoto: loadFieldPhotoIntoImg,
+      photoSrc: photoSrcForDisplay,
+      photoProxy: toBlePhotoProxyUrl,
+      photoHint: photoUnavailableHint,
+      getRoute: getFieldSyncRouteRef,
+      getRouteMarkers: () => {
+        if (!bleMapRouteFilter) return bleMapData;
+        return bleMapData.filter((pt) => pointPassesRouteFilter(pt));
+      },
+      getRouteProgress: getRouteInspectionStats,
+      onPatrolChanged: () => {
+        void refreshFieldPackChrome();
+      },
+    });
+  }
+
   function initNativeAppChrome() {
     if (!isBleNativeApp()) return;
     document.documentElement.classList.add("ble-map-native");
@@ -7482,6 +7631,7 @@ if(cards.length)selectIdx(0);
       logo.style.pointerEvents = "none";
       logo.style.opacity = "0.85";
     }
+    initBleFieldModule();
   }
 
   function loadClusterTogglePref() {

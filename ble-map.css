@@ -263,6 +263,18 @@ body.ble-map-tools-menu-open .map-toolbar {
   background: #e7ebee;
 }
 
+body.ble-map--layer-street #bleMap.leaflet-container,
+body.ble-map--layer-street #bleMapFS.leaflet-container,
+body.ble-map--layer-street .leaflet-tile-pane,
+body:not(.ble-map--layer-satellite):not(.ble-map--layer-hybrid):not(.ble-map--layer-genplan)
+  #bleMap.leaflet-container,
+body:not(.ble-map--layer-satellite):not(.ble-map--layer-hybrid):not(.ble-map--layer-genplan)
+  #bleMapFS.leaflet-container,
+body:not(.ble-map--layer-satellite):not(.ble-map--layer-hybrid):not(.ble-map--layer-genplan)
+  .leaflet-tile-pane {
+  background: #e7ebee;
+}
+
 body.ble-map--layer-satellite #bleMap.leaflet-container,
 body.ble-map--layer-satellite #bleMapFS.leaflet-container,
 body.ble-map--layer-satellite .leaflet-tile-pane,
@@ -273,6 +285,11 @@ body.ble-map--layer-genplan #bleMap.leaflet-container,
 body.ble-map--layer-genplan #bleMapFS.leaflet-container,
 body.ble-map--layer-genplan .leaflet-tile-pane {
   background: #1a2430;
+}
+
+body:not(.ble-map--layer-genplan) .genplan-grid-layer {
+  display: none !important;
+  pointer-events: none !important;
 }
 
 .leaflet-container img.leaflet-tile {

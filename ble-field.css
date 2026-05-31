@@ -1,0 +1,689 @@
+/* Панель обхода BLE — только native APK, на весь экран */
+.ble-field-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.ble-field-panel[hidden] {
+  display: none !important;
+}
+
+.ble-field-panel__sheet {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  background: #fff;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.ble-field-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: max(14px, env(safe-area-inset-top, 0px)) 16px 10px;
+  border-bottom: 1px solid #e8edf2;
+}
+
+.ble-field-panel__title {
+  margin: 0;
+  font-family: Oswald, "Segoe UI", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1565c0;
+}
+
+.ble-field-panel__body {
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ble-field-route {
+  font-size: 13px;
+  color: #37474f;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.ble-field-route__label {
+  color: #78909c;
+}
+
+.ble-field-route--warn {
+  color: #e65100;
+  font-weight: 600;
+}
+
+.ble-field-status {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #546e7a;
+  margin-bottom: 10px;
+  min-height: 1.4em;
+}
+
+.ble-field-status--busy {
+  color: #1565c0;
+}
+
+.ble-field-status--ok {
+  color: #2e7d32;
+}
+
+.ble-field-status--error {
+  color: #c62828;
+}
+
+.ble-field-status--info {
+  color: #37474f;
+}
+
+.ble-field-status--warn {
+  color: #e65100;
+  font-weight: 600;
+}
+
+.ble-field-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ble-field-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #cfd8dc;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 16px;
+  color: #37474f;
+  background: #fff;
+}
+
+.ble-field-search__input:focus {
+  outline: none;
+  border-color: #00897b;
+  box-shadow: 0 0 0 2px rgba(0, 137, 123, 0.18);
+}
+
+.ble-field-search__go {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #00897b, #26a69a);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ble-field-search__clear {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #78909c;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ble-field-progress {
+  margin-bottom: 10px;
+}
+
+.ble-field-progress__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: #37474f;
+  margin-bottom: 6px;
+}
+
+.ble-field-progress__stat strong {
+  color: #1565c0;
+  font-size: 1.15em;
+}
+
+.ble-field-progress__left {
+  color: #78909c;
+  font-size: 12px;
+}
+
+.ble-field-progress__pending {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #546e7a;
+}
+
+.ble-field-progress__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #e8edf2;
+  overflow: hidden;
+}
+
+.ble-field-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #00897b, #26a69a);
+  transition: width 0.25s ease;
+}
+
+.ble-field-section {
+  margin-bottom: 14px;
+}
+
+.ble-field-section--nearby {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 10px;
+}
+
+.ble-field-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ble-field-section__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #546e7a;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ble-field-section__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #37474f;
+}
+
+#bleFieldNearbyList,
+#bleFieldPendingList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e8edf2;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#bleFieldNearbyList {
+  flex: 1 1 auto;
+  min-height: 100px;
+  max-height: none;
+  overflow: auto;
+}
+
+#bleFieldPendingList {
+  max-height: min(26vh, 180px);
+  overflow: auto;
+}
+
+.ble-field-nearby,
+.ble-field-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.ble-field-nearby:last-child,
+.ble-field-pending:last-child {
+  border-bottom: none;
+}
+
+.ble-field-nearby--focus {
+  box-shadow: inset 3px 0 0 #ff9800;
+}
+
+.ble-field-nearby--z1 {
+  background: #e3f2fd;
+}
+
+.ble-field-nearby--z2 {
+  background: #e8f5e9;
+}
+
+.ble-field-nearby--z4 {
+  background: #eceff1;
+}
+
+.ble-field-nearby--z5 {
+  background: #ffcdd2;
+}
+
+.ble-field-nearby--z7 {
+  background: #d7ccc8;
+}
+
+.ble-field-nearby--z12 {
+  background: #ffcdd2;
+}
+
+.ble-field-nearby--z-other {
+  background: #fffde7;
+}
+
+.ble-field-nearby__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ble-field-nearby__zone {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #546e7a;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.ble-field-nearby--z5 .ble-field-nearby__zone,
+.ble-field-nearby--z12 .ble-field-nearby__zone {
+  color: #b71c1c;
+}
+
+.ble-field-nearby--z2 .ble-field-nearby__zone {
+  color: #2e7d32;
+}
+
+.ble-field-nearby--z7 .ble-field-nearby__zone {
+  color: #5d4037;
+}
+
+.ble-field-nearby--empty,
+.ble-field-pending--empty {
+  display: block;
+  color: #78909c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ble-field-nearby__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ble-field-nearby__num,
+.ble-field-pending__num {
+  font-weight: 700;
+  color: #1565c0;
+  margin-right: 6px;
+}
+
+.ble-field-nearby__title {
+  font-size: 13px;
+  color: #37474f;
+}
+
+.ble-field-nearby__meta,
+.ble-field-pending__meta {
+  display: block;
+  font-size: 12px;
+  color: #78909c;
+  margin-top: 2px;
+}
+
+.ble-field-nearby__meta--low {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.ble-field-nearby__actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.ble-field-nearby__photo,
+.ble-field-pending__photo {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  background: #fff;
+  color: #1565c0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ble-field-nearby__photo--disabled {
+  opacity: 0.45;
+  border-color: #cfd8dc;
+  color: #90a4ae;
+}
+
+.ble-field-nearby__save {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #00897b, #26a69a);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ble-field-pending__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ble-field-photo-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(21, 38, 55, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.ble-field-photo-modal[hidden] {
+  display: none !important;
+}
+
+.ble-field-photo-modal__sheet {
+  width: 100%;
+  max-height: 92%;
+  background: #fff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.ble-field-photo-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e8edf2;
+  flex-shrink: 0;
+}
+
+.ble-field-photo-modal__title {
+  margin: 0;
+  font-family: Oswald, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  color: #1565c0;
+}
+
+.ble-field-photo-modal__body {
+  padding: 12px 14px 16px;
+  overflow: auto;
+  flex: 1;
+}
+
+.ble-field-photo-modal__fig {
+  margin: 0 0 14px;
+}
+
+.ble-field-photo-modal__fig:last-child {
+  margin-bottom: 0;
+}
+
+.ble-field-photo-modal__fig figcaption {
+  font-size: 12px;
+  font-weight: 700;
+  color: #546e7a;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ble-field-photo-modal__img {
+  display: block;
+  width: 100%;
+  max-height: min(42vh, 360px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: #f5f5f5;
+}
+
+.ble-field-photo-modal__img--missing {
+  min-height: 80px;
+  object-fit: none;
+}
+
+.ble-field-photo-modal__empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #78909c;
+}
+
+.ble-field-nearby__saved {
+  display: none;
+}
+
+#bleFieldScanBtn {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #90caf9;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#bleFieldUploadBtn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid #1565c0;
+  background: linear-gradient(135deg, #1565c0, #2196f3);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#bleFieldUploadBtn:disabled {
+  opacity: 0.5;
+  background: #cfd8dc;
+  border-color: #b0bec5;
+  color: #546e7a;
+}
+
+.ble-field-section--pending {
+  flex-shrink: 0;
+  padding-top: 4px;
+  border-top: 1px solid #eef2f6;
+}
+
+.ble-field-route--all {
+  color: #546e7a;
+  font-style: italic;
+}
+
+.ble-field-nearby__route {
+  display: block;
+  font-size: 11px;
+  color: #78909c;
+  margin-top: 1px;
+}
+
+#mapBleFieldBtn.map-retry-btn {
+  position: relative;
+}
+
+.ble-field-toolbar-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #e65100;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.ble-popup-patrol-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #00897b, #26a69a);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body.ble-field-open {
+  overflow: hidden;
+}
+
+.ble-field-section--focus {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.ble-field-focus {
+  padding: 14px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #e0f2f1, #f1f8f6);
+  border: 1px solid #80cbc4;
+  box-shadow: 0 2px 12px rgba(0, 137, 123, 0.12);
+}
+
+.ble-field-focus__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.ble-field-focus__num {
+  font-family: Oswald, "Segoe UI", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #00695c;
+}
+
+.ble-field-focus__conn {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #546e7a;
+}
+
+.ble-field-focus__conn--busy {
+  color: #1565c0;
+}
+
+.ble-field-focus__conn--ok {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.ble-field-focus__save {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  background: #b0bec5;
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: not-allowed;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+.ble-field-focus__save:not(:disabled) {
+  cursor: pointer;
+  background: linear-gradient(135deg, #00897b, #26a69a);
+  box-shadow: 0 4px 14px rgba(0, 137, 123, 0.35);
+}
+
+.ble-field-focus__save:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.ble-field-panel--tag-focus .ble-field-section--nearby {
+  display: none;
+}
+
+.ble-field-panel--tag-focus .ble-field-panel__body {
+  overflow-y: auto;
+}
+
+.ble-field-section--pending.ble-field-section--highlight {
+  animation: ble-field-pending-pulse 1.2s ease-out 1;
+}
+
+@keyframes ble-field-pending-pulse {
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(21, 101, 192, 0);
+  }
+  40% {
+    box-shadow: inset 0 0 0 3px rgba(21, 101, 192, 0.35);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(21, 101, 192, 0);
+  }
+}
