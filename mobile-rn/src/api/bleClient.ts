@@ -4,26 +4,19 @@ import {
   BLE_AUTO_USER,
   BLE_BACKEND_BASE,
   BLE_PROXY_BACKEND_BASE,
-  BLE_SUPABASE_BASE,
   BLE_TOKEN_KEY,
-  BLE_WORKER_BASE,
-  SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
+import {
+  WW_MOBILE_AUTH_PATH,
+  WW_NATIVE_TRANSPORTS,
+  type WwNativeTransport,
+} from "./wwServiceEndpoints";
 
 const FETCH_TIMEOUT_MS = 120_000;
-const LIST_TIMEOUT_MS = 40_000;
+const LIST_TIMEOUT_MS = 55_000;
+const AUTH_TIMEOUT_MS = 25_000;
 
-/** Как WW Service: backend → proxy backend → worker → supabase (браузерный обход). */
-const NATIVE_TRANSPORT_ORDER = [
-  "backend",
-  "proxy",
-  "worker",
-  "supabase",
-] as const;
-
-type TransportId = (typeof NATIVE_TRANSPORT_ORDER)[number];
-
-const FAILOVER_STATUSES = new Set([404, 405, 500, 502, 503]);
+const FAILOVER_STATUSES = new Set([404, 405, 500, 502, 503, 504]);
 
 export async function getBleToken(): Promise<string | null> {
   return AsyncStorage.getItem(BLE_TOKEN_KEY);
@@ -33,35 +26,27 @@ async function setBleToken(token: string): Promise<void> {
   await AsyncStorage.setItem(BLE_TOKEN_KEY, token);
 }
 
-function transportOrder(_path: string): TransportId[] {
-  return [...NATIVE_TRANSPORT_ORDER];
+function transportOrder(): WwNativeTransport[] {
+  return [...WW_NATIVE_TRANSPORTS];
 }
 
-function mergeSupabaseHeaders(headers: HeadersInit, bleToken: string | null): Headers {
-  const h = new Headers(headers);
-  h.set("apikey", SUPABASE_PUBLISHABLE_KEY);
-  h.set("Authorization", `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
-  if (bleToken) h.set("x-ble-token", bleToken);
-  return h;
+function buildUrl(transport: WwNativeTransport, path: string): string {
+  const base =
+    transport === "backend" ? BLE_BACKEND_BASE : BLE_PROXY_BACKEND_BASE;
+  return `${base}${path}`;
 }
 
-function buildUrl(transport: TransportId, path: string): string {
-  switch (transport) {
-    case "backend":
-      return `${BLE_BACKEND_BASE}${path}`;
-    case "proxy":
-      return `${BLE_PROXY_BACKEND_BASE}${path}`;
-    case "worker":
-      return `${BLE_WORKER_BASE}${path}`;
-    case "supabase":
-      return `${BLE_SUPABASE_BASE}${path}`;
+function timeoutForPath(path: string): number {
+  if (path.includes(WW_MOBILE_AUTH_PATH) || path.includes("/token")) {
+    return AUTH_TIMEOUT_MS;
   }
+  if (path.includes("/api/v1/ble") || path.includes("/map/ble/")) {
+    return LIST_TIMEOUT_MS;
+  }
+  return FETCH_TIMEOUT_MS;
 }
 
-function shouldFailover(transport: TransportId, res: Response): boolean {
-  if (transport === "supabase") {
-    return FAILOVER_STATUSES.has(res.status);
-  }
+function shouldFailover(res: Response): boolean {
   return FAILOVER_STATUSES.has(res.status);
 }
 
@@ -70,27 +55,19 @@ export async function bleHttpFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   let lastErr: unknown = null;
-  const authHeader =
-    (init.headers as Record<string, string> | undefined)?.Authorization ??
-    (init.headers as Record<string, string> | undefined)?.authorization;
-  const bleToken =
-    authHeader?.replace(/^Bearer\s+/i, "") ||
-    (await getBleToken());
+  const timeoutMs = timeoutForPath(path);
 
-  const timeoutMs = path.includes("/map/ble/") ? LIST_TIMEOUT_MS : FETCH_TIMEOUT_MS;
-
-  for (const tid of transportOrder(path)) {
+  for (const tid of transportOrder()) {
     const url = buildUrl(tid, path);
-    const headers =
-      tid === "supabase"
-        ? mergeSupabaseHeaders(init.headers ?? {}, bleToken)
-        : new Headers(init.headers ?? {});
-
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...init, headers, signal: ctrl.signal });
-      if (shouldFailover(tid, res)) {
+      const res = await fetch(url, {
+        ...init,
+        headers: new Headers(init.headers ?? {}),
+        signal: ctrl.signal,
+      });
+      if (shouldFailover(res)) {
         lastErr = new Error(`${tid}_${res.status}`);
         continue;
       }
@@ -101,21 +78,71 @@ export async function bleHttpFetch(
       clearTimeout(timer);
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error("Failed to fetch");
+
+  if (lastErr instanceof Error && lastErr.name === "AbortError") {
+    throw new Error(
+      `Таймаут запроса (${BLE_BACKEND_BASE}). Проверьте Wi‑Fi на объекте.`,
+    );
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(
+        `Нет связи с backend.vsm / proxy.backend.vsm (${BLE_BACKEND_BASE}).`,
+      );
 }
 
-export async function bleAutoLogin(): Promise<string> {
+function parseTokenPayload(data: Record<string, unknown>): string | null {
+  const token =
+    data.access_token ||
+    data.accessToken ||
+    data.token ||
+    (typeof data.data === "object" &&
+      data.data &&
+      ((data.data as Record<string, unknown>).access_token ||
+        (data.data as Record<string, unknown>).accessToken));
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
+/** WW Service: POST /mobile/v1/auth/login { username, password }. */
+export async function mobileLogin(
+  username: string,
+  password: string,
+): Promise<string> {
+  const res = await bleHttpFetch(WW_MOBILE_AUTH_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) throw new Error(`mobile_auth_${res.status}`);
+  const data = (await res.json()) as Record<string, unknown>;
+  const token = parseTokenPayload(data);
+  if (!token) throw new Error("mobile_auth_no_token");
+  await setBleToken(token);
+  return token;
+}
+
+/** Резерв: form /api/v1/token (веб-учётка impl_dept). */
+async function legacyTokenLogin(): Promise<string> {
   const res = await bleHttpFetch("/api/v1/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `username=${encodeURIComponent(BLE_AUTO_USER)}&password=${encodeURIComponent(BLE_AUTO_PASS)}`,
   });
-  if (!res.ok) throw new Error("auto_auth_failed");
-  const data = (await res.json()) as Record<string, string>;
-  const token = data.accessToken || data.access_token || data.token;
-  if (!token) throw new Error("no_token_in_response");
+  if (!res.ok) throw new Error(`legacy_auth_${res.status}`);
+  const data = (await res.json()) as Record<string, unknown>;
+  const token = parseTokenPayload(data);
+  if (!token) throw new Error("legacy_auth_no_token");
   await setBleToken(token);
   return token;
+}
+
+export async function bleAutoLogin(): Promise<string> {
+  try {
+    return await mobileLogin(BLE_AUTO_USER, BLE_AUTO_PASS);
+  } catch (e) {
+    console.warn("[bleClient] mobile login failed, trying /api/v1/token", e);
+    return legacyTokenLogin();
+  }
 }
 
 async function ensureToken(): Promise<string> {
@@ -134,6 +161,7 @@ export async function bleApiFetch<T>(path: string, retried = false): Promise<T> 
   const res = await bleHttpFetch(path, {
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json",
       Authorization: `Bearer ${token}`,
     },
   });
@@ -164,6 +192,7 @@ export async function bleApiMutate<T>(
     method,
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json",
       Authorization: `Bearer ${token}`,
     },
     body: body != null ? JSON.stringify(body) : undefined,

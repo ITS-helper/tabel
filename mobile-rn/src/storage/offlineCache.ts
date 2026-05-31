@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import {
   classifyBle,
-  fetchBleMapCache,
   fetchBleMapRaw,
   parseZonesFromMapPayload,
 } from "../api/bleMapApi";
@@ -118,16 +117,7 @@ async function loadRawMarkers(companyId: number): Promise<{
     const raw = await fetchBleMapRaw(companyId);
     if (raw.length) return { raw, source: "api" };
   } catch {
-    /* try cache */
-  }
-
-  try {
-    const cached = await fetchBleMapCache(companyId);
-    if (Array.isArray(cached) && cached.length) {
-      return { raw: cached as RawBlePoint[], source: "cache" };
-    }
-  } catch {
-    /* try bundled snapshot */
+    /* bundled snapshot */
   }
 
   const bundled = loadBundledBleCache(companyId);
@@ -136,7 +126,7 @@ async function loadRawMarkers(companyId: number): Promise<{
   }
 
   throw new Error(
-    "Нет доступа к серверу (нужен VPN). Включите VPN и нажмите ↻ для обновления.",
+    "Нет связи с backend.vsm.workwatch.pro. Проверьте Wi‑Fi на объекте и нажмите ↻.",
   );
 }
 
@@ -208,13 +198,11 @@ export function snapshotHint(source: OfflineMeta["source"], savedAt?: number): s
       : "";
   if (source === "bundle") {
     return age
-      ? `Без VPN — встроенный снимок от ${age}. Зоны: ↻ с VPN.`
-      : "Без VPN — встроенный снимок меток. Зоны: обновите ↻ с VPN.";
+      ? `Офлайн-снимок от ${age}. Обновите ↻ на объекте.`
+      : "Офлайн-снимок меток. Обновите ↻ на объекте.";
   }
   if (source === "cache") {
-    return age
-      ? `Без VPN — кэш Supabase от ${age}.`
-      : "Без VPN — кэш Supabase.";
+    return age ? `Кэш от ${age}.` : "Кэш меток.";
   }
   return age ? `Офлайн — локальный кэш от ${age}.` : "Офлайн — локальный кэш.";
 }

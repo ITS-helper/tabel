@@ -17,6 +17,9 @@ export type AdvTelemetry = {
 export type RawBlePoint = {
   id?: number;
   ble_number?: number | string;
+  bleNumber?: number | string;
+  name?: string;
+  nameExtended?: string;
   name_extended?: string;
   latitude?: number;
   longitude?: number;

@@ -47,10 +47,13 @@ const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
 const debugMode = process.argv.includes("--debug");
 const task = debugMode ? "assembleDebug" : "assembleRelease";
 console.log(`[mobile-rn] ${task}…`);
-run(gradlew, [task], androidDir, {
+const gradleHome = path.join(root, "..", ".gradle-home");
+const gradleEnv = {
   ANDROID_HOME: process.env.ANDROID_HOME || "C:\\Android\\Sdk",
   ANDROID_SDK_ROOT: process.env.ANDROID_SDK_ROOT || "C:\\Android\\Sdk",
-});
+  ...(fs.existsSync(gradleHome) ? { GRADLE_USER_HOME: gradleHome } : {}),
+};
+run(gradlew, [task], androidDir, gradleEnv);
 
 const sub = debugMode ? "debug" : "release";
 const apkName = debugMode ? "app-debug.apk" : "app-release.apk";

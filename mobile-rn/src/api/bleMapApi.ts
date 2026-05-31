@@ -1,16 +1,11 @@
 import type { BleRoute, BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
-import { BLE_DEFAULT_COMPANY_ID, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "../config";
+import { BLE_DEFAULT_COMPANY_ID } from "../config";
 import { coordsFromRaw } from "../storage/markerNormalize";
 import { resolvePhotoUrl } from "./photoUtils";
 import { bleApiFetch, ensureBleTokenForField } from "./bleClient";
+import { WW_BLE_LIST_PATH } from "./wwServiceEndpoints";
 
-function supabaseHeaders(): HeadersInit {
-  return {
-    apikey: SUPABASE_PUBLISHABLE_KEY,
-    Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-    Accept: "application/json",
-  };
-}
+const WW_BLE_PAGE_MAX = 120;
 
 export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMarker {
   const LOW = 15;
@@ -36,11 +31,12 @@ export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMark
   else if (!isInspected) status = "inspection";
 
   const { lat, lng } = coordsFromRaw(point);
+  const row = point as Record<string, unknown>;
 
   return {
     id: point.id,
-    ble: String(point.ble_number || ""),
-    title: point.name_extended || "",
+    ble: String(point.ble_number ?? row.bleNumber ?? ""),
+    title: point.name_extended || String(row.nameExtended ?? row.name ?? ""),
     lat,
     lng,
     charge,
@@ -64,18 +60,75 @@ export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMark
     ),
     locationDesc: point.location_desc || "",
     bleTypeLabel: point.ble_type_desc || "",
-    routeId: point.bleRoute?.id ?? null,
-    routeTitle: point.bleRoute?.title || "",
-    zoneId: point.ble_zone_id ?? point.ble_zoneId ?? null,
+    routeId: point.bleRoute?.id ?? (row.bleRouteId as number | undefined) ?? null,
+    routeTitle: point.bleRoute?.title || String(row.bleRouteTitle ?? ""),
+    zoneId: point.ble_zone_id ?? point.ble_zoneId ?? (row.bleZoneId as number | undefined) ?? null,
   };
+}
+
+function extractBlePageItems(data: unknown): RawBlePoint[] {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  const o = data as Record<string, unknown>;
+  for (const key of ["items", "content", "results"]) {
+    if (Array.isArray(o[key])) return o[key] as RawBlePoint[];
+  }
+  if (Array.isArray(o.data)) return o.data as RawBlePoint[];
+  if (o.data && typeof o.data === "object") {
+    const nested = o.data as Record<string, unknown>;
+    for (const key of ["items", "content", "results"]) {
+      if (Array.isArray(nested[key])) return nested[key] as RawBlePoint[];
+    }
+  }
+  return [];
+}
+
+function pageHasNext(data: unknown, page: number, batchLen: number): boolean {
+  if (!data || typeof data !== "object") return false;
+  const o = data as Record<string, unknown>;
+  if (typeof o.hasNextPage === "boolean") return o.hasNextPage;
+  if (typeof o.hasNext === "boolean") return o.hasNext;
+  if (typeof o.totalPages === "number") return page < o.totalPages;
+  if (typeof o.last === "boolean") return !o.last;
+  return batchLen >= 50;
+}
+
+/** WW Service: GET /api/v1/ble?page=N (BleDataService.getAllBleTags). */
+export async function fetchAllBlePaginated(): Promise<RawBlePoint[]> {
+  await ensureBleTokenForField();
+  const all: RawBlePoint[] = [];
+  let page = 1;
+  while (page <= WW_BLE_PAGE_MAX) {
+    const data = await bleApiFetch<unknown>(`${WW_BLE_LIST_PATH}?page=${page}`);
+    const batch = extractBlePageItems(data);
+    if (!batch.length) break;
+    all.push(...batch);
+    if (!pageHasNext(data, page, batch.length)) break;
+    page += 1;
+  }
+  return all;
 }
 
 export async function fetchBleMapRaw(
   companyId = BLE_DEFAULT_COMPANY_ID,
 ): Promise<RawBlePoint[]> {
   await ensureBleTokenForField();
-  const raw = await bleApiFetch<RawBlePoint[]>(`/api/v1/map/ble/${companyId}`);
-  return Array.isArray(raw) ? raw : [];
+
+  try {
+    const paginated = await fetchAllBlePaginated();
+    if (paginated.length) return paginated;
+  } catch (e) {
+    console.warn("[bleMapApi] WW paginated /api/v1/ble failed", e);
+  }
+
+  try {
+    const raw = await bleApiFetch<RawBlePoint[]>(`/api/v1/map/ble/${companyId}`);
+    if (Array.isArray(raw) && raw.length) return raw;
+  } catch (e) {
+    console.warn("[bleMapApi] /api/v1/map/ble fallback failed", e);
+  }
+
+  return [];
 }
 
 export async function fetchBleMapMarkers(
@@ -131,23 +184,6 @@ export function parseZonesFromMapPayload(mapData: {
       ptsSource: "api" as const,
     }))
     .filter((z) => z.pts.length >= 3);
-}
-
-export async function fetchBleMapCache(
-  companyId = BLE_DEFAULT_COMPANY_ID,
-): Promise<RawBlePoint[] | null> {
-  const url = `${SUPABASE_URL}/rest/v1/ble_map_cache?company_id=eq.${companyId}&select=payload,updated_at`;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12_000);
-  try {
-    const res = await fetch(url, { headers: supabaseHeaders(), signal: ctrl.signal });
-    if (!res.ok) throw new Error(`Кэш карты: HTTP ${res.status}`);
-    const rows = (await res.json()) as { payload?: RawBlePoint[] }[];
-    const payload = rows[0]?.payload;
-    return Array.isArray(payload) && payload.length ? payload : null;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 export async function fetchBleMapData(

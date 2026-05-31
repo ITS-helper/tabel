@@ -8,7 +8,8 @@
 - **expo-router** — вкладки: Карта / Обход / Поиск
 - **react-native-ble-plx** — скан и GATT
 - **react-native-maps** + **react-native-map-clustering** — спутник, кластеры, зоны
-- **Supabase Edge** (`ble-map-proxy`) + Worker fallback — как `ble-map.js`
+- **API как WW Service** — `backend.vsm` / `proxy.backend.vsm`, auth `/mobile/v1/auth/login`, метки `/api/v1/ble?page=`
+- Без `workers.dev` и Supabase Edge (в отличие от web `ble-map.js`)
 
 ## Быстрый старт (dev)
 

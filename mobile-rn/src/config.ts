@@ -1,19 +1,18 @@
-/** Конфиг API — те же endpoints, что в ble-map.js (без табеля). */
+/** Конфиг API — RN как WW Service (backend.vsm), не web/workers.dev. */
 export const SUPABASE_URL = "https://owcuvcshwtivqueftiuk.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_zMRDhywx67zYK6SLGAyg-A_4KXV_Ujc";
-/** Прямые хосты WW Service (BleDataService в libapp.so v1.0.33). */
+/** Прямые хосты WW Service (libapp.so). */
 export const BLE_BACKEND_BASE = "https://backend.vsm.workwatch.pro";
 export const BLE_PROXY_BACKEND_BASE = "https://proxy.backend.vsm.workwatch.pro";
-/** Cloudflare Worker — прокси к тому же API (веб/резерв). */
+/** Только для веб ble-map.js — в RN не используется. */
 export const BLE_WORKER_BASE =
   "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
-/** Только для браузера; в RN — последний резерв. */
 export const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
-export const APP_BUILD = "rn-20260601e";
-export const APP_VERSION = "1.0.13";
+export const APP_BUILD = "rn-20260601f";
+export const APP_VERSION = "1.0.14";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";
