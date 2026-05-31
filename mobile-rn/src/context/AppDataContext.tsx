@@ -18,6 +18,7 @@ import {
   loadOfflineZones,
   saveOfflineMarkersOnly,
   syncOfflinePack,
+  snapshotHint,
   type OfflineMeta,
 } from "../storage/offlineCache";
 import { normalizeBleMarkers } from "../storage/markerNormalize";
@@ -149,12 +150,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         /* routes optional offline */
       }
       void syncPhotos(pack.raw);
+      const hint = snapshotHint(pack.meta.source, pack.meta.savedAt);
+      setError(hint);
     } catch (e) {
       if (localMarkers.length) {
+        const meta = await loadOfflineMeta();
         setError(
-          e instanceof Error
-            ? `${e.message} · показан локальный кэш`
-            : "Ошибка загрузки · показан локальный кэш",
+          snapshotHint(meta?.source ?? "local", meta?.savedAt) ??
+            (e instanceof Error
+              ? `${e.message} · показан локальный кэш`
+              : "Ошибка загрузки · показан локальный кэш"),
         );
         BleService.setKnownTags(localMarkers);
       } else {

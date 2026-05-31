@@ -216,9 +216,11 @@ export default function MapScreen() {
       ? "API"
       : offlineMeta?.source === "cache"
         ? "кэш Supabase"
-        : offlineMeta?.source === "local"
-          ? "локально"
-          : "—";
+        : offlineMeta?.source === "bundle"
+          ? "снимок"
+          : offlineMeta?.source === "local"
+            ? "локально"
+            : "—";
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -318,7 +320,7 @@ export default function MapScreen() {
           <ActivityIndicator color={colors.accent} />
           <Text style={styles.muted}>Загрузка меток и зон…</Text>
         </View>
-      ) : error ? (
+      ) : error && !routeMarkers.length ? (
         <View style={styles.center}>
           <Text style={styles.error}>{error}</Text>
           <Pressable style={styles.retry} onPress={onRefresh}>
@@ -326,7 +328,13 @@ export default function MapScreen() {
           </Pressable>
         </View>
       ) : (
-        <BleLeafletMap
+        <>
+          {error && routeMarkers.length ? (
+            <View style={styles.noteBar}>
+              <Text style={styles.noteText}>{error}</Text>
+            </View>
+          ) : null}
+          <BleLeafletMap
           markers={displayMarkers}
           zones={routeZones}
           query={query}
@@ -337,6 +345,7 @@ export default function MapScreen() {
           onMarkerMoved={onMarkerMoved}
           onPatrol={onPatrol}
         />
+        </>
       )}
 
       <View style={styles.footer}>

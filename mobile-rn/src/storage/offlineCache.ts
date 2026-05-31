@@ -6,6 +6,7 @@ import {
   fetchBleMapRaw,
   parseZonesFromMapPayload,
 } from "../api/bleMapApi";
+import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
 import { loadBleZonesFull } from "../api/zonesLoader";
 import type { BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
 import {
@@ -26,7 +27,7 @@ export type OfflineMeta = {
   mappableCount: number;
   zoneCount: number;
   fromNetwork: boolean;
-  source?: "api" | "cache" | "local";
+  source?: "api" | "cache" | "local" | "bundle";
   refreshedAt?: number;
 };
 
@@ -111,6 +112,7 @@ function markersFromRaw(raw: RawBlePoint[]): BleTagMarker[] {
 async function loadRawMarkers(companyId: number): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
+  snapshotAt?: string;
 }> {
   try {
     const raw = await fetchBleMapRaw(companyId);
@@ -125,10 +127,17 @@ async function loadRawMarkers(companyId: number): Promise<{
       return { raw: cached as RawBlePoint[], source: "cache" };
     }
   } catch {
-    /* fall through */
+    /* try bundled snapshot */
   }
 
-  throw new Error("Не удалось загрузить метки (API и кэш недоступны)");
+  const bundled = loadBundledBleCache(companyId);
+  if (bundled?.raw.length) {
+    return { raw: bundled.raw, source: "bundle", snapshotAt: bundled.updatedAt };
+  }
+
+  throw new Error(
+    "Нет доступа к серверу (нужен VPN). Включите VPN и нажмите ↻ для обновления.",
+  );
 }
 
 async function loadZones(companyId: number, local: BleZone[]): Promise<BleZone[]> {
@@ -148,6 +157,14 @@ export async function syncOfflinePack(
   const online = await isOnline();
 
   if (!online) {
+    if (!localMarkers.length) {
+      const bundled = loadBundledBleCache(companyId);
+      if (bundled?.raw.length) {
+        const markers = markersFromRaw(bundled.raw);
+        const meta = await saveOfflinePack(markers, localZones, companyId, "bundle");
+        return { markers, zones: localZones, meta, raw: bundled.raw };
+      }
+    }
     const meta = (await loadOfflineMeta()) ?? {
       companyId,
       savedAt: 0,
@@ -181,6 +198,25 @@ export async function syncOfflinePack(
     }
     throw e;
   }
+}
+
+export function snapshotHint(source: OfflineMeta["source"], savedAt?: number): string | null {
+  if (source !== "bundle" && source !== "cache" && source !== "local") return null;
+  const age =
+    savedAt && savedAt > 0
+      ? formatBundleAge(new Date(savedAt).toISOString())
+      : "";
+  if (source === "bundle") {
+    return age
+      ? `Без VPN — встроенный снимок от ${age}. Зоны: ↻ с VPN.`
+      : "Без VPN — встроенный снимок меток. Зоны: обновите ↻ с VPN.";
+  }
+  if (source === "cache") {
+    return age
+      ? `Без VPN — кэш Supabase от ${age}.`
+      : "Без VPN — кэш Supabase.";
+  }
+  return age ? `Офлайн — локальный кэш от ${age}.` : "Офлайн — локальный кэш.";
 }
 
 /** Быстрые зоны из map_data без отдельных запросов (если API вернёт). */

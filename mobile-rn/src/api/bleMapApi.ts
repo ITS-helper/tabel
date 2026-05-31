@@ -137,11 +137,17 @@ export async function fetchBleMapCache(
   companyId = BLE_DEFAULT_COMPANY_ID,
 ): Promise<RawBlePoint[] | null> {
   const url = `${SUPABASE_URL}/rest/v1/ble_map_cache?company_id=eq.${companyId}&select=payload,updated_at`;
-  const res = await fetch(url, { headers: supabaseHeaders() });
-  if (!res.ok) throw new Error(`Кэш карты: HTTP ${res.status}`);
-  const rows = (await res.json()) as { payload?: RawBlePoint[] }[];
-  const payload = rows[0]?.payload;
-  return Array.isArray(payload) && payload.length ? payload : null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const res = await fetch(url, { headers: supabaseHeaders(), signal: ctrl.signal });
+    if (!res.ok) throw new Error(`Кэш карты: HTTP ${res.status}`);
+    const rows = (await res.json()) as { payload?: RawBlePoint[] }[];
+    const payload = rows[0]?.payload;
+    return Array.isArray(payload) && payload.length ? payload : null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function fetchBleMapData(

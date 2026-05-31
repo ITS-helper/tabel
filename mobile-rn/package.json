@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "prebuild": "expo prebuild --platform android --clean",
     "typecheck": "tsc --noEmit",
+    "sync:ble-cache": "node scripts/sync-ble-cache-asset.mjs",
     "prebuild:android": "expo prebuild --platform android --clean",
     "apk": "node scripts/build-apk.mjs"
   },

@@ -23,6 +23,9 @@ function run(cmd, args, cwd = root, env = process.env) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
+console.log("[mobile-rn] sync ble cache asset…");
+run("node", ["scripts/sync-ble-cache-asset.mjs"]);
+
 console.log("[mobile-rn] prebuild android…");
 run("npx", ["expo", "prebuild", "--platform", "android", "--clean"]);
 
