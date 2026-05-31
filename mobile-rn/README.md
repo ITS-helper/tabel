@@ -23,15 +23,6 @@ BLE **не работает** в Expo Go — только native build.
 
 ## Release APK
 
-> **Windows:** если `prebuild` падает с `MainApplication does not exist`, соберите из пути **без кириллицы**:
-> ```powershell
-> subst X: D:\табель
-> cd X:\mobile-rn
-> npm run apk
-> subst X: /d
-> ```
-> Или используйте EAS Build (облако).
-
 ```bash
 cd mobile-rn
 npm install --legacy-peer-deps
