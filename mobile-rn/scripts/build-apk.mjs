@@ -13,26 +13,52 @@ const root = path.resolve(__dirname, "..");
 const androidDir = path.join(root, "android");
 const distDir = path.join(root, "dist");
 
-function run(cmd, args, cwd = root) {
-  const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+function run(cmd, args, cwd = root, env = process.env) {
+  const r = spawnSync(cmd, args, {
+    cwd,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    env: { ...process.env, ...env },
+  });
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
 console.log("[mobile-rn] prebuild android…");
 run("npx", ["expo", "prebuild", "--platform", "android", "--clean"]);
 
-const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
-console.log("[mobile-rn] assembleRelease…");
-run(gradlew, ["assembleRelease"], androidDir);
+const sdkProps = path.join(androidDir, "local.properties");
+const parentSdk = path.join(root, "..", "android", "local.properties");
+if (!fs.existsSync(sdkProps) && fs.existsSync(parentSdk)) {
+  fs.copyFileSync(parentSdk, sdkProps);
+  console.log("[mobile-rn] copied local.properties from Capacitor android/");
+}
 
-const apkSrc = path.join(androidDir, "app", "build", "outputs", "apk", "release", "app-release.apk");
+const gradleProps = path.join(androidDir, "gradle.properties");
+if (fs.existsSync(gradleProps)) {
+  let gp = fs.readFileSync(gradleProps, "utf8");
+  gp = gp.replace(/newArchEnabled=true/g, "newArchEnabled=false");
+  fs.writeFileSync(gradleProps, gp);
+}
+
+const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
+const debugMode = process.argv.includes("--debug");
+const task = debugMode ? "assembleDebug" : "assembleRelease";
+console.log(`[mobile-rn] ${task}…`);
+run(gradlew, [task], androidDir, {
+  ANDROID_HOME: process.env.ANDROID_HOME || "C:\\Android\\Sdk",
+  ANDROID_SDK_ROOT: process.env.ANDROID_SDK_ROOT || "C:\\Android\\Sdk",
+});
+
+const sub = debugMode ? "debug" : "release";
+const apkName = debugMode ? "app-debug.apk" : "app-release.apk";
+const apkSrc = path.join(androidDir, "app", "build", "outputs", "apk", sub, apkName);
 if (!fs.existsSync(apkSrc)) {
   console.error("APK not found:", apkSrc);
   process.exit(1);
 }
 
 fs.mkdirSync(distDir, { recursive: true });
-const label = process.argv.includes("--debug") ? "debug" : "release";
+const label = debugMode ? "debug" : "release";
 const version = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8")).expo.version;
 const out = path.join(distDir, `workwatch-ble-rn-v${version}-${label}.apk`);
 fs.copyFileSync(apkSrc, out);
