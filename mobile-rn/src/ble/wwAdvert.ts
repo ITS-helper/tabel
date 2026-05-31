@@ -11,12 +11,22 @@ export function normalizeMac(mac: string | null | undefined): string {
   return String(mac).replace(/[^a-fA-F0-9]/g, "").toUpperCase();
 }
 
+/** ble-plx отдаёт base64-строку; Capacitor — объект companyId → base64. */
+export function manufacturerDataToRecord(
+  md: string | Record<string, string> | null | undefined,
+): Record<string, string> {
+  if (!md) return {};
+  if (typeof md === "string") return md ? { "": md } : {};
+  return md;
+}
+
 function bytesFromManufacturerData(
-  md: Record<string, string> | null | undefined,
+  md: string | Record<string, string> | null | undefined,
 ): number[] {
-  if (!md || typeof md !== "object") return [];
+  const rec = manufacturerDataToRecord(md);
+  if (!Object.keys(rec).length) return [];
   const out: number[] = [];
-  for (const val of Object.values(md)) {
+  for (const val of Object.values(rec)) {
     if (!val) continue;
     try {
       const binary = atob(val);
@@ -46,7 +56,7 @@ function hasWwMagic(nums: number[]): boolean {
 }
 
 export function isWwAdvertisement(params: {
-  manufacturerData?: Record<string, string> | null;
+  manufacturerData?: string | Record<string, string> | null;
   serviceUUIDs?: string[] | null;
 }): boolean {
   const nums = bytesFromManufacturerData(params.manufacturerData ?? null);
@@ -56,7 +66,7 @@ export function isWwAdvertisement(params: {
 }
 
 export function bleFromManufacturerData(
-  manufacturerData?: Record<string, string> | null,
+  manufacturerData?: string | Record<string, string> | null,
 ): string {
   const nums = bytesFromManufacturerData(manufacturerData ?? null);
   for (let i = 0; i <= nums.length - 6; i++) {

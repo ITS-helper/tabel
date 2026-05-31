@@ -5,29 +5,38 @@ import {
   GATT_BATTERY_SERVICE,
   GATT_WW_READ_SUFFIXES,
   GATT_WW_SERVICE,
+  NEARBY_TTL_MS,
 } from "../config";
 import { GATT_READ_ORDER, parseGattReads } from "./gattTelemetry";
-import type { AdvTelemetry, GattLiveTelemetry, ScannedDevice } from "./types";
+import { requestBlePermissions } from "./requestBlePermissions";
+import type { AdvTelemetry, BleTagMarker, GattLiveTelemetry, ScannedDevice } from "./types";
 import {
   bleFromDeviceName,
   bleFromManufacturerData,
   isWwAdvertisement,
+  manufacturerDataToRecord,
+  normalizeBle,
   normalizeMac,
 } from "./wwAdvert";
 
 const SCAN_MODE = { allowDuplicates: true };
 
 type ScanListener = (devices: ScannedDevice[]) => void;
+type ScanMode = "field" | "finder";
 
-function parseWwAdvTelemetry(manufacturerData: string | null): AdvTelemetry | null {
-  if (!manufacturerData) return null;
-  const md = { "": manufacturerData };
+function parseWwAdvTelemetry(
+  manufacturerData: string | Record<string, string> | null,
+): AdvTelemetry | null {
+  const rec = manufacturerDataToRecord(manufacturerData);
   const nums: number[] = [];
-  try {
-    const binary = atob(manufacturerData);
-    for (let i = 0; i < binary.length; i++) nums.push(binary.charCodeAt(i) & 0xff);
-  } catch {
-    return null;
+  for (const val of Object.values(rec)) {
+    if (!val) continue;
+    try {
+      const binary = atob(val);
+      for (let i = 0; i < binary.length; i++) nums.push(binary.charCodeAt(i) & 0xff);
+    } catch {
+      /* skip */
+    }
   }
   for (let i = 0; i <= nums.length - 6; i++) {
     if (nums[i] === 0xa5 && nums[i + 1] === 8 && nums[i + 2] === 0 && nums[i + 3] === 1) {
@@ -44,21 +53,104 @@ function parseWwAdvTelemetry(manufacturerData: string | null): AdvTelemetry | nu
 }
 
 class BleServiceImpl {
-  private manager = new BleManager();
+  private manager: BleManager | null = null;
   private devices = new Map<string, ScannedDevice>();
   private scanning = false;
   private paused = false;
   private listener: ScanListener | null = null;
   private connectedId: string | null = null;
+  private knownTags: BleTagMarker[] = [];
+  private scanMode: ScanMode = "field";
+  private finderTargets = new Set<string>();
+  private finderWatchMode = false;
+  private pruneTimer: ReturnType<typeof setInterval> | null = null;
+
+  private get ble(): BleManager {
+    if (!this.manager) this.manager = new BleManager();
+    return this.manager;
+  }
+
+  setKnownTags(tags: BleTagMarker[]) {
+    this.knownTags = tags;
+  }
+
+  setFinderTargets(bles: string[]) {
+    this.finderTargets = new Set(bles.map((b) => normalizeBle(b)).filter(Boolean));
+  }
+
+  setFinderWatchMode(v: boolean) {
+    this.finderWatchMode = v;
+  }
+
+  private tagMacKeys(tag: BleTagMarker): string[] {
+    return [normalizeMac(tag.mac), normalizeMac(tag.chipUuid)].filter(Boolean);
+  }
+
+  private acceptDevice(
+    device: Device,
+    bleFromAdv: string,
+    isWw: boolean,
+  ): boolean {
+    if (this.scanMode === "finder") {
+      if (this.finderWatchMode) return true;
+      if (isWw) return true;
+      const name = device.name ?? device.localName ?? "";
+      if (this.finderTargets.size) {
+        const ble = bleFromAdv || bleFromDeviceName(name);
+        if (ble && this.finderTargets.has(normalizeBle(ble))) return true;
+      }
+      return false;
+    }
+
+    if (isWw) return true;
+    const mac = normalizeMac(device.id);
+    if (mac) {
+      for (const tag of this.knownTags) {
+        if (this.tagMacKeys(tag).includes(mac)) return true;
+      }
+    }
+    if (bleFromAdv) {
+      const key = normalizeBle(bleFromAdv);
+      if (this.knownTags.some((t) => normalizeBle(t.ble) === key)) return true;
+    }
+    return false;
+  }
+
+  private pruneStale() {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, dev] of this.devices) {
+      if (now - dev.lastSeen > NEARBY_TTL_MS) {
+        this.devices.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) this.listener?.(Array.from(this.devices.values()));
+  }
+
+  private startPruneTimer() {
+    if (this.pruneTimer) return;
+    this.pruneTimer = setInterval(() => this.pruneStale(), 5000);
+  }
+
+  private stopPruneTimer() {
+    if (!this.pruneTimer) return;
+    clearInterval(this.pruneTimer);
+    this.pruneTimer = null;
+  }
 
   async ensureReady(): Promise<void> {
-    const state = await this.manager.state();
+    const granted = await requestBlePermissions();
+    if (!granted) {
+      throw new Error("Нужно разрешение Bluetooth");
+    }
+    const state = await this.ble.state();
     if (state === State.PoweredOff) {
       throw new Error("Включите Bluetooth на устройстве");
     }
     if (state !== State.PoweredOn) {
       await new Promise<void>((resolve, reject) => {
-        const sub = this.manager.onStateChange((s) => {
+        const sub = this.ble.onStateChange((s) => {
           if (s === State.PoweredOn) {
             sub.remove();
             resolve();
@@ -91,23 +183,26 @@ class BleServiceImpl {
   suspendScan(): void {
     this.paused = true;
     if (this.scanning) {
-      this.manager.stopDeviceScan();
+      this.ble.stopDeviceScan();
       this.scanning = false;
+      this.stopPruneTimer();
     }
   }
 
   async resumeScan(): Promise<void> {
     this.paused = false;
     if (this.listener && !this.scanning) {
-      await this.startScan();
+      await this.startScan(this.scanMode);
     }
   }
 
-  async startScan(): Promise<void> {
+  async startScan(mode: ScanMode = "field"): Promise<void> {
     await this.ensureReady();
     if (this.paused || this.scanning) return;
+    this.scanMode = mode;
     this.scanning = true;
-    this.manager.startDeviceScan(null, SCAN_MODE, (error, device) => {
+    this.startPruneTimer();
+    this.ble.startDeviceScan(null, SCAN_MODE, (error, device) => {
       if (error) {
         console.warn("[BleService] scan", error.message);
         return;
@@ -117,16 +212,38 @@ class BleServiceImpl {
     });
   }
 
-  async stopScan(): Promise<void> {
-    this.paused = false;
+  async pauseScan(): Promise<void> {
     if (!this.scanning) return;
-    this.manager.stopDeviceScan();
+    this.ble.stopDeviceScan();
     this.scanning = false;
+    this.paused = true;
+    this.stopPruneTimer();
+  }
+
+  async beginScanOnly(fresh = true): Promise<void> {
+    if (fresh) {
+      this.devices.clear();
+      this.listener?.([]);
+    }
+    this.paused = false;
+    await this.startScan(this.scanMode);
+  }
+
+  async stopScan(clear = false): Promise<void> {
+    this.paused = false;
+    if (this.scanning) {
+      this.ble.stopDeviceScan();
+      this.scanning = false;
+    }
+    this.stopPruneTimer();
+    if (clear) {
+      this.devices.clear();
+      this.listener?.([]);
+    }
   }
 
   async pauseScanKeepList(): Promise<void> {
-    await this.stopScan();
-    this.paused = true;
+    await this.pauseScan();
   }
 
   clearDevices(): void {
@@ -140,30 +257,34 @@ class BleServiceImpl {
       const devMac = normalizeMac(dev.id);
       if (macKeys.includes(devMac)) return dev;
     }
-    const ble = String(tag.ble).replace(/\D/g, "").replace(/^0+/, "");
+    const ble = normalizeBle(tag.ble);
     for (const dev of this.devices.values()) {
-      if (dev.bleFromAdv === ble) return dev;
+      if (normalizeBle(dev.bleFromAdv) === ble) return dev;
     }
     return null;
   }
 
   private ingestDevice(device: Device) {
-    const mdStr = device.manufacturerData ?? null;
-    const md = mdStr ? { "": mdStr } : null;
-    const bleFromAdv = bleFromManufacturerData(md);
+    const mdRaw = device.manufacturerData ?? null;
+    const md = manufacturerDataToRecord(mdRaw);
+    const bleFromAdv =
+      bleFromManufacturerData(mdRaw) ||
+      bleFromDeviceName(device.name ?? device.localName);
     const isWw = isWwAdvertisement({
-      manufacturerData: md,
+      manufacturerData: mdRaw,
       serviceUUIDs: device.serviceUUIDs,
     });
+
+    if (!this.acceptDevice(device, bleFromAdv, isWw)) return;
 
     const entry: ScannedDevice = {
       id: device.id,
       name: device.name ?? device.localName ?? null,
       rssi: device.rssi,
       lastSeen: Date.now(),
-      bleFromAdv: bleFromAdv || bleFromDeviceName(device.name ?? device.localName),
+      bleFromAdv: bleFromAdv || "",
       isWw,
-      advTelemetry: parseWwAdvTelemetry(mdStr) ?? undefined,
+      advTelemetry: parseWwAdvTelemetry(mdRaw) ?? undefined,
     };
 
     this.devices.set(device.id, entry);
@@ -172,7 +293,7 @@ class BleServiceImpl {
 
   async connectToTag(deviceId: string): Promise<void> {
     await this.pauseScanKeepList();
-    const device = await this.manager.connectToDevice(deviceId, { timeout: 12_000 });
+    const device = await this.ble.connectToDevice(deviceId, { timeout: 12_000 });
     await device.discoverAllServicesAndCharacteristics();
     this.connectedId = deviceId;
   }
@@ -180,7 +301,7 @@ class BleServiceImpl {
   async disconnect(): Promise<void> {
     if (!this.connectedId) return;
     try {
-      await this.manager.cancelDeviceConnection(this.connectedId);
+      await this.ble.cancelDeviceConnection(this.connectedId);
     } catch {
       /* ignore */
     }
@@ -191,12 +312,12 @@ class BleServiceImpl {
     deviceId: string,
     scanHint?: { rssi?: number | null; advTelemetry?: AdvTelemetry },
   ): Promise<GattLiveTelemetry> {
-    let device = await this.manager.isDeviceConnected(deviceId)
-      ? await this.manager.devices([deviceId]).then((d) => d[0])
+    let device = (await this.ble.isDeviceConnected(deviceId))
+      ? await this.ble.devices([deviceId]).then((d) => d[0])
       : null;
     if (!device) {
       await this.pauseScanKeepList();
-      device = await this.manager.connectToDevice(deviceId, { timeout: 12_000 });
+      device = await this.ble.connectToDevice(deviceId, { timeout: 12_000 });
       await device.discoverAllServicesAndCharacteristics();
       this.connectedId = deviceId;
     }
@@ -237,13 +358,14 @@ class BleServiceImpl {
     } finally {
       await this.disconnect();
       this.paused = false;
-      if (this.listener) await this.startScan();
+      if (this.listener) await this.startScan(this.scanMode);
     }
   }
 
   destroy(): void {
     void this.stopScan();
-    this.manager.destroy();
+    if (this.manager) this.manager.destroy();
+    this.manager = null;
   }
 }
 

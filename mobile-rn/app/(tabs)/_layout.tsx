@@ -1,44 +1,35 @@
 import { Tabs } from "expo-router";
-import { Text } from "react-native";
-import { colors } from "../../src/theme/colors";
-
-function TabLabel({ label }: { label: string }) {
-  return <Text style={{ color: colors.text, fontSize: 12 }}>{label}</Text>;
-}
+import { CyberTabBar } from "../../src/components/CyberTabBar";
+import { TabMapIcon, TabPatrolIcon, TabSearchIcon } from "../../src/components/TabIcons";
 
 export default function TabsLayout() {
   return (
     <Tabs
+      tabBar={(props) => <CyberTabBar {...props} />}
       screenOptions={{
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-        },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.text,
+        headerShown: false,
+        tabBarShowLabel: false,
       }}
     >
       <Tabs.Screen
         name="map"
         options={{
           title: "Карта",
-          tabBarLabel: ({ color }) => <TabLabel label="Карта" />,
+          tabBarIcon: ({ focused }) => <TabMapIcon active={focused} />,
         }}
       />
       <Tabs.Screen
         name="field"
         options={{
           title: "Обход",
-          tabBarLabel: ({ color }) => <TabLabel label="Обход" />,
+          tabBarIcon: ({ focused }) => <TabPatrolIcon active={focused} />,
         }}
       />
       <Tabs.Screen
         name="finder"
         options={{
           title: "Поиск",
-          tabBarLabel: ({ color }) => <TabLabel label="Поиск" />,
+          tabBarIcon: ({ focused }) => <TabSearchIcon active={focused} />,
         }}
       />
     </Tabs>

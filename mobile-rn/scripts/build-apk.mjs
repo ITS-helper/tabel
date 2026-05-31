@@ -36,7 +36,7 @@ if (!fs.existsSync(sdkProps) && fs.existsSync(parentSdk)) {
 const gradleProps = path.join(androidDir, "gradle.properties");
 if (fs.existsSync(gradleProps)) {
   let gp = fs.readFileSync(gradleProps, "utf8");
-  gp = gp.replace(/newArchEnabled=true/g, "newArchEnabled=false");
+  gp = gp.replace(/newArchEnabled=false/g, "newArchEnabled=true");
   fs.writeFileSync(gradleProps, gp);
 }
 

@@ -1,0 +1,272 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import WebView, { type WebViewMessageEvent } from "react-native-webview";
+import { toBlePhotoProxyUrl } from "../api/photoUtils";
+import type { BleTagMarker, BleZone } from "../ble/types";
+import {
+  BLE_DEFAULT_CENTER_BLE,
+  ZONE_SHORT,
+} from "../config";
+import { useTheme } from "../context/ThemeContext";
+import { buildLeafletHtml } from "../map/leafletHtml";
+import { resolveSearchFocus } from "../map/mapHelpers";
+import { coordsFromRaw } from "../storage/markerNormalize";
+import { getLocalPhotoUri } from "../storage/fieldPhotoCache";
+import { normalizeBle } from "../ble/wwAdvert";
+import type { AppColors } from "../theme/palettes";
+
+export type MapMarkerPayload = {
+  id?: number;
+  ble: string;
+  lat: number;
+  lng: number;
+  status?: BleTagMarker["status"];
+  title?: string;
+  routeTitle?: string;
+  locationDesc?: string;
+  bleTypeLabel?: string;
+  photoTag?: string;
+  photoPlace?: string;
+};
+
+type Props = {
+  markers: BleTagMarker[];
+  zones: BleZone[];
+  query: string;
+  findTag: (ble: string) => BleTagMarker | undefined;
+  clusterEnabled?: boolean;
+  editMode?: boolean;
+  dirtyIds?: number[];
+  onMarkerMoved?: (id: number, ble: string, lat: number, lng: number) => void;
+  onPatrol?: (tag: BleTagMarker) => void;
+};
+
+function pushMapUpdate(webRef: RefObject<WebView | null>, payload: unknown) {
+  const json = JSON.stringify(payload);
+  webRef.current?.injectJavaScript(
+    `(function(){ if(window.__updateMap) window.__updateMap(${json}); })(); true;`,
+  );
+}
+
+function toMapMarker(m: BleTagMarker): MapMarkerPayload | null {
+  const { lat, lng } = coordsFromRaw(m);
+  if (lat == null || lng == null) return null;
+  const bleTypeLabel =
+    m.bleTypeLabel ||
+    (m.bleTypeNum != null ? ZONE_SHORT[m.bleTypeNum] : undefined);
+  return {
+    id: m.id,
+    ble: m.ble,
+    lat,
+    lng,
+    status: m.status,
+    title: m.title,
+    routeTitle: m.routeTitle,
+    locationDesc: m.locationDesc,
+    bleTypeLabel,
+    photoTag: m.photoTag,
+    photoPlace: m.photoPlace,
+  };
+}
+
+export function BleLeafletMap({
+  markers,
+  zones,
+  query,
+  findTag,
+  clusterEnabled = true,
+  editMode = false,
+  dirtyIds = [],
+  onMarkerMoved,
+  onPatrol,
+}: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const webRef = useRef<WebView>(null);
+  const [ready, setReady] = useState(false);
+  const [photoSrc, setPhotoSrc] = useState<Record<string, string>>({});
+  const html = useMemo(() => buildLeafletHtml(), []);
+
+  const focusTag = useMemo(
+    () => resolveSearchFocus(query, markers, findTag),
+    [query, markers, findTag],
+  );
+
+  const displayMarkers = useMemo(() => {
+    const q = query.trim().toLowerCase().replace(/^ble/i, "");
+    let list = markers.map(toMapMarker).filter(Boolean) as MapMarkerPayload[];
+
+    if (q && !list.some((m) => normalizeBle(m.ble) === normalizeBle(q))) {
+      const global = focusTag ? toMapMarker(focusTag) : null;
+      if (global) list = [global];
+      else if (q) {
+        list = list.filter(
+          (m) =>
+            String(m.ble).includes(q) ||
+            (m.title ?? "").toLowerCase().includes(q),
+        );
+      }
+    } else if (q) {
+      list = list.filter(
+        (m) =>
+          normalizeBle(m.ble) === normalizeBle(q) ||
+          String(m.ble).includes(q) ||
+          (m.title ?? "").toLowerCase().includes(q),
+      );
+    }
+
+    return list;
+  }, [markers, query, focusTag]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const src: Record<string, string> = {};
+      for (const m of displayMarkers) {
+        for (const url of [m.photoTag, m.photoPlace].filter(Boolean) as string[]) {
+          if (src[url]) continue;
+          const local = await getLocalPhotoUri(url);
+          if (local) {
+            src[url] = local.startsWith("file://") ? local : `file://${local}`;
+          } else {
+            src[url] = toBlePhotoProxyUrl(url) || url;
+          }
+        }
+      }
+      if (!cancelled) setPhotoSrc(src);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [displayMarkers]);
+
+  const payload = useMemo(
+    () => ({
+      type: "update" as const,
+      markers: displayMarkers,
+      zones: zones.map((z) => ({
+        id: z.id,
+        name: z.name,
+        color: z.color,
+        pts: z.pts,
+      })),
+      photoSrc,
+      clusterEnabled: editMode ? false : clusterEnabled,
+      editMode,
+      dirtyIds,
+      bootCenter: query.trim() || editMode ? null : BLE_DEFAULT_CENTER_BLE,
+      focus:
+        focusTag?.lat != null && focusTag.lng != null
+          ? {
+              lat: focusTag.lat,
+              lng: focusTag.lng,
+              ble: focusTag.ble,
+              openPopup: !!query.trim(),
+            }
+          : null,
+    }),
+    [displayMarkers, zones, photoSrc, clusterEnabled, editMode, dirtyIds, focusTag, query],
+  );
+
+  useEffect(() => {
+    if (!ready) return;
+    pushMapUpdate(webRef, payload);
+  }, [ready, payload]);
+
+  const onMessage = useCallback(
+    (ev: WebViewMessageEvent) => {
+      try {
+        const data = JSON.parse(ev.nativeEvent.data) as {
+          type?: string;
+          ble?: string;
+          id?: number;
+          lat?: number;
+          lng?: number;
+        };
+        if (data.type === "ready") {
+          setReady(true);
+          pushMapUpdate(webRef, payload);
+          return;
+        }
+        if (data.type === "markerMoved" && data.id != null && data.lat != null && data.lng != null) {
+          onMarkerMoved?.(data.id, String(data.ble ?? data.id), data.lat, data.lng);
+          return;
+        }
+        if (data.type === "patrol" && data.ble) {
+          const tag =
+            markers.find((m) => normalizeBle(m.ble) === normalizeBle(data.ble)) ||
+            findTag(data.ble);
+          if (tag) onPatrol?.(tag);
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    [markers, findTag, onPatrol, onMarkerMoved, payload],
+  );
+
+  return (
+    <View style={styles.wrap}>
+      <WebView
+        ref={webRef}
+        originWhitelist={["*"]}
+        source={{ html, baseUrl: "https://local.blemap" }}
+        style={styles.web}
+        onMessage={onMessage}
+        onLoadEnd={() => pushMapUpdate(webRef, payload)}
+        javaScriptEnabled
+        domStorageEnabled
+        mixedContentMode="always"
+        allowFileAccess
+        allowUniversalAccessFromFileURLs
+        setSupportMultipleWindows={false}
+      />
+      {!ready ? (
+        <View style={styles.loading} pointerEvents="none">
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.loadingText}>Leaflet…</Text>
+        </View>
+      ) : null}
+      {query.trim() && focusTag && !markers.some((m) => normalizeBle(m.ble) === normalizeBle(focusTag.ble)) ? (
+        <View style={styles.hint} pointerEvents="none">
+          <Text style={styles.hintText}>#{focusTag.ble} — другой маршрут</Text>
+        </View>
+      ) : null}
+      {query.trim() && !focusTag && !displayMarkers.length ? (
+        <View style={styles.hint} pointerEvents="none">
+          <Text style={styles.hintText}>Метка «{query.trim()}» не найдена</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const createStyles = (colors: AppColors) =>
+  StyleSheet.create({
+  wrap: { flex: 1 },
+  web: { flex: 1, backgroundColor: "#37474f" },
+  loading: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(4,8,16,0.65)",
+  },
+  loadingText: { color: colors.textMuted, fontSize: 13 },
+  hint: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    right: 8,
+    backgroundColor: "rgba(4,8,16,0.88)",
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  hintText: { color: colors.warning, textAlign: "center", fontSize: 12 },
+  });

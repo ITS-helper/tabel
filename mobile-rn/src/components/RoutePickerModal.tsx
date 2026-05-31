@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { BleRoute } from "../ble/types";
-import { colors } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import type { AppColors } from "../theme/palettes";
 
 type Props = {
   visible: boolean;
@@ -18,6 +19,8 @@ export function RoutePickerModal({
   onSelect,
   onClose,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const items = useMemo(
     () => [{ id: 0, title: "Все маршруты" }, ...routes],
     [routes],
@@ -54,29 +57,36 @@ export function RoutePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    maxHeight: "60%",
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 16,
-  },
-  title: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 12 },
-  list: { maxHeight: 360 },
-  item: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 6,
-    backgroundColor: colors.surfaceAlt,
-  },
-  itemActive: { backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accent },
-  itemText: { color: colors.text, fontSize: 15 },
-  itemTextActive: { color: colors.accent, fontWeight: "600" },
-});
+const createStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      maxHeight: "60%",
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      padding: 16,
+      borderTopWidth: 2,
+      borderColor: colors.neon,
+    },
+    title: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 12 },
+    list: { maxHeight: 360 },
+    item: {
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      marginBottom: 6,
+      backgroundColor: colors.surfaceAlt,
+    },
+    itemActive: {
+      backgroundColor: colors.accentSoft,
+      borderWidth: 1,
+      borderColor: colors.neon,
+    },
+    itemText: { color: colors.text, fontSize: 15 },
+    itemTextActive: { color: colors.neon, fontWeight: "600" },
+  });

@@ -20,6 +20,8 @@ export type RawBlePoint = {
   name_extended?: string;
   latitude?: number;
   longitude?: number;
+  lat?: number;
+  lng?: number;
   charge_value?: number | null;
   movability_type?: number;
   power?: number;
@@ -34,6 +36,17 @@ export type RawBlePoint = {
   ble_zone_id?: number;
   ble_zoneId?: number;
   bleRoute?: { id?: number; title?: string };
+  ble_image_url?: string;
+  bleImageUrl?: string;
+  ble_image?: string;
+  location_image_url?: string;
+  locationImageUrl?: string;
+  location_image?: string;
+  updated_at?: string;
+  ble_image_status?: string;
+  ble_location_image_status?: string;
+  location_desc?: string;
+  ble_type_desc?: string;
 };
 
 export type BleTagMarker = {
@@ -58,6 +71,10 @@ export type BleTagMarker = {
   routeId?: number | null;
   routeTitle?: string;
   zoneId?: number | null;
+  photoTag?: string;
+  photoPlace?: string;
+  locationDesc?: string;
+  bleTypeLabel?: string;
 };
 
 export type BleRoute = {

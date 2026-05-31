@@ -2,24 +2,32 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import {
   classifyBle,
+  fetchBleMapCache,
   fetchBleMapRaw,
-  fetchBleZoneDetail,
   parseZonesFromMapPayload,
 } from "../api/bleMapApi";
-import type { BleTagMarker, BleZone } from "../ble/types";
+import { loadBleZonesFull } from "../api/zonesLoader";
+import type { BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
 import {
   BLE_DEFAULT_COMPANY_ID,
   BLE_OFFLINE_MARKERS_KEY,
   BLE_OFFLINE_META_KEY,
   BLE_ZONES_LS_KEY,
 } from "../config";
+import {
+  countMappableMarkers,
+  normalizeBleMarkers,
+} from "./markerNormalize";
 
 export type OfflineMeta = {
   companyId: number;
   savedAt: number;
   markerCount: number;
+  mappableCount: number;
   zoneCount: number;
   fromNetwork: boolean;
+  source?: "api" | "cache" | "local";
+  refreshedAt?: number;
 };
 
 export async function isOnline(): Promise<boolean> {
@@ -27,12 +35,17 @@ export async function isOnline(): Promise<boolean> {
   return s.isConnected === true && s.isInternetReachable !== false;
 }
 
+export async function saveOfflineMarkersOnly(markers: BleTagMarker[]): Promise<void> {
+  const normalized = normalizeBleMarkers(markers);
+  await AsyncStorage.setItem(BLE_OFFLINE_MARKERS_KEY, JSON.stringify(normalized));
+}
+
 export async function loadOfflineMarkers(): Promise<BleTagMarker[]> {
   const raw = await AsyncStorage.getItem(BLE_OFFLINE_MARKERS_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as BleTagMarker[];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? normalizeBleMarkers(parsed) : [];
   } catch {
     return [];
   }
@@ -67,8 +80,10 @@ async function saveOfflinePack(
   markers: BleTagMarker[],
   zones: BleZone[],
   companyId: number,
+  source: OfflineMeta["source"] = "api",
 ): Promise<OfflineMeta> {
-  await AsyncStorage.setItem(BLE_OFFLINE_MARKERS_KEY, JSON.stringify(markers));
+  const normalized = normalizeBleMarkers(markers);
+  await AsyncStorage.setItem(BLE_OFFLINE_MARKERS_KEY, JSON.stringify(normalized));
   await AsyncStorage.setItem(
     BLE_ZONES_LS_KEY,
     JSON.stringify({ companyId, savedAt: Date.now(), zones }),
@@ -76,60 +91,96 @@ async function saveOfflinePack(
   const meta: OfflineMeta = {
     companyId,
     savedAt: Date.now(),
-    markerCount: markers.length,
+    refreshedAt: Date.now(),
+    markerCount: normalized.length,
+    mappableCount: countMappableMarkers(normalized),
     zoneCount: zones.length,
-    fromNetwork: true,
+    fromNetwork: source !== "local",
+    source,
   };
   await AsyncStorage.setItem(BLE_OFFLINE_META_KEY, JSON.stringify(meta));
   return meta;
 }
 
+function markersFromRaw(raw: RawBlePoint[]): BleTagMarker[] {
+  return normalizeBleMarkers(
+    raw.map((p) => classifyBle(p)).filter((m) => m.lat != null && m.lng != null),
+  );
+}
+
+async function loadRawMarkers(companyId: number): Promise<{
+  raw: RawBlePoint[];
+  source: OfflineMeta["source"];
+}> {
+  try {
+    const raw = await fetchBleMapRaw(companyId);
+    if (raw.length) return { raw, source: "api" };
+  } catch {
+    /* try cache */
+  }
+
+  try {
+    const cached = await fetchBleMapCache(companyId);
+    if (Array.isArray(cached) && cached.length) {
+      return { raw: cached as RawBlePoint[], source: "cache" };
+    }
+  } catch {
+    /* fall through */
+  }
+
+  throw new Error("Не удалось загрузить метки (API и кэш недоступны)");
+}
+
+async function loadZones(companyId: number, local: BleZone[]): Promise<BleZone[]> {
+  return loadBleZonesFull(companyId, local);
+}
+
 export async function syncOfflinePack(
   companyId = BLE_DEFAULT_COMPANY_ID,
-): Promise<{ markers: BleTagMarker[]; zones: BleZone[]; meta: OfflineMeta }> {
+): Promise<{
+  markers: BleTagMarker[];
+  zones: BleZone[];
+  meta: OfflineMeta;
+  raw: RawBlePoint[];
+}> {
+  const localMarkers = await loadOfflineMarkers();
+  const localZones = await loadOfflineZones(companyId);
   const online = await isOnline();
+
   if (!online) {
-    const markers = await loadOfflineMarkers();
-    const zones = await loadOfflineZones(companyId);
     const meta = (await loadOfflineMeta()) ?? {
       companyId,
       savedAt: 0,
-      markerCount: markers.length,
-      zoneCount: zones.length,
+      markerCount: localMarkers.length,
+      mappableCount: countMappableMarkers(localMarkers),
+      zoneCount: localZones.length,
       fromNetwork: false,
+      source: "local" as const,
     };
-    return { markers, zones, meta };
+    return { markers: localMarkers, zones: localZones, meta, raw: [] };
   }
 
-  const raw = await fetchBleMapRaw(companyId);
-  const withCoords = raw
-    .map((p) => classifyBle(p))
-    .filter((m) => m.lat != null && m.lng != null);
-
-  const zoneIds = [
-    ...new Set(withCoords.map((m) => m.zoneId).filter((id): id is number => id != null)),
-  ];
-  const loadedZones: BleZone[] = [];
-  for (const id of zoneIds.slice(0, 48)) {
-    try {
-      const pts = await fetchBleZoneDetail(id);
-      if (pts.length >= 3) {
-        loadedZones.push({
-          id,
-          name: `Зона ${id}`,
-          description: "",
-          color: "#0088cc",
-          pts,
-          ptsSource: "api",
-        });
-      }
-    } catch {
-      /* skip */
+  try {
+    const { raw, source } = await loadRawMarkers(companyId);
+    const markers = markersFromRaw(raw);
+    const zones = await loadZones(companyId, localZones);
+    const meta = await saveOfflinePack(markers, zones, companyId, source);
+    return { markers, zones, meta, raw };
+  } catch (e) {
+    if (localMarkers.length) {
+      const meta = (await loadOfflineMeta()) ?? {
+        companyId,
+        savedAt: 0,
+        markerCount: localMarkers.length,
+        mappableCount: countMappableMarkers(localMarkers),
+        zoneCount: localZones.length,
+        fromNetwork: false,
+        source: "local" as const,
+      };
+      return { markers: localMarkers, zones: localZones, meta, raw: [] };
     }
+    throw e;
   }
-
-  const meta = await saveOfflinePack(withCoords, loadedZones, companyId);
-  return { markers: withCoords, zones: loadedZones, meta };
 }
 
 /** Быстрые зоны из map_data без отдельных запросов (если API вернёт). */

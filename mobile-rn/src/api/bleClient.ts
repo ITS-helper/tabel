@@ -2,16 +2,28 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   BLE_AUTO_PASS,
   BLE_AUTO_USER,
+  BLE_BACKEND_BASE,
+  BLE_PROXY_BACKEND_BASE,
   BLE_SUPABASE_BASE,
   BLE_TOKEN_KEY,
   BLE_WORKER_BASE,
   SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
 
-const BLE_WORKER_ONLY = ["/api/v1/map/ble/"];
-const BLE_WORKER_PREF = ["/api/v1/ble_zone"];
 const FETCH_TIMEOUT_MS = 120_000;
 const LIST_TIMEOUT_MS = 40_000;
+
+/** Как WW Service: backend → proxy backend → worker → supabase (браузерный обход). */
+const NATIVE_TRANSPORT_ORDER = [
+  "backend",
+  "proxy",
+  "worker",
+  "supabase",
+] as const;
+
+type TransportId = (typeof NATIVE_TRANSPORT_ORDER)[number];
+
+const FAILOVER_STATUSES = new Set([404, 405, 500, 502, 503]);
 
 export async function getBleToken(): Promise<string | null> {
   return AsyncStorage.getItem(BLE_TOKEN_KEY);
@@ -21,14 +33,8 @@ async function setBleToken(token: string): Promise<void> {
   await AsyncStorage.setItem(BLE_TOKEN_KEY, token);
 }
 
-function transportOrder(path: string): ("supabase" | "worker")[] {
-  if (BLE_WORKER_ONLY.some((p) => path.includes("/map/ble/"))) {
-    return ["worker", "supabase"];
-  }
-  if (BLE_WORKER_PREF.some((p) => path.startsWith(p))) {
-    return ["worker", "supabase"];
-  }
-  return ["supabase", "worker"];
+function transportOrder(_path: string): TransportId[] {
+  return [...NATIVE_TRANSPORT_ORDER];
 }
 
 function mergeSupabaseHeaders(headers: HeadersInit, bleToken: string | null): Headers {
@@ -39,16 +45,30 @@ function mergeSupabaseHeaders(headers: HeadersInit, bleToken: string | null): He
   return h;
 }
 
-function buildUrl(transport: "supabase" | "worker", path: string): string {
-  if (transport === "worker") return `${BLE_WORKER_BASE}${path}`;
-  return `${BLE_SUPABASE_BASE}${path}`;
+function buildUrl(transport: TransportId, path: string): string {
+  switch (transport) {
+    case "backend":
+      return `${BLE_BACKEND_BASE}${path}`;
+    case "proxy":
+      return `${BLE_PROXY_BACKEND_BASE}${path}`;
+    case "worker":
+      return `${BLE_WORKER_BASE}${path}`;
+    case "supabase":
+      return `${BLE_SUPABASE_BASE}${path}`;
+  }
+}
+
+function shouldFailover(transport: TransportId, res: Response): boolean {
+  if (transport === "supabase") {
+    return FAILOVER_STATUSES.has(res.status);
+  }
+  return FAILOVER_STATUSES.has(res.status);
 }
 
 export async function bleHttpFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const tried: string[] = [];
   let lastErr: unknown = null;
   const authHeader =
     (init.headers as Record<string, string> | undefined)?.Authorization ??
@@ -60,7 +80,6 @@ export async function bleHttpFetch(
   const timeoutMs = path.includes("/map/ble/") ? LIST_TIMEOUT_MS : FETCH_TIMEOUT_MS;
 
   for (const tid of transportOrder(path)) {
-    tried.push(tid);
     const url = buildUrl(tid, path);
     const headers =
       tid === "supabase"
@@ -71,8 +90,8 @@ export async function bleHttpFetch(
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(url, { ...init, headers, signal: ctrl.signal });
-      if (tid === "supabase" && [404, 500, 502, 503].includes(res.status)) {
-        lastErr = new Error(`supabase_proxy_${res.status}`);
+      if (shouldFailover(tid, res)) {
+        lastErr = new Error(`${tid}_${res.status}`);
         continue;
       }
       return res;

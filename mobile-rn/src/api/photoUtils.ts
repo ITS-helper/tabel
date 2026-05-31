@@ -1,0 +1,81 @@
+/** Утилиты URL фото — как pickFirstUrl / collectPhotoUrlsFromRaw в ble-map.js */
+import type { RawBlePoint } from "../ble/types";
+
+const TAG_KEYS = ["ble_image_url", "bleImageUrl", "ble_image"] as const;
+const PLACE_KEYS = [
+  "location_image_url",
+  "locationImageUrl",
+  "location_image",
+] as const;
+
+export function pickFirstUrl(
+  point: Record<string, unknown>,
+  keys: readonly string[],
+): string {
+  for (const k of keys) {
+    const v = point[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+export function isPhotoUrlExpired(url: string): boolean {
+  const m = url.match(/[?&]Expires=(\d+)/i);
+  if (!m) return false;
+  return Date.now() > Number(m[1]) * 1000;
+}
+
+export function resolvePhotoUrl(
+  rawPoint: RawBlePoint,
+  keys: readonly string[],
+  prevUrl?: string,
+): string {
+  const row = rawPoint as Record<string, unknown>;
+  const fromApi = pickFirstUrl(row, keys);
+  if (fromApi && !isPhotoUrlExpired(fromApi)) return fromApi;
+  if (prevUrl && !isPhotoUrlExpired(prevUrl)) return prevUrl;
+  if (fromApi) return fromApi;
+  if (prevUrl) return prevUrl;
+  return "";
+}
+
+export function collectPhotoUrlsFromRaw(
+  raw: RawBlePoint[],
+  opts: { tagOnly?: boolean; allowExpired?: boolean } = {},
+): string[] {
+  const tagOnly = !!opts.tagOnly;
+  const allowExpired = !!opts.allowExpired;
+  const urls = new Set<string>();
+  for (const p of raw) {
+    const row = p as Record<string, unknown>;
+    const tag = pickFirstUrl(row, TAG_KEYS);
+    if (tag && (allowExpired || !isPhotoUrlExpired(tag))) urls.add(tag);
+    if (!tagOnly) {
+      const place = pickFirstUrl(row, PLACE_KEYS);
+      if (place && (allowExpired || !isPhotoUrlExpired(place))) urls.add(place);
+    }
+  }
+  return [...urls];
+}
+
+export function photoUrlPathnameKey(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`.toLowerCase();
+  } catch {
+    return url.split("?")[0].toLowerCase();
+  }
+}
+
+export function isYandexPhotoUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.toLowerCase().includes("storage.yandexcloud.net");
+  } catch {
+    return false;
+  }
+}
+
+/** Нативное приложение — прямой URL (WW Service / Capacitor), без supabase-прокси для CORS. */
+export function toBlePhotoProxyUrl(url: string): string {
+  return url;
+}

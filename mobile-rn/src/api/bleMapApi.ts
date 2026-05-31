@@ -1,5 +1,7 @@
 import type { BleRoute, BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
 import { BLE_DEFAULT_COMPANY_ID, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "../config";
+import { coordsFromRaw } from "../storage/markerNormalize";
+import { resolvePhotoUrl } from "./photoUtils";
 import { bleApiFetch, ensureBleTokenForField } from "./bleClient";
 
 function supabaseHeaders(): HeadersInit {
@@ -33,12 +35,14 @@ export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMark
   if (isLowBattery) status = "battery";
   else if (!isInspected) status = "inspection";
 
+  const { lat, lng } = coordsFromRaw(point);
+
   return {
     id: point.id,
     ble: String(point.ble_number || ""),
     title: point.name_extended || "",
-    lat: point.latitude,
-    lng: point.longitude,
+    lat,
+    lng,
     charge,
     movabilityType: point.movability_type ?? 1,
     power: point.power ?? 6,
@@ -52,6 +56,14 @@ export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMark
     isLowBattery,
     recordDt,
     status,
+    photoTag: resolvePhotoUrl(point, ["ble_image_url", "bleImageUrl", "ble_image"], prev?.photoTag),
+    photoPlace: resolvePhotoUrl(
+      point,
+      ["location_image_url", "locationImageUrl", "location_image"],
+      prev?.photoPlace,
+    ),
+    locationDesc: point.location_desc || "",
+    bleTypeLabel: point.ble_type_desc || "",
     routeId: point.bleRoute?.id ?? null,
     routeTitle: point.bleRoute?.title || "",
     zoneId: point.ble_zone_id ?? point.ble_zoneId ?? null,
@@ -123,12 +135,28 @@ export function parseZonesFromMapPayload(mapData: {
 
 export async function fetchBleMapCache(
   companyId = BLE_DEFAULT_COMPANY_ID,
-): Promise<unknown> {
+): Promise<RawBlePoint[] | null> {
   const url = `${SUPABASE_URL}/rest/v1/ble_map_cache?company_id=eq.${companyId}&select=payload,updated_at`;
   const res = await fetch(url, { headers: supabaseHeaders() });
   if (!res.ok) throw new Error(`Кэш карты: HTTP ${res.status}`);
-  const rows = (await res.json()) as { payload?: unknown }[];
-  return rows[0]?.payload ?? null;
+  const rows = (await res.json()) as { payload?: RawBlePoint[] }[];
+  const payload = rows[0]?.payload;
+  return Array.isArray(payload) && payload.length ? payload : null;
+}
+
+export async function fetchBleMapData(
+  companyId = BLE_DEFAULT_COMPANY_ID,
+): Promise<{ zones?: [] }> {
+  await ensureBleTokenForField();
+  return bleApiFetch<{ zones?: [] }>(`/api/v1/map/${companyId}/map_data`);
+}
+
+export async function fetchBleMapConfig(): Promise<{
+  defaultView?: { latitude: number; longitude: number };
+  defaultZoom?: number;
+}> {
+  await ensureBleTokenForField();
+  return bleApiFetch("/api/v1/map/config");
 }
 
 export function buildInspectionBody(
