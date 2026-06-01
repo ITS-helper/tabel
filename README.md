@@ -145,7 +145,7 @@ set SUPABASE_SERVICE_ROLE_KEY=ваш_service_role
 ble-cache-push.bat
 ```
 
-**Обход API в браузере:** Edge Function **`ble-map-proxy`** (браузер → `supabase.co` → Worker). Один раз из корня репозитория с [Supabase CLI](https://supabase.com/docs/guides/cli):
+**Обход API в браузере:** Edge Function **`ble-map-proxy`** (браузер → `supabase.co` → Worker). **Важно:** на проде должен быть задеплоен код с буферизацией ответа (коммит «кэш меток без VPN»); иначе GET `/api/v1/map/ble/*` и список меток через Edge возвращают HTTP 500. Один раз из корня репозитория с [Supabase CLI](https://supabase.com/docs/guides/cli):
 
 ```bash
 supabase login

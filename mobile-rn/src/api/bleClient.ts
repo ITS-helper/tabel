@@ -9,6 +9,7 @@ import {
 } from "../config";
 import {
   isMutationPath,
+  isWorkerOnlyGetPath,
   transportOrderForPath,
   WW_MOBILE_AUTH_PATH,
   type WwTransport,
@@ -16,7 +17,11 @@ import {
 
 const FETCH_TIMEOUT_MS = 120_000;
 const LIST_TIMEOUT_MS = 55_000;
+const WORKER_ONLY_TIMEOUT_MS = 18_000;
+const MUTATION_TIMEOUT_MS = 35_000;
 const AUTH_TIMEOUT_MS = 25_000;
+
+const BLE_TRANSPORT_PREF_KEY = "ww-ble-rn-transport-pref";
 
 const FAILOVER_STATUSES = new Set([404, 405, 422, 500, 502, 503, 504]);
 
@@ -30,8 +35,28 @@ async function setBleToken(token: string): Promise<void> {
   await AsyncStorage.setItem(BLE_TOKEN_KEY, token);
 }
 
-function transportOrder(path: string, method?: string): WwTransport[] {
-  return [...transportOrderForPath(path, method)];
+async function getPreferredTransport(): Promise<WwTransport | null> {
+  try {
+    const v = await AsyncStorage.getItem(BLE_TRANSPORT_PREF_KEY);
+    return v === "worker" || v === "supabase" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+async function rememberTransport(id: WwTransport): Promise<void> {
+  try {
+    await AsyncStorage.setItem(BLE_TRANSPORT_PREF_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function transportOrder(path: string, method?: string): Promise<WwTransport[]> {
+  const base = [...transportOrderForPath(path, method)];
+  const pref = await getPreferredTransport();
+  if (!pref || !base.includes(pref)) return base;
+  return [pref, ...base.filter((t) => t !== pref)];
 }
 
 function shouldFailover(res: Response, path: string, method?: string): boolean {
@@ -69,14 +94,40 @@ function buildUrl(transport: TransportId, path: string): string {
   }
 }
 
-function timeoutForPath(path: string): number {
+function timeoutForPath(path: string, method?: string): number {
   if (path.includes(WW_MOBILE_AUTH_PATH) || path.includes("/token")) {
     return AUTH_TIMEOUT_MS;
+  }
+  if (isWorkerOnlyGetPath(path, method)) {
+    return WORKER_ONLY_TIMEOUT_MS;
+  }
+  if (isMutationPath(path, method)) {
+    return MUTATION_TIMEOUT_MS;
   }
   if (path.includes("/api/v1/ble") || path.includes("/map/ble/")) {
     return LIST_TIMEOUT_MS;
   }
   return FETCH_TIMEOUT_MS;
+}
+
+function formatBleTransportError(err: unknown, path: string): Error {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (err instanceof Error && err.name === "AbortError") {
+    return new Error(
+      `Таймаут запроса (${path}). На объекте часто недоступен worker — проверьте Wi‑Fi или VPN.`,
+    );
+  }
+  if (raw === "worker_500" || raw === "supabase_500") {
+    if (isWorkerOnlyGetPath(path)) {
+      return new Error(
+        "worker_500: список меток недоступен без worker/VPN — используется офлайн-снимок",
+      );
+    }
+  }
+  if (raw.startsWith("worker_") || raw.startsWith("supabase_")) {
+    return new Error(raw);
+  }
+  return err instanceof Error ? err : new Error(raw);
 }
 
 function isSslHostnameError(e: unknown): boolean {
@@ -93,7 +144,8 @@ export async function bleHttpFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   let lastErr: unknown = null;
-  const timeoutMs = timeoutForPath(path);
+  const method = init.method ?? "GET";
+  const timeoutMs = timeoutForPath(path, method);
   const authHeader =
     (init.headers as Record<string, string> | undefined)?.Authorization ??
     (init.headers as Record<string, string> | undefined)?.authorization;
@@ -101,9 +153,7 @@ export async function bleHttpFetch(
     authHeader?.replace(/^Bearer\s+/i, "") ||
     (await getBleToken());
 
-  const method = init.method ?? "GET";
-
-  for (const tid of transportOrder(path, method)) {
+  for (const tid of await transportOrder(path, method)) {
     const url = buildUrl(tid, path);
     const headers =
       tid === "supabase"
@@ -118,6 +168,7 @@ export async function bleHttpFetch(
         lastErr = new Error(`${tid}_${res.status}`);
         continue;
       }
+      void rememberTransport(tid);
       return res;
     } catch (e) {
       lastErr = isSslHostnameError(e)
@@ -128,14 +179,7 @@ export async function bleHttpFetch(
     }
   }
 
-  if (lastErr instanceof Error && lastErr.name === "AbortError") {
-    throw new Error(
-      `Таймаут запроса (${path}). Проверьте Wi‑Fi на объекте.`,
-    );
-  }
-  throw lastErr instanceof Error
-    ? lastErr
-    : new Error(`Нет связи с API (${path}). Попробуйте Wi‑Fi или VPN.`);
+  throw formatBleTransportError(lastErr, path);
 }
 
 function parseTokenPayload(data: Record<string, unknown>): string | null {

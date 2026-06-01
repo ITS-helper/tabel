@@ -20,7 +20,7 @@ function formatUploadError(e: unknown): string {
     return msg.replace(/^HTTP 422:\s*/, "Сервер отклонил: ").slice(0, 160);
   }
   if (msg.includes("worker_") || msg.includes("supabase_") || msg.includes("Failed to fetch")) {
-    return "Нет связи с API обходов (worker). Проверьте Wi‑Fi / VPN";
+    return "Нет связи с worker. Обходы идут через Supabase — проверьте Wi‑Fi; при блокировке worker нужен VPN.";
   }
   return msg.slice(0, 160);
 }

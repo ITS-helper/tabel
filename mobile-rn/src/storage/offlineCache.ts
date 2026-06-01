@@ -436,7 +436,12 @@ export function snapshotHint(
       ? formatBundleAge(new Date(savedAt).toISOString())
       : "";
   if (source === "api" && apiRefreshFailed) {
-    return `Обновление с сервера не удалось — показан последний кэш.${detailSuffix}`;
+    const workerHint = detail?.includes("supabase_500")
+      ? " Supabase-прокси не отдаёт список меток — нужен worker или VPN."
+      : detail?.includes("worker_")
+        ? " Worker (*.workers.dev) недоступен с Wi‑Fi объекта."
+        : "";
+    return `Обновление с сервера не удалось — показан последний кэш.${workerHint}${detailSuffix}`;
   }
   if (source !== "bundle" && source !== "cache" && source !== "local") return null;
   if (source === "bundle") {
