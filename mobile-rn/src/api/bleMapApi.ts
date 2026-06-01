@@ -90,7 +90,9 @@ export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMark
     locationDesc: point.location_desc || "",
     bleTypeLabel: point.ble_type_desc || "",
     routeId: point.bleRoute?.id ?? (row.bleRouteId as number | undefined) ?? null,
-    routeTitle: point.bleRoute?.title || String(row.bleRouteTitle ?? ""),
+    routeTitle:
+      point.bleRoute?.title ||
+      String(row.bleRouteTitle ?? (typeof row.bleRoute === "string" ? row.bleRoute : "")),
     zoneId: point.ble_zone_id ?? point.ble_zoneId ?? (row.bleZoneId as number | undefined) ?? null,
   };
 }
@@ -115,6 +117,10 @@ function extractBlePageItems(data: unknown): RawBlePoint[] {
 function pageHasNext(data: unknown, page: number, batchLen: number): boolean {
   if (!data || typeof data !== "object") return false;
   const o = data as Record<string, unknown>;
+  if (typeof o.total === "number" && typeof o.page === "number") {
+    const size = Number(o.size) || batchLen || 1;
+    return Number(o.page) * size < Number(o.total);
+  }
   if (typeof o.hasNextPage === "boolean") return o.hasNextPage;
   if (typeof o.hasNext === "boolean") return o.hasNext;
   if (typeof o.totalPages === "number") return page < o.totalPages;
@@ -126,13 +132,48 @@ function pageHasNext(data: unknown, page: number, batchLen: number): boolean {
   return batchLen >= 50;
 }
 
-/** WW Service: GET /api/v1/ble?page=N — резерв, если нет GPS не используем для карты. */
+/** Worker отдаёт camelCase — приводим к полям RawBlePoint. */
+function normalizeWorkerBlePoint(point: RawBlePoint): RawBlePoint {
+  const row = point as Record<string, unknown>;
+  const bleRoute = point.bleRoute;
+  const routeTitle =
+    typeof bleRoute === "object" && bleRoute && "title" in bleRoute
+      ? String((bleRoute as { title?: string }).title ?? "")
+      : typeof bleRoute === "string"
+        ? bleRoute
+        : String(row.bleRouteTitle ?? "");
+  return {
+    ...point,
+    ble_number: point.ble_number ?? (row.bleNumber as number | undefined),
+    mac_address: point.mac_address || String(row.macAddress ?? ""),
+    charge_value:
+      point.charge_value ??
+      (row.chargeValue as number | undefined) ??
+      (row.charge_value as number | undefined),
+    record_dt: point.record_dt || String(row.recordDt ?? row.record_dt ?? ""),
+    location_desc: point.location_desc || String(row.locationDesc ?? ""),
+    ble_image_url:
+      point.ble_image_url || String(row.bleImageUrl ?? row.ble_image_url ?? ""),
+    location_image_url:
+      point.location_image_url ||
+      String(row.locationImageUrl ?? row.location_image_url ?? ""),
+    ble_type_desc: point.ble_type_desc || String(row.bleTypeDesc ?? ""),
+    bleRoute:
+      typeof bleRoute === "object" && bleRoute
+        ? bleRoute
+        : row.bleRouteId != null
+          ? { id: Number(row.bleRouteId), title: routeTitle }
+          : undefined,
+  };
+}
+
+/** WW Service: GET /api/v1/ble?page=N (page ≥ 1). */
 export async function fetchAllBlePaginated(): Promise<RawBlePoint[]> {
   await ensureBleTokenForField();
   const all: RawBlePoint[] = [];
-  for (let page = 0; page <= WW_BLE_PAGE_MAX; page += 1) {
+  for (let page = 1; page <= WW_BLE_PAGE_MAX; page += 1) {
     const data = await bleApiFetch<unknown>(`${WW_BLE_LIST_PATH}?page=${page}`);
-    const batch = extractBlePageItems(data);
+    const batch = extractBlePageItems(data).map(normalizeWorkerBlePoint);
     if (!batch.length) break;
     all.push(...batch);
     if (!pageHasNext(data, page, batch.length)) break;

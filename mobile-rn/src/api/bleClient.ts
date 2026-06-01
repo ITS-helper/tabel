@@ -9,23 +9,18 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
 import {
-  isBleListPagePath,
-  isMapApiPath,
-  WW_BLE_LIST_TRANSPORTS,
-  WW_CORPORATE_TRANSPORTS,
-  WW_MAP_TRANSPORTS,
+  WW_API_TRANSPORTS,
   WW_MOBILE_AUTH_PATH,
-  type WwCorporateTransport,
-  type WwMapTransport,
+  type WwTransport,
 } from "./wwServiceEndpoints";
 
 const FETCH_TIMEOUT_MS = 120_000;
 const LIST_TIMEOUT_MS = 55_000;
 const AUTH_TIMEOUT_MS = 25_000;
 
-const FAILOVER_STATUSES = new Set([404, 405, 500, 502, 503, 504]);
+const FAILOVER_STATUSES = new Set([404, 405, 422, 500, 502, 503, 504]);
 
-type TransportId = WwCorporateTransport | WwMapTransport;
+type TransportId = WwTransport;
 
 export async function getBleToken(): Promise<string | null> {
   return AsyncStorage.getItem(BLE_TOKEN_KEY);
@@ -35,10 +30,8 @@ async function setBleToken(token: string): Promise<void> {
   await AsyncStorage.setItem(BLE_TOKEN_KEY, token);
 }
 
-function transportOrder(path: string): TransportId[] {
-  if (isBleListPagePath(path)) return [...WW_BLE_LIST_TRANSPORTS];
-  if (isMapApiPath(path)) return [...WW_MAP_TRANSPORTS];
-  return [...WW_CORPORATE_TRANSPORTS];
+function transportOrder(_path: string): TransportId[] {
+  return [...WW_API_TRANSPORTS];
 }
 
 function defaultFetchHeaders(init: RequestInit): Headers {
