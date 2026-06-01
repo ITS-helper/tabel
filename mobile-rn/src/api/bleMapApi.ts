@@ -6,12 +6,20 @@ import {
   bleApiFetch,
   ensureBleTokenForField,
 } from "./bleClient";
-import { fetchBleMapCacheFromSupabase } from "./bleMapCacheRemote";
+import {
+  fetchBleMapCacheFromGithub,
+  fetchBleMapCacheFromSupabase,
+} from "./bleMapCacheRemote";
 import { WW_BLE_LIST_PATH } from "./wwServiceEndpoints";
 
 const WW_BLE_PAGE_MAX = 120;
 
-export type BleMapFetchChannel = "map_ble" | "ble_page" | "supabase_cache" | "none";
+export type BleMapFetchChannel =
+  | "map_ble"
+  | "ble_page"
+  | "github_cache"
+  | "supabase_cache"
+  | "none";
 
 let lastBleFetchDetail = "";
 
@@ -246,7 +254,19 @@ export async function fetchBleMapRaw(
     console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
   }
 
-  // 3. Supabase REST-снимок
+  // 3. Свежий снимок с сайта (github.io) — доступен без worker/VPN.
+  try {
+    const remote = await fetchBleMapCacheFromGithub(companyId);
+    if (remote?.raw.some(rawHasCoords)) {
+      noteFetch("github_cache", remote.updatedAt || "ok");
+      return remote.raw;
+    }
+    noteFetch("github_cache", "empty");
+  } catch (e) {
+    noteFetch("github_cache", e);
+  }
+
+  // 4. Supabase REST-снимок
   try {
     const cached = await fetchBleMapCacheFromSupabase(companyId);
     if (cached?.raw.some(rawHasCoords)) {

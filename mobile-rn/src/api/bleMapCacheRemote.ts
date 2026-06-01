@@ -1,5 +1,49 @@
 import type { RawBlePoint } from "../ble/types";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "../config";
+import {
+  BLE_REMOTE_CACHE_TIMEOUT_MS,
+  BLE_REMOTE_CACHE_URLS,
+  SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_URL,
+} from "../config";
+
+/**
+ * Свежий снимок меток с github.io (как сайт берёт data/ble-map-cache.json).
+ * Работает на сети объекта, где worker (*.workers.dev) заблокирован.
+ */
+export async function fetchBleMapCacheFromGithub(
+  companyId: number,
+): Promise<{ raw: RawBlePoint[]; updatedAt: string } | null> {
+  for (const url of BLE_REMOTE_CACHE_URLS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), BLE_REMOTE_CACHE_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${url}?t=${Date.now()}`, {
+        headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) continue;
+      const body = (await res.json()) as {
+        company_id?: number;
+        companyId?: number;
+        updated_at?: string;
+        updatedAt?: string;
+        payload?: RawBlePoint[];
+      };
+      const cid = body.company_id ?? body.companyId;
+      if (companyId != null && cid != null && Number(cid) !== Number(companyId)) {
+        continue;
+      }
+      const payload = body.payload;
+      if (!Array.isArray(payload) || !payload.length) continue;
+      return { raw: payload, updatedAt: body.updated_at ?? body.updatedAt ?? "" };
+    } catch {
+      /* пробуем следующий URL */
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return null;
+}
 
 /** Кэш из Supabase REST (как fetchBleListCached в ble-map.js). */
 export async function fetchBleMapCacheFromSupabase(

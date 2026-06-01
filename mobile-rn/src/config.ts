@@ -9,10 +9,20 @@ export const BLE_PROXY_BACKEND_BASE = "https://proxy.backend.vsm.workwatch.pro";
 export const BLE_WORKER_BASE =
   "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
 export const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
+/**
+ * Свежий снимок меток на github.io (как `data/ble-map-cache.json` на сайте).
+ * Доступен на любой сети, даже когда worker (*.workers.dev) заблокирован.
+ * Обновляется скриптом `npm run ble-cache` / `ble-cache-push.bat`.
+ */
+export const BLE_REMOTE_CACHE_URLS = [
+  "https://its-helper.github.io/tabel/data/ble-map-cache.json",
+  "https://raw.githubusercontent.com/ITS-helper/tabel/main/data/ble-map-cache.json",
+] as const;
+export const BLE_REMOTE_CACHE_TIMEOUT_MS = 20_000;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
 export const APP_BUILD = "rn-20260601v";
-export const APP_VERSION = "1.0.32";
+export const APP_VERSION = "1.0.33";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";

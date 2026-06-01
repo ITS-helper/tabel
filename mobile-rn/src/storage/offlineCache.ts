@@ -9,7 +9,10 @@ import {
   parseZonesFromMapPayload,
   type BleMapFetchChannel,
 } from "../api/bleMapApi";
-import { fetchBleMapCacheFromSupabase } from "../api/bleMapCacheRemote";
+import {
+  fetchBleMapCacheFromGithub,
+  fetchBleMapCacheFromSupabase,
+} from "../api/bleMapCacheRemote";
 import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
 import { loadBleZonesFull } from "../api/zonesLoader";
 import type { BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
@@ -192,9 +195,15 @@ function pickBestFallbackRaw(
   candidates: Array<{
     raw: RawBlePoint[];
     source: OfflineMeta["source"];
+    channel?: BleMapFetchChannel;
     snapshotAt?: string;
   }>,
-): { raw: RawBlePoint[]; source: OfflineMeta["source"]; snapshotAt?: string } | null {
+): {
+  raw: RawBlePoint[];
+  source: OfflineMeta["source"];
+  channel?: BleMapFetchChannel;
+  snapshotAt?: string;
+} | null {
   let best: (typeof candidates)[number] | null = null;
   for (const c of candidates) {
     if (!c.raw.some(rawHasCoords)) continue;
@@ -217,26 +226,45 @@ function pickBestFallbackRaw(
   return best;
 }
 
-/** Офлайн-снимок: bundled → Supabase REST → local (как fetchBleListOffline). */
+/** Офлайн-снимок: github.io (свежий) → Supabase REST → bundled → local. */
 async function loadBootstrapRaw(
   companyId: number,
   localMarkers: BleTagMarker[],
 ): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
+  channel?: BleMapFetchChannel;
   snapshotAt?: string;
 }> {
   const candidates: Array<{
     raw: RawBlePoint[];
     source: OfflineMeta["source"];
+    channel?: BleMapFetchChannel;
     snapshotAt?: string;
   }> = [];
+
+  // Свежий снимок с сайта (github.io) — обновляется без пересборки APK,
+  // доступен даже когда worker заблокирован на сети объекта.
+  try {
+    const remote = await fetchBleMapCacheFromGithub(companyId);
+    if (remote?.raw.some(rawHasCoords)) {
+      candidates.push({
+        raw: remote.raw,
+        source: "cache",
+        channel: "github_cache",
+        snapshotAt: remote.updatedAt,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
 
   const bundled = loadBundledBleCache(companyId);
   if (bundled?.raw.some(rawHasCoords)) {
     candidates.push({
       raw: bundled.raw,
       source: "bundle",
+      channel: "none",
       snapshotAt: bundled.updatedAt,
     });
   }
@@ -247,6 +275,7 @@ async function loadBootstrapRaw(
       candidates.push({
         raw: cached.raw,
         source: "cache",
+        channel: "supabase_cache",
         snapshotAt: cached.updatedAt,
       });
     }
@@ -290,9 +319,11 @@ async function loadRawMarkers(companyId: number): Promise<{
   if (bootstrap.raw.length) {
     return {
       ...bootstrap,
-      channel: bootstrap.source === "cache" ? "supabase_cache" : "none",
+      channel:
+        bootstrap.channel ??
+        (bootstrap.source === "cache" ? "supabase_cache" : "none"),
       apiFailed,
-      fetchDetail,
+      fetchDetail: fetchDetail || `snapshot: ${bootstrap.channel ?? bootstrap.source}`,
     };
   }
 
