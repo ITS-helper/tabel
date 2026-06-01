@@ -209,21 +209,7 @@ export async function fetchBleMapRaw(
     await ensureBleTokenForField();
   }
 
-  // 1. WW Service (libapp.so): GET /api/v1/ble?page=N — backend/proxy на объекте
-  try {
-    const paginated = await fetchAllBlePaginated();
-    const withCoords = paginated.filter(rawHasCoords);
-    if (withCoords.length) {
-      noteFetch("ble_page", `${withCoords.length} GPS`);
-      return paginated;
-    }
-    noteFetch("ble_page", "no GPS in list");
-  } catch (e) {
-    noteFetch("ble_page", e);
-    console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
-  }
-
-  // 2. Cloud map API — полные фото/bleRoute (worker/supabase)
+  // 1. Cloud map API — полные фото, маршруты, GPS (как fetchBleListLive в ble-map.js)
   try {
     const data = await bleApiFetch<unknown>(`/api/v1/map/ble/${companyId}`);
     const raw = extractMapBleRaw(data);
@@ -237,7 +223,21 @@ export async function fetchBleMapRaw(
     console.warn("[bleMapApi] /api/v1/map/ble failed", e);
   }
 
-  // 3. Supabase REST-снимок (без VPN, если таблица заполнена)
+  // 2. WW Service: GET /api/v1/ble?page=N — живой список, свежее Supabase-снимка
+  try {
+    const paginated = await fetchAllBlePaginated();
+    const withCoords = paginated.filter(rawHasCoords);
+    if (withCoords.length) {
+      noteFetch("ble_page", `${withCoords.length} GPS`);
+      return paginated;
+    }
+    noteFetch("ble_page", "no GPS in list");
+  } catch (e) {
+    noteFetch("ble_page", e);
+    console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
+  }
+
+  // 3. Supabase REST-снимок — только если map API и paginated недоступны
   try {
     const cached = await fetchBleMapCacheFromSupabase(companyId);
     if (cached?.raw.some(rawHasCoords)) {
@@ -352,8 +352,12 @@ export function buildInspectionBody(
 ) {
   const recordDt = checkin.checkedAt || new Date().toISOString();
   const bleNum = Number(tag?.ble ?? checkin.bleNumber ?? 0);
+  const bleId = tag?.id ?? checkin.ble_id ?? null;
+  if (bleId == null) {
+    throw new Error(`bleId missing for #${bleNum}`);
+  }
   return {
-    bleId: tag?.id ?? checkin.ble_id ?? null,
+    bleId,
     ble_number: bleNum,
     bleNumber: bleNum,
     mac_address: checkin.mac_address || tag?.mac || "",

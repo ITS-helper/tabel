@@ -37,7 +37,23 @@ async function refineMissingPolygons(
     if (z.pts.length >= 3) byId.set(z.id, z);
   }
 
-  const missing = metas.filter((m) => !byId.has(m.id));
+  for (const m of metas) {
+    if (m.pts.length >= 3) {
+      byId.set(m.id, {
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        color: m.color,
+        pts: m.pts,
+        ptsSource: "api",
+      });
+    }
+  }
+
+  const missing = metas.filter((m) => {
+    const z = byId.get(m.id);
+    return !z || z.pts.length < 3;
+  });
   if (!missing.length) return [...byId.values()];
 
   let cursor = 0;
@@ -84,5 +100,8 @@ export async function loadBleZonesFull(
   if (!metas.length) return fast.length ? fast : local;
 
   const refined = await refineMissingPolygons(metas, fast.length ? fast : local);
-  return refined.length ? refined : local;
+  if (!refined.length) return local;
+
+  // Если API вернул зоны — всегда сохраняем свежие координаты, не stale local.
+  return refined;
 }

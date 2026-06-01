@@ -3,7 +3,10 @@ import {
   BLE_DEFAULT_CENTER_BLE,
   BLE_DEFAULT_CENTER_ZOOM,
   BLE_DOT_PX,
+  BLE_DOT_INSPECTION_PX,
+  BLE_MAP_MAX_ZOOM,
   BLE_MARKER_HOLD_MS,
+  BLE_TILE_MAX_ZOOM,
   BLE_ZONE_NEON,
   BLE_ZONE_NEON_FILL,
 } from "../config";
@@ -29,12 +32,18 @@ export function buildLeafletHtml(): string {
     .ble-dot {
       width:${BLE_DOT_PX}px; height:${BLE_DOT_PX}px; border-radius:50%;
       display:flex; align-items:center; justify-content:center;
-      font-size:8px; font-weight:700; color:#fff; font-family:Oswald,sans-serif;
-      box-shadow:0 2px 6px rgba(0,0,0,.3); border:2px solid #fff;
+      font-size:7px; font-weight:700; color:#fff; font-family:Oswald,sans-serif;
+      letter-spacing:-0.3px; line-height:1;
+      box-shadow:0 1px 4px rgba(0,0,0,.35); border:1.5px solid #fff;
     }
     .ble-dot-ok { background:#0abab5; }
     .ble-dot-battery { background:#ffa726; animation:pulse-orange 2s infinite; }
-    .ble-dot-inspection { background:#f9a825; animation:pulse-yellow-green 2s ease-in-out infinite; }
+    .ble-dot-inspection {
+      background:#ffb300;
+      border-width:2px;
+      font-size:8px;
+      animation:pulse-yellow-green 2s ease-in-out infinite;
+    }
     .ble-dot--dirty { border-color:#ffeb3b; box-shadow:0 0 0 2px rgba(255,235,59,.75); }
     body.ble-map--edit .ble-dot--hold-pending { animation:ble-dot-hold-pulse 1s linear forwards; }
     body.ble-map--edit .ble-dot--hold-armed {
@@ -50,8 +59,8 @@ export function buildLeafletHtml(): string {
       50% { box-shadow:0 0 0 6px rgba(255,167,38,0); }
     }
     @keyframes pulse-yellow-green {
-      0%,100% { background-color:#f9a825; }
-      50% { background-color:#43a047; }
+      0%,100% { background-color:#ffb300; box-shadow:0 0 0 0 rgba(255,179,0,.55); }
+      50% { background-color:#66bb6a; box-shadow:0 0 0 5px rgba(102,187,106,0); }
     }
     .marker-cluster-small { background-color:rgba(10,186,181,.2); }
     .marker-cluster-small div { background-color:rgba(10,186,181,.75); }
@@ -97,12 +106,30 @@ export function buildLeafletHtml(): string {
     var BOOT_ZOOM = ${BLE_DEFAULT_CENTER_ZOOM};
     var ZONE_NEON = "${BLE_ZONE_NEON}";
     var ZONE_NEON_FILL = "${BLE_ZONE_NEON_FILL}";
-    var map = L.map("map", { zoomControl:true, attributionControl:false, maxZoom:18 }).setView([59.6603, 28.3967], 16);
+    var MAP_MAX_ZOOM = ${BLE_MAP_MAX_ZOOM};
+    var TILE_MAX_ZOOM = ${BLE_TILE_MAX_ZOOM};
+    var map = L.map("map", {
+      zoomControl:true,
+      attributionControl:false,
+      maxZoom:MAP_MAX_ZOOM,
+      fadeAnimation:false,
+      markerZoomAnimation:false,
+      zoomAnimation:true
+    }).setView([59.6603, 28.3967], 16);
     map.createPane("bleZones");
     map.getPane("bleZones").classList.add("ble-zones-pane");
     map.createPane("bleMarkers");
     map.getPane("bleMarkers").classList.add("ble-markers-pane");
-    L.tileLayer("${ARCGIS_SATELLITE_URL}", { maxZoom:18, minZoom:10, attribution:"" }).addTo(map);
+    L.tileLayer("${ARCGIS_SATELLITE_URL}", {
+      maxZoom: MAP_MAX_ZOOM,
+      maxNativeZoom: TILE_MAX_ZOOM,
+      minZoom: 10,
+      detectRetina: false,
+      updateWhenIdle: false,
+      updateWhenZooming: true,
+      keepBuffer: 3,
+      attribution: ""
+    }).addTo(map);
     var cluster = null;
     var markerLayer = null;
     var clusterEnabled = true;
@@ -111,7 +138,11 @@ export function buildLeafletHtml(): string {
     var markerByBle = {};
     var markerDataByBle = {};
     var HOLD_MS = ${BLE_MARKER_HOLD_MS};
-    var MAP_MAX_ZOOM = 18;
+    var markerRegistry = {};
+    var lastEditMode = false;
+    var lastRenderKey = "";
+    var lastZonesKey = "";
+    var plainAddRaf = 0;
 
     function makeClusterGroup(markerCount) {
       var heavy = markerCount > 350;
@@ -144,6 +175,10 @@ export function buildLeafletHtml(): string {
     }
 
     function ensureMarkerTarget(useCluster, markerCount) {
+      if (plainAddRaf) {
+        cancelAnimationFrame(plainAddRaf);
+        plainAddRaf = 0;
+      }
       if (useCluster) {
         if (markerLayer) {
           markerLayer.clearLayers();
@@ -153,8 +188,6 @@ export function buildLeafletHtml(): string {
         if (!cluster) {
           cluster = makeClusterGroup(markerCount || 0);
           map.addLayer(cluster);
-        } else {
-          cluster.clearLayers();
         }
         return cluster;
       }
@@ -165,8 +198,6 @@ export function buildLeafletHtml(): string {
       }
       if (!markerLayer) {
         markerLayer = L.layerGroup([], { pane: "bleMarkers" }).addTo(map);
-      } else {
-        markerLayer.clearLayers();
       }
       return markerLayer;
     }
@@ -186,7 +217,8 @@ export function buildLeafletHtml(): string {
     }
 
     function createBleIcon(m, isDirty) {
-      var hit = ${BLE_DOT_PX};
+      var insp = m.status === "inspection";
+      var hit = insp ? ${BLE_DOT_INSPECTION_PX} : ${BLE_DOT_PX};
       var dirtyCls = isDirty ? " ble-dot--dirty" : "";
       return L.divIcon({
         className: "",
@@ -348,7 +380,10 @@ export function buildLeafletHtml(): string {
 
       var bindPointer = function() {
         var el = marker.getElement();
-        if (!el || touchBound) return;
+        if (!el) return;
+        if (touchBound && marker._wwHoldEl === el) return;
+        if (touchBound) unbindPointer();
+        marker._wwHoldEl = el;
         touchBound = true;
         L.DomEvent.on(el, "mousedown", onHoldStart, marker);
         el.addEventListener("touchstart", onHoldStart, { passive: false, capture: true });
@@ -358,9 +393,14 @@ export function buildLeafletHtml(): string {
       };
 
       var unbindPointer = function() {
-        var el = marker.getElement();
-        if (!el) return;
+        var el = marker._wwHoldEl || marker.getElement();
+        if (!el) {
+          touchBound = false;
+          marker._wwHoldEl = null;
+          return;
+        }
         touchBound = false;
+        marker._wwHoldEl = null;
         L.DomEvent.off(el, "mousedown", onHoldStart, marker);
         el.removeEventListener("touchstart", onHoldStart, { capture: true });
         L.DomEvent.off(el, "mouseup", onHoldEndEarly, marker);
@@ -368,6 +408,7 @@ export function buildLeafletHtml(): string {
         el.removeEventListener("touchcancel", onHoldEndEarly, { capture: true });
       };
 
+      marker._wwHoldRebind = bindPointer;
       marker.on("add", bindPointer);
       marker.on("remove", function() { unbindPointer(); resetDragSession(); });
       marker.on("click", function(e) {
@@ -469,21 +510,80 @@ export function buildLeafletHtml(): string {
       return true;
     }
 
-    function updateMap(payload) {
-      if (!payload) return;
-      editMode = !!payload.editMode;
-      dirtySet = {};
-      (payload.dirtyIds || []).forEach(function(id) { dirtySet[id] = true; });
-      document.body.classList.toggle("ble-map--edit", editMode);
-      clusterEnabled = editMode ? false : (payload.clusterEnabled !== false);
-      var markers = payload.markers || [];
-      var zones = payload.zones || [];
-      var target = ensureMarkerTarget(clusterEnabled, markers.length);
-      markerByBle = {};
-      markerDataByBle = {};
+    function buildRenderKey(payload, markers, useCluster) {
+      var dirty = (payload.dirtyIds || []).join(",");
+      return (useCluster ? "c" : "p") + ":" + markers.length + ":" + !!payload.editMode + ":" + dirty;
+    }
+
+    function syncMarkerRegistry(markers) {
+      var keep = {};
+      markers.forEach(function(m) { keep[String(m.ble)] = true; });
+      Object.keys(markerRegistry).forEach(function(k) {
+        if (keep[k]) return;
+        try { markerRegistry[k].marker.remove(); } catch(e) {}
+        delete markerRegistry[k];
+      });
+    }
+
+    function clearMarkerRegistry() {
+      Object.keys(markerRegistry).forEach(function(k) {
+        try { markerRegistry[k].marker.remove(); } catch(e) {}
+        delete markerRegistry[k];
+      });
+    }
+
+    function ensureEditMarker(mk, m) {
+      if (!mk._wwHoldRebind) {
+        mk.bindPopup('<span style="font-size:12px;color:#546E7A">Удержите 1 сек., затем перетащите</span>', { maxWidth: 220 });
+        attachMarkerHoldDrag(mk, m);
+      } else if (typeof mk._wwHoldRebind === "function") {
+        mk._wwHoldRebind();
+      }
+    }
+
+    function getOrCreateMarker(m, isDirty, edit) {
+      var key = String(m.ble);
+      var entry = markerRegistry[key];
+      var icon = createBleIcon(m, isDirty);
+      if (entry) {
+        entry.m = m;
+        entry.marker.setLatLng([m.lat, m.lng]);
+        entry.marker.setIcon(icon);
+        if (edit && m.id != null) {
+          ensureEditMarker(entry.marker, m);
+        } else if (typeof entry.marker._wwHoldRebind !== "function") {
+          bindPopup(entry.marker, m);
+        }
+        return entry.marker;
+      }
+      var mk = L.marker([m.lat, m.lng], { icon: icon, pane: "bleMarkers" });
+      if (edit && m.id != null) {
+        ensureEditMarker(mk, m);
+      } else {
+        bindPopup(mk, m);
+      }
+      markerRegistry[key] = { marker: mk, m: m };
+      return mk;
+    }
+
+    function zoneCoordsKey(z) {
+      if (!z.pts || !z.pts.length) return "";
+      var s = 0;
+      for (var i = 0; i < z.pts.length; i++) {
+        var p = z.pts[i];
+        s = ((s << 5) - s + Math.round(p[0] * 1e5) + Math.round(p[1] * 1e5)) | 0;
+      }
+      return String(s);
+    }
+
+    function renderZones(zones) {
+      var zKey = zones.map(function(z) {
+        return z.id + ":" + (z.pts ? z.pts.length : 0) + ":" + zoneCoordsKey(z);
+      }).join("|");
+      if (zKey === lastZonesKey) return [];
+      lastZonesKey = zKey;
       zoneLayer.clearLayers();
       var bounds = [];
-
       zones.forEach(function(z) {
         if (!z.pts || z.pts.length < 3) return;
         var latlngs = z.pts.map(function(p) { return [p[0], p[1]]; });
@@ -492,23 +592,80 @@ export function buildLeafletHtml(): string {
           .addTo(zoneLayer);
         latlngs.forEach(function(ll) { bounds.push(ll); });
       });
+      return bounds;
+    }
 
+    function indexMarkers(markers) {
+      markerByBle = {};
+      markerDataByBle = {};
+      markers.forEach(function(m) {
+        if (m.lat == null || m.lng == null) return;
+        var entry = markerRegistry[String(m.ble)];
+        if (!entry) return;
+        markerByBle[String(m.ble)] = entry.marker;
+        markerDataByBle[String(m.ble)] = m;
+      });
+    }
+
+    function addPlainMarkersChunked(target, markers, edit) {
+      if (plainAddRaf) {
+        cancelAnimationFrame(plainAddRaf);
+        plainAddRaf = 0;
+      }
+      target.clearLayers();
+      var list = [];
+      var bounds = [];
       markers.forEach(function(m) {
         if (m.lat == null || m.lng == null) return;
         var isDirty = m.id != null && !!dirtySet[m.id];
-        var mk = L.marker([m.lat, m.lng], { icon: createBleIcon(m, isDirty), pane: "bleMarkers" });
-        markerByBle[String(m.ble)] = mk;
-        markerDataByBle[String(m.ble)] = m;
-        if (editMode && m.id != null) {
-          mk.bindPopup('<span style="font-size:12px;color:#546E7A">Удержите 1 сек., затем перетащите</span>', { maxWidth: 220 });
-          attachMarkerHoldDrag(mk, m);
-        } else {
-          bindPopup(mk, m);
-        }
-        target.addLayer(mk);
+        list.push({ m: m, isDirty: isDirty });
         bounds.push([m.lat, m.lng]);
       });
+      syncMarkerRegistry(markers);
+      var i = 0;
+      var CHUNK = 72;
+      function step() {
+        var end = Math.min(i + CHUNK, list.length);
+        for (; i < end; i++) {
+          var item = list[i];
+          target.addLayer(getOrCreateMarker(item.m, item.isDirty, edit));
+        }
+        if (i < list.length) {
+          plainAddRaf = requestAnimationFrame(step);
+        } else {
+          plainAddRaf = 0;
+          indexMarkers(markers);
+        }
+      }
+      if (!list.length) {
+        indexMarkers(markers);
+        return bounds;
+      }
+      step();
+      return bounds;
+    }
 
+    function renderClusterMarkers(target, markers, edit) {
+      syncMarkerRegistry(markers);
+      var layers = [];
+      var bounds = [];
+      markers.forEach(function(m) {
+        if (m.lat == null || m.lng == null) return;
+        var isDirty = m.id != null && !!dirtySet[m.id];
+        layers.push(getOrCreateMarker(m, isDirty, edit));
+        bounds.push([m.lat, m.lng]);
+      });
+      target.clearLayers();
+      if (target.addLayers) {
+        target.addLayers(layers);
+      } else {
+        layers.forEach(function(l) { target.addLayer(l); });
+      }
+      indexMarkers(markers);
+      return bounds;
+    }
+
+    function applyMapView(payload, markers, bounds) {
       if (payload.focus && payload.focus.lat != null && !editMode) {
         map.setView([payload.focus.lat, payload.focus.lng], BOOT_ZOOM, { animate: true });
         if (payload.focus.openPopup) {
@@ -532,8 +689,50 @@ export function buildLeafletHtml(): string {
       } else if (bounds.length === 1) {
         map.setView(bounds[0], BOOT_ZOOM, { animate: false });
       } else if (bounds.length > 1 && !userMoved) {
-        try { map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 }); } catch(e) {}
+        try { map.fitBounds(bounds, { padding: [28, 28], maxZoom: MAP_MAX_ZOOM - 1 }); } catch(e) {}
       }
+    }
+
+    function updateMap(payload) {
+      if (!payload) return;
+      editMode = !!payload.editMode;
+      if (editMode !== lastEditMode) {
+        clearMarkerRegistry();
+        lastRenderKey = "";
+        lastEditMode = editMode;
+      }
+      dirtySet = {};
+      (payload.dirtyIds || []).forEach(function(id) { dirtySet[id] = true; });
+      document.body.classList.toggle("ble-map--edit", editMode);
+      clusterEnabled = editMode ? false : (payload.clusterEnabled !== false);
+      var markers = payload.markers || [];
+      var zones = payload.zones || [];
+      var renderKey = buildRenderKey(payload, markers, clusterEnabled);
+      var viewOnly = renderKey === lastRenderKey;
+      lastRenderKey = renderKey;
+
+      var zoneBounds = renderZones(zones);
+      var target = ensureMarkerTarget(clusterEnabled, markers.length);
+      var markerBounds;
+
+      if (editMode || (viewOnly && !plainAddRaf)) {
+        markers.forEach(function(m) {
+          if (m.lat == null || m.lng == null) return;
+          var isDirty = m.id != null && !!dirtySet[m.id];
+          var mk = getOrCreateMarker(m, isDirty, editMode);
+          markerByBle[String(m.ble)] = mk;
+          markerDataByBle[String(m.ble)] = m;
+        });
+        markerBounds = markers.filter(function(m) { return m.lat != null && m.lng != null; })
+          .map(function(m) { return [m.lat, m.lng]; });
+      } else if (clusterEnabled) {
+        markerBounds = renderClusterMarkers(target, markers, editMode);
+      } else {
+        markerBounds = addPlainMarkersChunked(target, markers, editMode);
+      }
+
+      var bounds = zoneBounds.concat(markerBounds);
+      applyMapView(payload, markers, bounds);
       setTimeout(function() { map.invalidateSize(); }, 120);
     }
     window.__updateMap = updateMap;

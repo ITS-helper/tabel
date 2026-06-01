@@ -7,10 +7,11 @@ import {
 } from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RawBlePoint } from "../ble/types";
-import { BLE_SUPABASE_BASE } from "../config";
 import {
   collectPhotoUrlsFromRaw,
   photoUrlPathnameKey,
+  isYandexPhotoUrl,
+  toBlePhotoProxyUrl,
 } from "../api/photoUtils";
 
 export const FIELD_PHOTOS_DIR = `${documentDirectory}ww-ble-photos/`;
@@ -107,8 +108,7 @@ async function fetchPhotoBytes(url: string): Promise<ArrayBuffer | null> {
     return await tryFetch(url);
   } catch {
     try {
-      const proxy = `${BLE_SUPABASE_BASE}?path=${encodeURIComponent("/photo")}&url=${encodeURIComponent(url)}`;
-      return await tryFetch(proxy);
+      return await tryFetch(toBlePhotoProxyUrl(url));
     } catch {
       return null;
     }
@@ -123,10 +123,28 @@ export async function syncFieldPhotosFromRaw(
 
   const urls = collectPhotoUrlsFromRaw(raw, { allowExpired: true });
   const index = await loadIndex();
-  const missing = urls.filter((u) => {
-    const p = index[u] || index[photoUrlPathnameKey(u)];
-    return !p;
-  });
+  const pathnameFromRaw = new Set(urls.map(photoUrlPathnameKey));
+  const missing: string[] = [];
+  for (const u of urls) {
+    const pathKey = photoUrlPathnameKey(u);
+    const p = index[u] || index[pathKey];
+    if (!p) {
+      missing.push(u);
+      continue;
+    }
+    const info = await getInfoAsync(p);
+    if (!info.exists) {
+      delete index[u];
+      delete index[pathKey];
+      missing.push(u);
+    }
+  }
+
+  for (const key of Object.keys(index)) {
+    if (key.startsWith("http") && !pathnameFromRaw.has(photoUrlPathnameKey(key))) {
+      delete index[key];
+    }
+  }
 
   let ok = 0;
   let fail = 0;

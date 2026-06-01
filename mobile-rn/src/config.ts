@@ -11,8 +11,8 @@ export const BLE_WORKER_BASE =
 export const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
-export const APP_BUILD = "rn-20260601l";
-export const APP_VERSION = "1.0.20";
+export const APP_BUILD = "rn-20260601p";
+export const APP_VERSION = "1.0.27";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";
@@ -41,9 +41,15 @@ export const NEARBY_TTL_MS = 20_000;
 
 export const BLE_DEFAULT_CENTER_BLE = "7";
 export const BLE_DEFAULT_CENTER_ZOOM = 18;
+/** Esri World Imagery: выше z18 в этом районе — «Map data not yet available» (как ble-map.js) */
+export const BLE_TILE_MAX_ZOOM = 18;
+/** Leaflet overzoom поверх 18-го уровня тайлов */
+export const BLE_MAP_MAX_ZOOM = 19;
 export const BLE_ZONE_NEON = "#00e5ff";
 export const BLE_ZONE_NEON_FILL = "#66f0ff";
-export const BLE_DOT_PX = 20;
+export const BLE_DOT_PX = 15;
+/** Метки «требуют обхода» — чуть крупнее обычных */
+export const BLE_DOT_INSPECTION_PX = 19;
 
 /** Тот же слой спутника, что Leaflet + ArcGIS в ble-map.js */
 export const ARCGIS_SATELLITE_URL =

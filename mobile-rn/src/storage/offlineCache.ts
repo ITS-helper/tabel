@@ -6,6 +6,7 @@ import {
   getLastBleFetchDetail,
   parseZonesFromMapPayload,
 } from "../api/bleMapApi";
+import { fetchBleMapCacheFromSupabase } from "../api/bleMapCacheRemote";
 import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
 import { loadBleZonesFull } from "../api/zonesLoader";
 import type { BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
@@ -31,7 +32,7 @@ export type OfflineMeta = {
   refreshedAt?: number;
 };
 
-/** Wi‑Fi на объекте часто без «интернета» в NetInfo, но backend.vsm доступен. */
+/** Wi‑Fi на объекте часто без «интернета» в NetInfo — не блокируем API только из‑за этого. */
 export async function isOnline(): Promise<boolean> {
   const s = await NetInfo.fetch();
   return s.isConnected === true;
@@ -110,6 +111,105 @@ function markersFromRaw(raw: RawBlePoint[]): BleTagMarker[] {
   );
 }
 
+function rawHasCoords(point: RawBlePoint): boolean {
+  const lat = point.latitude ?? point.lat;
+  const lng = point.longitude ?? point.lng;
+  return (
+    lat != null &&
+    lng != null &&
+    Math.abs(Number(lat)) <= 90 &&
+    Math.abs(Number(lng)) <= 180 &&
+    !(Number(lat) === 0 && Number(lng) === 0)
+  );
+}
+
+function countRawWithCoords(raw: RawBlePoint[]): number {
+  return raw.filter(rawHasCoords).length;
+}
+
+function parseSnapshotMs(iso?: string): number {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Выбираем самый полный/свежий снимок при сбое live API. */
+function pickBestFallbackRaw(
+  candidates: Array<{
+    raw: RawBlePoint[];
+    source: OfflineMeta["source"];
+    snapshotAt?: string;
+  }>,
+): { raw: RawBlePoint[]; source: OfflineMeta["source"]; snapshotAt?: string } | null {
+  let best: (typeof candidates)[number] | null = null;
+  for (const c of candidates) {
+    if (!c.raw.some(rawHasCoords)) continue;
+    if (!best) {
+      best = c;
+      continue;
+    }
+    const countDiff = countRawWithCoords(c.raw) - countRawWithCoords(best.raw);
+    if (countDiff > 0) {
+      best = c;
+      continue;
+    }
+    if (
+      countDiff === 0 &&
+      parseSnapshotMs(c.snapshotAt) > parseSnapshotMs(best.snapshotAt)
+    ) {
+      best = c;
+    }
+  }
+  return best;
+}
+
+/** Офлайн-снимок: bundled → Supabase REST → local (как fetchBleListOffline). */
+async function loadBootstrapRaw(
+  companyId: number,
+  localMarkers: BleTagMarker[],
+): Promise<{
+  raw: RawBlePoint[];
+  source: OfflineMeta["source"];
+  snapshotAt?: string;
+}> {
+  const candidates: Array<{
+    raw: RawBlePoint[];
+    source: OfflineMeta["source"];
+    snapshotAt?: string;
+  }> = [];
+
+  const bundled = loadBundledBleCache(companyId);
+  if (bundled?.raw.some(rawHasCoords)) {
+    candidates.push({
+      raw: bundled.raw,
+      source: "bundle",
+      snapshotAt: bundled.updatedAt,
+    });
+  }
+
+  try {
+    const cached = await fetchBleMapCacheFromSupabase(companyId);
+    if (cached?.raw.some(rawHasCoords)) {
+      candidates.push({
+        raw: cached.raw,
+        source: "cache",
+        snapshotAt: cached.updatedAt,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const best = pickBestFallbackRaw(candidates);
+  if (best) return best;
+
+  if (localMarkers.length) {
+    return { raw: [], source: "local" };
+  }
+
+  return { raw: [], source: "bundle" };
+}
+
 async function loadRawMarkers(companyId: number): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
@@ -129,19 +229,13 @@ async function loadRawMarkers(companyId: number): Promise<{
     fetchDetail = getLastBleFetchDetail() || (e instanceof Error ? e.message : "error");
   }
 
-  const bundled = loadBundledBleCache(companyId);
-  if (bundled?.raw.length) {
-    return {
-      raw: bundled.raw,
-      source: "bundle",
-      snapshotAt: bundled.updatedAt,
-      apiFailed,
-      fetchDetail,
-    };
+  const bootstrap = await loadBootstrapRaw(companyId, await loadOfflineMarkers());
+  if (bootstrap.raw.length) {
+    return { ...bootstrap, apiFailed, fetchDetail };
   }
 
   throw new Error(
-    "Нет связи с backend.vsm.workwatch.pro. Проверьте Wi‑Fi на объекте и нажмите ↻.",
+    "Не удалось загрузить метки. Проверьте Wi‑Fi и нажмите ↻.",
   );
 }
 
@@ -162,54 +256,43 @@ export async function syncOfflinePack(
 }> {
   const localMarkers = await loadOfflineMarkers();
   const localZones = await loadOfflineZones(companyId);
-  const online = await isOnline();
-
   const bundledFallback = () => loadBundledBleCache(companyId)?.raw ?? [];
 
-  if (!online) {
-    if (!localMarkers.length) {
-      const bundled = loadBundledBleCache(companyId);
-      if (bundled?.raw.length) {
-        const markers = markersFromRaw(bundled.raw);
-        const meta = await saveOfflinePack(markers, localZones, companyId, "bundle");
-        return {
-          markers,
-          zones: localZones,
-          meta,
-          raw: bundled.raw,
-          photoRaw: bundled.raw,
-          apiRefreshFailed: true,
-        };
-      }
-    }
-    const meta = (await loadOfflineMeta()) ?? {
-      companyId,
-      savedAt: 0,
-      markerCount: localMarkers.length,
-      mappableCount: countMappableMarkers(localMarkers),
-      zoneCount: localZones.length,
-      fromNetwork: false,
-      source: "local" as const,
-    };
-    const photoRaw = bundledFallback();
-    return {
-      markers: localMarkers,
-      zones: localZones,
-      meta,
-      raw: [],
-      photoRaw,
-      apiRefreshFailed: true,
-    };
-  }
-
+  // Capacitor всегда пробует API; NetInfo не блокирует refresh.
   try {
     const { raw, source, apiFailed, fetchDetail } = await loadRawMarkers(companyId);
-    const markers = markersFromRaw(raw);
+    const fromNetwork = raw.length ? markersFromRaw(raw) : [];
+    const markers = fromNetwork.length ? fromNetwork : localMarkers;
     const zones = await loadZones(companyId, localZones);
     const photoRaw =
       raw.some((p) => p.ble_image_url || p.location_image_url) ? raw : bundledFallback();
 
-    if (!markers.length && localMarkers.length > 0) {
+    if (!fromNetwork.length && localMarkers.length > 0) {
+      const fallback = await loadBootstrapRaw(companyId, localMarkers);
+      const fallbackMarkers = fallback.raw.length ? markersFromRaw(fallback.raw) : [];
+      const useFallback =
+        fallbackMarkers.length > localMarkers.length ||
+        (fallbackMarkers.length === localMarkers.length &&
+          parseSnapshotMs(fallback.snapshotAt) >
+            ((await loadOfflineMeta())?.savedAt ?? 0));
+      if (useFallback && fallbackMarkers.length) {
+        const meta = await saveOfflinePack(
+          fallbackMarkers,
+          zones.length ? zones : localZones,
+          companyId,
+          fallback.source,
+        );
+        return {
+          markers: fallbackMarkers,
+          zones: zones.length ? zones : localZones,
+          meta,
+          raw: fallback.raw,
+          photoRaw: fallback.raw,
+          apiRefreshFailed: true,
+          fetchDetail,
+        };
+      }
+
       const meta = (await loadOfflineMeta()) ?? {
         companyId,
         savedAt: 0,
@@ -237,10 +320,15 @@ export async function syncOfflinePack(
       };
     }
 
-    const meta = await saveOfflinePack(markers, zones, companyId, source);
+    const meta = await saveOfflinePack(
+      markers.length ? markers : localMarkers,
+      zones.length ? zones : localZones,
+      companyId,
+      source,
+    );
     return {
-      markers,
-      zones,
+      markers: markers.length ? markers : localMarkers,
+      zones: zones.length ? zones : localZones,
       meta,
       raw,
       photoRaw,
@@ -269,6 +357,22 @@ export async function syncOfflinePack(
         fetchDetail: getLastBleFetchDetail() || (e instanceof Error ? e.message : undefined),
       };
     }
+
+    const bootstrap = await loadBootstrapRaw(companyId, []);
+    if (bootstrap.raw.length) {
+      const markers = markersFromRaw(bootstrap.raw);
+      const meta = await saveOfflinePack(markers, localZones, companyId, bootstrap.source);
+      return {
+        markers,
+        zones: localZones,
+        meta,
+        raw: bootstrap.raw,
+        photoRaw: bootstrap.raw,
+        apiRefreshFailed: true,
+        fetchDetail: getLastBleFetchDetail() || (e instanceof Error ? e.message : undefined),
+      };
+    }
+
     throw e;
   }
 }
@@ -295,7 +399,7 @@ export function snapshotHint(
       ? `Офлайн-снимок от ${age}.`
       : "Офлайн-снимок меток.";
     return apiRefreshFailed
-      ? `${base} Не удалось обновить с API — проверьте Wi‑Fi на объекте и нажмите ↻.${detailSuffix}`
+      ? `${base} Не удалось обновить с API — нажмите ↻.${detailSuffix}`
       : `${base} Обновите ↻ на объекте.`;
   }
   if (source === "cache") {
@@ -308,4 +412,51 @@ export function snapshotHint(
 export function zonesFromRawPayload(raw: unknown): BleZone[] {
   if (!raw || typeof raw !== "object") return [];
   return parseZonesFromMapPayload(raw as { zones?: [] });
+}
+
+/** Быстрый bootstrap для UI до сетевого refresh (как loadBleMap в ble-map.js). */
+export async function loadImmediateBootstrap(
+  companyId = BLE_DEFAULT_COMPANY_ID,
+): Promise<{
+  markers: BleTagMarker[];
+  zones: BleZone[];
+  source: OfflineMeta["source"];
+}> {
+  const localMarkers = await loadOfflineMarkers();
+  const localZones = await loadOfflineZones(companyId);
+  const localMeta = await loadOfflineMeta();
+
+  const bootstrap = await loadBootstrapRaw(companyId, localMarkers);
+  const bootstrapMarkers = bootstrap.raw.length
+    ? markersFromRaw(bootstrap.raw)
+    : [];
+
+  if (bootstrapMarkers.length) {
+    const useBootstrap =
+      !localMarkers.length ||
+      bootstrapMarkers.length > localMarkers.length ||
+      (bootstrapMarkers.length === localMarkers.length &&
+        parseSnapshotMs(bootstrap.snapshotAt) > (localMeta?.savedAt ?? 0));
+    if (useBootstrap) {
+      return {
+        markers: bootstrapMarkers,
+        zones: localZones,
+        source: bootstrap.source,
+      };
+    }
+  }
+
+  if (localMarkers.length) {
+    return { markers: localMarkers, zones: localZones, source: "local" };
+  }
+
+  if (bootstrapMarkers.length) {
+    return {
+      markers: bootstrapMarkers,
+      zones: localZones,
+      source: bootstrap.source,
+    };
+  }
+
+  return { markers: [], zones: localZones, source: "local" };
 }
