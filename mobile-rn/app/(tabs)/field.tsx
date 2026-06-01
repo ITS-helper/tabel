@@ -2,6 +2,8 @@ import NetInfo from "@react-native-community/netinfo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +13,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { uploadCheckins } from "../../src/api/checkinsUpload";
+import { uploadCheckins, uploadOneCheckin } from "../../src/api/checkinsUpload";
+import { toBlePhotoProxyUrl } from "../../src/api/photoUtils";
 import { BleService } from "../../src/ble/BleService";
 import type { BleTagMarker, FieldCheckin, ScannedDevice } from "../../src/ble/types";
 import { normalizeBle } from "../../src/ble/wwAdvert";
@@ -19,9 +22,13 @@ import { useAppData } from "../../src/context/AppDataContext";
 import {
   buildNearbyRows,
   countLiveDevices,
+  photosForPatrol,
+  tagHasPhotos,
+  zoneRowStyle,
   zoneShortLabel,
 } from "../../src/field/fieldHelpers";
 import { LOW_BATTERY_PCT } from "../../src/config";
+import { getLocalPhotoUri } from "../../src/storage/fieldPhotoCache";
 import {
   getDailyDoneSet,
   getPendingCheckins,
@@ -61,6 +68,11 @@ export default function FieldScreen() {
   const [pending, setPending] = useState<FieldCheckin[]>([]);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [online, setOnline] = useState(true);
+  const [photoModalTag, setPhotoModalTag] = useState<BleTagMarker | null>(null);
+  const [photoModalItems, setPhotoModalItems] = useState<
+    Array<{ label: string; uri: string }>
+  >([]);
+  const [photoModalLoading, setPhotoModalLoading] = useState(false);
   const autoConnectRef = useRef(false);
 
   const refreshDaily = useCallback(async () => {
@@ -218,6 +230,24 @@ export default function FieldScreen() {
     }
   }, [devices, tagPatrolMode, focusTag, connectedId, connecting, scanActive, scanPaused, tryAutoConnect]);
 
+  const pushCheckinToServer = useCallback(
+    async (checkin: FieldCheckin): Promise<string | null> => {
+      const result = await uploadOneCheckin(checkin, (ble) => findTag(ble));
+      if (result.ok) {
+        const uploaded = {
+          ...checkin,
+          uploaded: true,
+          uploadedAt: new Date().toISOString(),
+        };
+        await markCheckinsUploaded([uploaded]);
+        await refreshPending();
+        return null;
+      }
+      return result.err ?? "Ошибка отправки";
+    },
+    [findTag, refreshPending],
+  );
+
   const saveCheckinForBle = async (bleNum: string) => {
     if (gattBusy) return;
     const tag =
@@ -250,16 +280,24 @@ export default function FieldScreen() {
         setStatus(`GATT: данных нет (#${tag.ble})`);
         return;
       }
-      await saveCheckinRecord(tag, { deviceId: dev.id, rssi: dev.rssi }, live, route);
+      const checkin = await saveCheckinRecord(tag, { deviceId: dev.id, rssi: dev.rssi }, live, route);
       Vibration.vibrate([22, 36, 28]);
       setPendingOpen(true);
       await refreshDaily();
       const charge = live.chargeValue ?? 100;
-      setStatus(
-        charge <= LOW_BATTERY_PCT
-          ? `Обход #${tag.ble} сохранён. Батарейки ${charge}%!`
-          : `Обход #${tag.ble} сохранён (${charge}%)`,
-      );
+      setStatus(`Отправка обхода #${tag.ble}…`);
+      const uploadErr = await pushCheckinToServer(checkin);
+      if (uploadErr) {
+        setStatus(
+          charge <= LOW_BATTERY_PCT
+            ? `Обход #${tag.ble} сохранён локально (батарея ${charge}%). ${uploadErr.slice(0, 80)}`
+            : `Обход #${tag.ble} сохранён локально. ${uploadErr.slice(0, 80)}`,
+        );
+      } else if (charge <= LOW_BATTERY_PCT) {
+        setStatus(`Обход #${tag.ble} на сервере. Батарейки ${charge}%!`);
+      } else {
+        setStatus(`Обход #${tag.ble} отправлен на сервер (${charge}%)`);
+      }
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка GATT");
     } finally {
@@ -283,7 +321,7 @@ export default function FieldScreen() {
         setStatus(`GATT: данных нет (#${focusTag.ble})`);
         return;
       }
-      await saveCheckinRecord(
+      const checkin = await saveCheckinRecord(
         focusTag,
         { deviceId: connectedId, rssi: dev?.rssi ?? null },
         live,
@@ -300,7 +338,13 @@ export default function FieldScreen() {
       setScanPaused(false);
       setPendingOpen(true);
       await refreshDaily();
-      setStatus(`Обход #${focusTag.ble} сохранён. Отправьте на сервер.`);
+      setStatus(`Отправка обхода #${focusTag.ble}…`);
+      const uploadErr = await pushCheckinToServer(checkin);
+      setStatus(
+        uploadErr
+          ? `Обход #${focusTag.ble} сохранён локально. ${uploadErr.slice(0, 80)}`
+          : `Обход #${focusTag.ble} отправлен на сервер.`,
+      );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка чтения");
     } finally {
@@ -309,10 +353,6 @@ export default function FieldScreen() {
   };
 
   const uploadAll = async () => {
-    if (!online) {
-      setStatus("Нужен интернет");
-      return;
-    }
     const list = await getPendingCheckins();
     if (!list.length) {
       setStatus("Нет обходов для отправки");
@@ -330,6 +370,39 @@ export default function FieldScreen() {
       setStatus(`Все обходы отправлены (${result.ok})`);
     }
   };
+
+  const closePhotoModal = useCallback(() => {
+    setPhotoModalTag(null);
+    setPhotoModalItems([]);
+    setPhotoModalLoading(false);
+  }, []);
+
+  const openPhotosForTag = useCallback(async (tag: BleTagMarker) => {
+    const photos = photosForPatrol(tag);
+    setPhotoModalTag(tag);
+    setPhotoModalItems([]);
+    if (!photos.length) {
+      setPhotoModalLoading(false);
+      return;
+    }
+    setPhotoModalLoading(true);
+    try {
+      const items = await Promise.all(
+        photos.map(async (p) => {
+          const local = await getLocalPhotoUri(p.url);
+          const uri = local
+            ? local.startsWith("file://")
+              ? local
+              : `file://${local}`
+            : toBlePhotoProxyUrl(p.url) || p.url;
+          return { label: p.label, uri };
+        }),
+      );
+      setPhotoModalItems(items);
+    } finally {
+      setPhotoModalLoading(false);
+    }
+  }, []);
 
   const progressPct =
     routeProgress.total > 0
@@ -439,13 +512,46 @@ export default function FieldScreen() {
               : `BLE в эфире: ${liveCount}. Сопоставленных меток нет.`}
         </Text>
       ) : (
-        nearbyRows.map(({ tag, dev, saved }) => (
-          <View key={normalizeBle(tag.ble)} style={[styles.row, saved && styles.rowDone]}>
+        nearbyRows.map(({ tag, dev, saved }) => {
+          const zStyle = zoneRowStyle(tag, colors);
+          const isFocus =
+            tagPatrolMode &&
+            focusBle &&
+            normalizeBle(tag.ble) === normalizeBle(focusBle);
+          return (
+          <View
+            key={normalizeBle(tag.ble)}
+            style={[
+              styles.row,
+              zStyle && {
+                backgroundColor: zStyle.background,
+                borderColor: zStyle.borderColor,
+              },
+              saved && styles.rowDone,
+              isFocus && styles.rowFocus,
+            ]}
+          >
             <View style={styles.rowMain}>
-              <Text style={styles.ble}>
-                #{tag.ble}
-                {zoneShortLabel(tag) ? ` · ${zoneShortLabel(tag)}` : ""}
-              </Text>
+              <View style={styles.rowHead}>
+                <Text style={styles.bleNum}>#{tag.ble}</Text>
+                {zoneShortLabel(tag) ? (
+                  <View
+                    style={[
+                      styles.zonePill,
+                      zStyle && { backgroundColor: zStyle.zonePillBg },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.zonePillText,
+                        zStyle && { color: zStyle.zonePillText },
+                      ]}
+                    >
+                      {zoneShortLabel(tag)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               {tag.title ? <Text style={styles.sub}>{tag.title}</Text> : null}
               <Text style={styles.meta}>
                 {dev.rssi ?? "—"} dBm ·{" "}
@@ -456,19 +562,36 @@ export default function FieldScreen() {
                     : "—"}
               </Text>
             </View>
-            <Pressable
-              style={styles.sendBtn}
-              disabled={!!busyBle || gattBusy}
-              onPress={() => saveCheckinForBle(tag.ble)}
-            >
-              {busyBle === tag.ble ? (
-                <ActivityIndicator color={colors.accent} size="small" />
-              ) : (
-                <Text style={styles.sendBtnText}>Отправить</Text>
-              )}
-            </Pressable>
+            <View style={styles.rowActions}>
+              <Pressable
+                style={[styles.photoBtn, !tagHasPhotos(tag) && styles.photoBtnOff]}
+                disabled={!tagHasPhotos(tag)}
+                onPress={() => openPhotosForTag(tag)}
+              >
+                <Text
+                  style={[
+                    styles.photoBtnText,
+                    !tagHasPhotos(tag) && styles.photoBtnTextOff,
+                  ]}
+                >
+                  Фото
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.sendBtn}
+                disabled={!!busyBle || gattBusy}
+                onPress={() => saveCheckinForBle(tag.ble)}
+              >
+                {busyBle === tag.ble ? (
+                  <ActivityIndicator color={colors.accent} size="small" />
+                ) : (
+                  <Text style={styles.sendBtnText}>Отправить</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
-        ))
+          );
+        })
       )}
 
       <Pressable
@@ -498,8 +621,8 @@ export default function FieldScreen() {
       ) : null}
 
       <Pressable
-        style={[styles.uploadBtn, (!pending.length || !online) && styles.uploadBtnOff]}
-        disabled={!pending.length || !online}
+        style={[styles.uploadBtn, !pending.length && styles.uploadBtnOff]}
+        disabled={!pending.length}
         onPress={uploadAll}
       >
         <Text style={styles.uploadBtnText}>
@@ -508,6 +631,49 @@ export default function FieldScreen() {
             : "Отправить на сервер"}
         </Text>
       </Pressable>
+
+      <Modal
+        visible={photoModalTag != null}
+        transparent
+        animationType="fade"
+        onRequestClose={closePhotoModal}
+      >
+        <Pressable style={styles.photoModalBackdrop} onPress={closePhotoModal}>
+          <Pressable style={styles.photoModalCard} onPress={() => {}}>
+            <View style={styles.photoModalHead}>
+              <Text style={styles.photoModalTitle}>
+                #{photoModalTag?.ble}
+                {photoModalTag && zoneShortLabel(photoModalTag)
+                  ? ` · ${zoneShortLabel(photoModalTag)}`
+                  : ""}
+              </Text>
+              <Pressable onPress={closePhotoModal} hitSlop={8}>
+                <Text style={styles.photoModalClose}>×</Text>
+              </Pressable>
+            </View>
+            {photoModalLoading ? (
+              <ActivityIndicator color={colors.accent} style={styles.photoModalSpinner} />
+            ) : photoModalItems.length ? (
+              <ScrollView contentContainerStyle={styles.photoModalBody}>
+                {photoModalItems.map((item) => (
+                  <View key={item.label} style={styles.photoFig}>
+                    <Text style={styles.photoFigLabel}>{item.label}</Text>
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={styles.photoFigImg}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.photoModalEmpty}>
+                Нет фото. Обновите карту (↻) на вкладке «Карта».
+              </Text>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -594,10 +760,55 @@ const createStyles = (colors: AppColors) =>
     gap: 8,
   },
   rowDone: { opacity: 0.55 },
+  rowFocus: {
+    borderLeftWidth: 3,
+    borderLeftColor: "#ff9800",
+  },
+  rowHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  zonePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceAlt,
+  },
+  zonePillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: colors.textMuted,
+  },
   rowMain: { flex: 1 },
-  ble: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  bleNum: {
+    color: colors.neon,
+    fontWeight: "800",
+    fontSize: 17,
+  },
   sub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   meta: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  photoBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 8,
+    minWidth: 56,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  photoBtnOff: { opacity: 0.45 },
+  photoBtnText: { color: colors.text, fontWeight: "700", fontSize: 13 },
+  photoBtnTextOff: { color: colors.textMuted },
   sendBtn: {
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -607,6 +818,53 @@ const createStyles = (colors: AppColors) =>
     alignItems: "center",
   },
   sendBtnText: { color: colors.accent, fontWeight: "700", fontSize: 13 },
+  photoModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.88)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  photoModalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: "85%",
+    overflow: "hidden",
+  },
+  photoModalHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  photoModalTitle: { color: colors.text, fontWeight: "700", fontSize: 16, flex: 1 },
+  photoModalClose: { color: colors.textMuted, fontSize: 28, lineHeight: 28 },
+  photoModalSpinner: { marginVertical: 32 },
+  photoModalBody: { padding: 12, gap: 12 },
+  photoFig: { gap: 6 },
+  photoFigLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  photoFigImg: {
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceAlt,
+  },
+  photoModalEmpty: {
+    color: colors.textMuted,
+    textAlign: "center",
+    padding: 24,
+    fontSize: 14,
+  },
   pendingHead: {
     flexDirection: "row",
     justifyContent: "space-between",
