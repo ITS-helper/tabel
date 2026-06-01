@@ -3,7 +3,7 @@
     "name": "WORK WATCH BLE",
     "slug": "workwatch-ble-map-rn",
     "scheme": "workwatch-ble",
-    "version": "1.0.27",
+    "version": "1.0.28",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.workwatch.blemap",
-      "versionCode": 28,
+      "versionCode": 29,
       "adaptiveIcon": {
         "backgroundColor": "#0f1419",
         "foregroundImage": "./assets/android-icon-foreground.png",

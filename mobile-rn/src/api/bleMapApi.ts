@@ -12,6 +12,8 @@ import { WW_BLE_LIST_PATH } from "./wwServiceEndpoints";
 
 const WW_BLE_PAGE_MAX = 120;
 
+export type BleMapFetchChannel = "map_ble" | "ble_page" | "supabase_cache" | "none";
+
 let lastBleFetchDetail = "";
 
 export function getLastBleFetchDetail(): string {
@@ -198,10 +200,11 @@ function extractMapBleRaw(data: unknown): RawBlePoint[] {
   return [];
 }
 
-export async function fetchBleMapRaw(
+/** Живой refresh — только /api/v1/map/ble (как refreshBleMapFromApi в ble-map.js). */
+export async function fetchBleMapLive(
   companyId = BLE_DEFAULT_COMPANY_ID,
   opts: { forceLogin?: boolean } = {},
-): Promise<RawBlePoint[]> {
+): Promise<{ raw: RawBlePoint[]; channel: BleMapFetchChannel }> {
   lastBleFetchDetail = "";
   if (opts.forceLogin) {
     await bleForceRelogin();
@@ -209,21 +212,35 @@ export async function fetchBleMapRaw(
     await ensureBleTokenForField();
   }
 
-  // 1. Cloud map API — полные фото, маршруты, GPS (как fetchBleListLive в ble-map.js)
   try {
     const data = await bleApiFetch<unknown>(`/api/v1/map/ble/${companyId}`);
     const raw = extractMapBleRaw(data);
-    if (raw.some(rawHasCoords)) {
+    if (raw.length) {
       noteFetch("map_ble", `${raw.length} markers`);
-      return raw;
+      return { raw, channel: "map_ble" };
     }
-    noteFetch("map_ble", "no GPS");
+    noteFetch("map_ble", "empty");
   } catch (e) {
     noteFetch("map_ble", e);
     console.warn("[bleMapApi] /api/v1/map/ble failed", e);
   }
 
-  // 2. WW Service: GET /api/v1/ble?page=N — живой список, свежее Supabase-снимка
+  return { raw: [], channel: "none" };
+}
+
+export async function fetchBleMapRaw(
+  companyId = BLE_DEFAULT_COMPANY_ID,
+  opts: { forceLogin?: boolean } = {},
+): Promise<RawBlePoint[]> {
+  const live = await fetchBleMapLive(companyId, opts);
+  if (live.raw.length) return live.raw;
+
+  // 2. WW Service: GET /api/v1/ble?page=N
+  if (opts.forceLogin) {
+    await bleForceRelogin();
+  } else {
+    await ensureBleTokenForField();
+  }
   try {
     const paginated = await fetchAllBlePaginated();
     const withCoords = paginated.filter(rawHasCoords);
@@ -237,7 +254,7 @@ export async function fetchBleMapRaw(
     console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
   }
 
-  // 3. Supabase REST-снимок — только если map API и paginated недоступны
+  // 3. Supabase REST-снимок
   try {
     const cached = await fetchBleMapCacheFromSupabase(companyId);
     if (cached?.raw.some(rawHasCoords)) {

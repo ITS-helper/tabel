@@ -13,6 +13,7 @@ import { normalizeBle } from "../ble/wwAdvert";
 import { BleService } from "../ble/BleService";
 import { BLE_DEFAULT_COMPANY_ID } from "../config";
 import {
+  loadImmediateBootstrap,
   loadOfflineMarkers,
   loadOfflineMeta,
   loadOfflineZones,
@@ -42,8 +43,6 @@ import {
   syncFieldPhotosFromRaw,
   type PhotoCacheMeta,
 } from "../storage/fieldPhotoCache";
-import { isOnline } from "../storage/offlineCache";
-
 type AppDataContextValue = {
   markers: BleTagMarker[];
   zones: BleZone[];
@@ -55,8 +54,8 @@ type AppDataContextValue = {
   loading: boolean;
   error: string | null;
   offlineMeta: OfflineMeta | null;
-  refresh: () => Promise<void>;
-  syncOffline: () => Promise<void>;
+  refresh: () => Promise<boolean>;
+  syncOffline: () => Promise<boolean>;
   findTag: (ble: string) => BleTagMarker | undefined;
   routeMarkers: BleTagMarker[];
   routeProgress: { done: number; total: number };
@@ -101,10 +100,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setPhotoSyncNote(null);
       return;
     }
-    if (!(await isOnline())) {
-      setPhotoSyncNote(null);
-      return;
-    }
     setPhotoSyncNote("Фото: 0…");
     try {
       const result = await syncFieldPhotosFromRaw(raw, (done, total) => {
@@ -113,6 +108,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setPhotoMeta(await loadPhotoCacheMeta());
       if (result.ok > 0) {
         setPhotoSyncNote(`Фото +${result.ok}${result.fail ? `, ошибок ${result.fail}` : ""}`);
+      } else if (result.fail > 0) {
+        setPhotoSyncNote(`Ошибка загрузки фото (${result.fail})`);
       } else if (result.skipped > 0) {
         setPhotoSyncNote(`Фото в кэше: ${result.skipped}`);
       } else {
@@ -129,18 +126,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setDailyDone(getDailyDoneSet(store, route.routeId));
   }, [route.routeId]);
 
-  const applyPack = useCallback(async () => {
+  const applyPack = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setError(null);
+    let apiOk = false;
 
+    const bootstrap = await loadImmediateBootstrap(BLE_DEFAULT_COMPANY_ID);
     const localMarkers = await applyQueuedEditsToMarkers(
-      normalizeBleMarkers(await loadOfflineMarkers()),
+      bootstrap.markers.length
+        ? normalizeBleMarkers(bootstrap.markers)
+        : normalizeBleMarkers(await loadOfflineMarkers()),
     );
-    const localZones = await loadOfflineZones(BLE_DEFAULT_COMPANY_ID);
+    const localZones = bootstrap.zones.length
+      ? bootstrap.zones
+      : await loadOfflineZones(BLE_DEFAULT_COMPANY_ID);
+
     if (localMarkers.length) {
       setMarkers(localMarkers);
       setZones(localZones);
       setOfflineMeta(await loadOfflineMeta());
+      BleService.setKnownTags(localMarkers);
     }
 
     try {
@@ -156,7 +161,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch {
         setRoutes([]);
       }
-      void syncPhotos(pack.photoRaw);
+      void syncPhotos(pack.photoRaw.length ? pack.photoRaw : pack.raw);
       const hint = snapshotHint(
         pack.meta.source,
         pack.meta.savedAt,
@@ -164,7 +169,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         pack.fetchDetail,
       );
       setError(hint);
+      apiOk = !pack.apiRefreshFailed;
     } catch (e) {
+      apiOk = false;
       if (localMarkers.length) {
         const meta = await loadOfflineMeta();
         setError(
@@ -183,7 +190,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       await refreshMarkerEditCount();
     }
-  }, [refreshPending, refreshMarkerEditCount]);
+    return apiOk;
+  }, [refreshPending, refreshMarkerEditCount, syncPhotos]);
 
   const patchMarkerCoords = useCallback(
     async (updates: { id: number; lat: number; lng: number }[]) => {
@@ -206,6 +214,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     BleService.setKnownTags(markers);
   }, [markers]);
+
+  const findTag = useCallback(
+    (ble: string) => {
+      const key = normalizeBle(ble);
+      return markers.find((m) => normalizeBle(m.ble) === key);
+    },
+    [markers],
+  );
+
+  useEffect(() => {
+    BleService.setFindTag(findTag);
+    return () => BleService.setFindTag(null);
+  }, [findTag]);
 
   useEffect(() => {
     void (async () => {
@@ -232,14 +253,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setClusterEnabledState(v);
     await saveClusterEnabled(v);
   }, []);
-
-  const findTag = useCallback(
-    (ble: string) => {
-      const key = normalizeBle(ble);
-      return markers.find((m) => normalizeBle(m.ble) === key);
-    },
-    [markers],
-  );
 
   const routeMarkers = useMemo(() => {
     if (!route.routeId) return markers;

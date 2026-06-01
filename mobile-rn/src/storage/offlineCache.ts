@@ -2,9 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import {
   classifyBle,
+  fetchBleMapLive,
   fetchBleMapRaw,
   getLastBleFetchDetail,
   parseZonesFromMapPayload,
+  type BleMapFetchChannel,
 } from "../api/bleMapApi";
 import { fetchBleMapCacheFromSupabase } from "../api/bleMapCacheRemote";
 import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
@@ -16,6 +18,7 @@ import {
   BLE_OFFLINE_META_KEY,
   BLE_ZONES_LS_KEY,
 } from "../config";
+import { normalizeBle } from "../ble/wwAdvert";
 import {
   countMappableMarkers,
   normalizeBleMarkers,
@@ -105,10 +108,59 @@ async function saveOfflinePack(
   return meta;
 }
 
-function markersFromRaw(raw: RawBlePoint[]): BleTagMarker[] {
+function markersFromRaw(raw: RawBlePoint[], prev: BleTagMarker[] = []): BleTagMarker[] {
+  const prevById = new Map<number, BleTagMarker>();
+  const prevByBle = new Map<string, BleTagMarker>();
+  for (const m of prev) {
+    if (m.id != null) prevById.set(m.id, m);
+    prevByBle.set(normalizeBle(m.ble), m);
+  }
   return normalizeBleMarkers(
-    raw.map((p) => classifyBle(p)).filter((m) => m.lat != null && m.lng != null),
+    raw
+      .map((p) => {
+        const row = p as Record<string, unknown>;
+        const bleKey = normalizeBle(String(p.ble_number ?? row.bleNumber ?? ""));
+        const prevMarker =
+          (p.id != null ? prevById.get(p.id) : undefined) ??
+          prevByBle.get(bleKey);
+        return classifyBle(p, prevMarker);
+      })
+      .filter((m) => m.lat != null && m.lng != null),
   );
+}
+
+function rawHasPhotoFields(raw: RawBlePoint[]): boolean {
+  return raw.some((p) => {
+    const row = p as Record<string, unknown>;
+    return !!(
+      p.ble_image_url ||
+      p.location_image_url ||
+      row.bleImageUrl ||
+      row.locationImageUrl
+    );
+  });
+}
+
+function photoRawFromMarkers(markers: BleTagMarker[]): RawBlePoint[] {
+  return markers
+    .filter((m) => m.photoTag || m.photoPlace)
+    .map((m) => ({
+      id: m.id,
+      ble_number: Number(m.ble) || undefined,
+      ble_image_url: m.photoTag,
+      location_image_url: m.photoPlace,
+    }));
+}
+
+function resolvePhotoRaw(
+  raw: RawBlePoint[],
+  markers: BleTagMarker[],
+  bundled: RawBlePoint[],
+): RawBlePoint[] {
+  if (rawHasPhotoFields(raw)) return raw;
+  const fromMarkers = photoRawFromMarkers(markers);
+  if (fromMarkers.length) return fromMarkers;
+  return bundled;
 }
 
 function rawHasCoords(point: RawBlePoint): boolean {
@@ -213,30 +265,46 @@ async function loadBootstrapRaw(
 async function loadRawMarkers(companyId: number): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
+  channel: BleMapFetchChannel;
   snapshotAt?: string;
   apiFailed?: boolean;
   fetchDetail?: string;
 }> {
-  let apiFailed = false;
   let fetchDetail = "";
+  const live = await fetchBleMapLive(companyId, { forceLogin: true });
+  fetchDetail = getLastBleFetchDetail();
+  if (live.channel === "map_ble" && live.raw.length) {
+    return {
+      raw: live.raw,
+      source: "api",
+      channel: live.channel,
+      apiFailed: false,
+      fetchDetail,
+    };
+  }
+
+  let apiFailed = true;
+  const bootstrap = await loadBootstrapRaw(companyId, await loadOfflineMarkers());
+  if (bootstrap.raw.length) {
+    return {
+      ...bootstrap,
+      channel: bootstrap.source === "cache" ? "supabase_cache" : "none",
+      apiFailed,
+      fetchDetail,
+    };
+  }
+
   try {
-    const raw = await fetchBleMapRaw(companyId, { forceLogin: true });
+    const raw = await fetchBleMapRaw(companyId, { forceLogin: false });
     fetchDetail = getLastBleFetchDetail();
-    if (raw.length) return { raw, source: "api", fetchDetail };
-    apiFailed = true;
+    if (raw.length) {
+      return { raw, source: "api", channel: "ble_page", apiFailed: true, fetchDetail };
+    }
   } catch (e) {
-    apiFailed = true;
     fetchDetail = getLastBleFetchDetail() || (e instanceof Error ? e.message : "error");
   }
 
-  const bootstrap = await loadBootstrapRaw(companyId, await loadOfflineMarkers());
-  if (bootstrap.raw.length) {
-    return { ...bootstrap, apiFailed, fetchDetail };
-  }
-
-  throw new Error(
-    "Не удалось загрузить метки. Проверьте Wi‑Fi и нажмите ↻.",
-  );
+  throw new Error("Не удалось загрузить метки. Проверьте Wi‑Fi и нажмите ↻.");
 }
 
 async function loadZones(companyId: number, local: BleZone[]): Promise<BleZone[]> {
@@ -260,39 +328,14 @@ export async function syncOfflinePack(
 
   // Capacitor всегда пробует API; NetInfo не блокирует refresh.
   try {
-    const { raw, source, apiFailed, fetchDetail } = await loadRawMarkers(companyId);
-    const fromNetwork = raw.length ? markersFromRaw(raw) : [];
+    const { raw, source, channel, apiFailed, fetchDetail } = await loadRawMarkers(companyId);
+    const fromNetwork = raw.length ? markersFromRaw(raw, localMarkers) : [];
     const markers = fromNetwork.length ? fromNetwork : localMarkers;
     const zones = await loadZones(companyId, localZones);
-    const photoRaw =
-      raw.some((p) => p.ble_image_url || p.location_image_url) ? raw : bundledFallback();
+    const photoRaw = resolvePhotoRaw(raw, markers, bundledFallback());
+    const liveRefresh = channel === "map_ble" && fromNetwork.length > 0;
 
     if (!fromNetwork.length && localMarkers.length > 0) {
-      const fallback = await loadBootstrapRaw(companyId, localMarkers);
-      const fallbackMarkers = fallback.raw.length ? markersFromRaw(fallback.raw) : [];
-      const useFallback =
-        fallbackMarkers.length > localMarkers.length ||
-        (fallbackMarkers.length === localMarkers.length &&
-          parseSnapshotMs(fallback.snapshotAt) >
-            ((await loadOfflineMeta())?.savedAt ?? 0));
-      if (useFallback && fallbackMarkers.length) {
-        const meta = await saveOfflinePack(
-          fallbackMarkers,
-          zones.length ? zones : localZones,
-          companyId,
-          fallback.source,
-        );
-        return {
-          markers: fallbackMarkers,
-          zones: zones.length ? zones : localZones,
-          meta,
-          raw: fallback.raw,
-          photoRaw: fallback.raw,
-          apiRefreshFailed: true,
-          fetchDetail,
-        };
-      }
-
       const meta = (await loadOfflineMeta()) ?? {
         companyId,
         savedAt: 0,
@@ -315,8 +358,8 @@ export async function syncOfflinePack(
         meta,
         raw: photoRaw.length ? photoRaw : [],
         photoRaw,
-        apiRefreshFailed: !!apiFailed || source !== "api",
-        fetchDetail,
+        apiRefreshFailed: true,
+        fetchDetail: fetchDetail || "API вернул метки без координат",
       };
     }
 
@@ -332,7 +375,7 @@ export async function syncOfflinePack(
       meta,
       raw,
       photoRaw,
-      apiRefreshFailed: !!apiFailed || source !== "api",
+      apiRefreshFailed: !!apiFailed || !liveRefresh,
       fetchDetail,
     };
   } catch (e) {
@@ -424,39 +467,16 @@ export async function loadImmediateBootstrap(
 }> {
   const localMarkers = await loadOfflineMarkers();
   const localZones = await loadOfflineZones(companyId);
-  const localMeta = await loadOfflineMeta();
-
-  const bootstrap = await loadBootstrapRaw(companyId, localMarkers);
-  const bootstrapMarkers = bootstrap.raw.length
-    ? markersFromRaw(bootstrap.raw)
-    : [];
-
-  if (bootstrapMarkers.length) {
-    const useBootstrap =
-      !localMarkers.length ||
-      bootstrapMarkers.length > localMarkers.length ||
-      (bootstrapMarkers.length === localMarkers.length &&
-        parseSnapshotMs(bootstrap.snapshotAt) > (localMeta?.savedAt ?? 0));
-    if (useBootstrap) {
-      return {
-        markers: bootstrapMarkers,
-        zones: localZones,
-        source: bootstrap.source,
-      };
-    }
-  }
-
   if (localMarkers.length) {
     return { markers: localMarkers, zones: localZones, source: "local" };
   }
-
-  if (bootstrapMarkers.length) {
+  const bootstrap = await loadBootstrapRaw(companyId, []);
+  if (bootstrap.raw.length) {
     return {
-      markers: bootstrapMarkers,
+      markers: markersFromRaw(bootstrap.raw),
       zones: localZones,
       source: bootstrap.source,
     };
   }
-
   return { markers: [], zones: localZones, source: "local" };
 }
