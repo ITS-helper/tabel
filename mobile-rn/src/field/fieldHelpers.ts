@@ -198,6 +198,10 @@ export function tagHasPhotos(tag: BleTagMarker): boolean {
   return photosForPatrol(tag).length > 0;
 }
 
+export function isPatrolDone(tag: BleTagMarker, dailyDone: Set<string>): boolean {
+  return dailyDone.has(normalizeBle(tag.ble)) || !!tag.isInspected;
+}
+
 export function buildNearbyRows(
   devices: ScannedDevice[],
   scopeMarkers: BleTagMarker[],

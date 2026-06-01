@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BLE_CLUSTER_TOGGLE_KEY } from "../config";
+import { BLE_CLUSTER_TOGGLE_KEY, BLE_SHOW_PASSED_MARKERS_KEY } from "../config";
 
 export async function loadClusterEnabled(): Promise<boolean> {
   const v = await AsyncStorage.getItem(BLE_CLUSTER_TOGGLE_KEY);
@@ -9,6 +9,17 @@ export async function loadClusterEnabled(): Promise<boolean> {
 
 export async function saveClusterEnabled(on: boolean): Promise<void> {
   await AsyncStorage.setItem(BLE_CLUSTER_TOGGLE_KEY, on ? "1" : "0");
+}
+
+/** true = показывать пройденные метки на карте (по умолчанию). */
+export async function loadShowPassedMarkers(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(BLE_SHOW_PASSED_MARKERS_KEY);
+  if (v === "0") return false;
+  return true;
+}
+
+export async function saveShowPassedMarkers(on: boolean): Promise<void> {
+  await AsyncStorage.setItem(BLE_SHOW_PASSED_MARKERS_KEY, on ? "1" : "0");
 }
 
 export async function loadRouteFilter(): Promise<{ routeId: string; routeTitle: string }> {

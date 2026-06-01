@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import { RoutePickerModal } from "../../src/components/RoutePickerModal";
 import { useAppData } from "../../src/context/AppDataContext";
 import { APP_BUILD } from "../../src/config";
 import { zonesForRouteMarkers } from "../../src/map/mapHelpers";
+import { isPatrolDone } from "../../src/field/fieldHelpers";
 import { countMappableMarkers } from "../../src/storage/markerNormalize";
 import {
   mergeSessionEdits,
@@ -40,11 +41,15 @@ export default function MapScreen() {
     setRoute,
     clusterEnabled,
     setClusterEnabled,
+    showPassedMarkers,
+    setShowPassedMarkers,
     loading,
     error,
     offlineMeta,
     refresh,
     routeProgress,
+    dailyDone,
+    refreshPending,
     setFocusBle,
     photoMeta,
     photoSyncNote,
@@ -78,14 +83,25 @@ export default function MapScreen() {
     });
   }, [routeMarkers, sessionDirty]);
 
+  const mapMarkers = useMemo(() => {
+    if (showPassedMarkers) return displayMarkers;
+    return displayMarkers.filter((m) => !isPatrolDone(m, dailyDone));
+  }, [displayMarkers, showPassedMarkers, dailyDone]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPending();
+    }, [refreshPending]),
+  );
+
   const mappableCount = useMemo(
-    () => countMappableMarkers(displayMarkers),
-    [displayMarkers],
+    () => countMappableMarkers(mapMarkers),
+    [mapMarkers],
   );
 
   const routeZones = useMemo(
-    () => zonesForRouteMarkers(displayMarkers, zones, route.routeId),
-    [displayMarkers, zones, route.routeId],
+    () => zonesForRouteMarkers(mapMarkers, zones, route.routeId),
+    [mapMarkers, zones, route.routeId],
   );
 
   const cacheLabel = useMemo(() => {
@@ -294,13 +310,23 @@ export default function MapScreen() {
             : `${routeProgress.done}/${routeProgress.total} · ${mappableCount} на карте · ${route.routeId ? `${routeZones.length} зон` : `${zones.length} зон`}${query.trim() ? ` · «${query.trim()}»` : ""}`}
         </Text>
         {!editMode ? (
-          <View style={styles.clusterRow}>
-            <Text style={styles.subText}>Кластеры</Text>
-            <Switch
-              value={clusterEnabled}
-              onValueChange={setClusterEnabled}
-              trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
-            />
+          <View style={styles.togglesRow}>
+            <View style={styles.toggleItem}>
+              <Text style={styles.toggleLabel}>Пройденные</Text>
+              <Switch
+                value={showPassedMarkers}
+                onValueChange={setShowPassedMarkers}
+                trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+              />
+            </View>
+            <View style={styles.toggleItem}>
+              <Text style={styles.toggleLabel}>Кластеры</Text>
+              <Switch
+                value={clusterEnabled}
+                onValueChange={setClusterEnabled}
+                trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+              />
+            </View>
           </View>
         ) : null}
       </View>
@@ -364,7 +390,7 @@ export default function MapScreen() {
             </View>
           ) : null}
           <BleLeafletMap
-          markers={displayMarkers}
+          markers={mapMarkers}
           zones={routeZones}
           query={query}
           findTag={findTag}
@@ -476,7 +502,9 @@ const createStyles = (colors: AppColors) =>
     borderBottomColor: colors.border,
   },
   subText: { color: colors.textMuted, fontSize: 12, flex: 1 },
-  clusterRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  togglesRow: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
+  toggleItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  toggleLabel: { color: colors.textMuted, fontSize: 11 },
   editBar: {
     flexDirection: "row",
     gap: 8,

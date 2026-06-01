@@ -36,8 +36,10 @@ import {
 import {
   loadClusterEnabled,
   loadRouteFilter,
+  loadShowPassedMarkers,
   saveClusterEnabled,
   saveRouteFilter,
+  saveShowPassedMarkers,
 } from "../storage/prefs";
 import {
   loadPhotoCacheMeta,
@@ -52,6 +54,8 @@ type AppDataContextValue = {
   setRoute: (routeId: string, routeTitle: string) => void;
   clusterEnabled: boolean;
   setClusterEnabled: (v: boolean) => void;
+  showPassedMarkers: boolean;
+  setShowPassedMarkers: (v: boolean) => void;
   loading: boolean;
   error: string | null;
   offlineMeta: OfflineMeta | null;
@@ -62,6 +66,7 @@ type AppDataContextValue = {
   routeProgress: { done: number; total: number };
   pendingUploads: number;
   refreshPending: () => Promise<void>;
+  dailyDone: Set<string>;
   focusBle: string | null;
   setFocusBle: (ble: string | null) => void;
   photoMeta: PhotoCacheMeta | null;
@@ -82,6 +87,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     routeTitle: "Все маршруты",
   });
   const [clusterEnabled, setClusterEnabledState] = useState(true);
+  const [showPassedMarkers, setShowPassedMarkersState] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [offlineMeta, setOfflineMeta] = useState<OfflineMeta | null>(null);
@@ -246,11 +252,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const [cluster, routePref] = await Promise.all([
+      const [cluster, routePref, showPassed] = await Promise.all([
         loadClusterEnabled(),
         loadRouteFilter(),
+        loadShowPassedMarkers(),
       ]);
       setClusterEnabledState(cluster);
+      setShowPassedMarkersState(showPassed);
       setRouteState(routePref);
       setPhotoMeta(await loadPhotoCacheMeta());
       await applyPack();
@@ -268,6 +276,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const setClusterEnabled = useCallback(async (v: boolean) => {
     setClusterEnabledState(v);
     await saveClusterEnabled(v);
+  }, []);
+
+  const setShowPassedMarkers = useCallback(async (v: boolean) => {
+    setShowPassedMarkersState(v);
+    await saveShowPassedMarkers(v);
   }, []);
 
   const routeMarkers = useMemo(() => {
@@ -293,6 +306,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setRoute,
     clusterEnabled,
     setClusterEnabled,
+    showPassedMarkers,
+    setShowPassedMarkers,
     loading,
     error,
     offlineMeta,
@@ -303,6 +318,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     routeProgress,
     pendingUploads,
     refreshPending,
+    dailyDone,
     focusBle,
     setFocusBle,
     photoMeta,

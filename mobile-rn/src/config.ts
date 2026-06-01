@@ -11,7 +11,7 @@ export const BLE_WORKER_BASE =
 export const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
-export const APP_BUILD = "rn-20260601t";
+export const APP_BUILD = "rn-20260601u";
 export const APP_VERSION = "1.0.30";
 
 export const BLE_AUTO_USER = "impl_dept";
@@ -19,6 +19,7 @@ export const BLE_AUTO_PASS = "impl_dept_vsm_2024";
 export const BLE_TOKEN_KEY = "accessToken";
 
 export const BLE_CLUSTER_TOGGLE_KEY = "ww-ble-cluster-enabled";
+export const BLE_SHOW_PASSED_MARKERS_KEY = "ww-ble-rn-show-passed-markers";
 export const THEME_STORAGE_KEY = "ww-ble-rn-theme";
 export const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
 export const BLE_OFFLINE_MARKERS_KEY = "ww-ble-rn-offline-markers";
