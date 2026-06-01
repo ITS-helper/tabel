@@ -140,7 +140,7 @@ export function BleLeafletMap({
     };
   }, [displayMarkers]);
 
-  const payload = useMemo(
+  const mapPayload = useMemo(
     () => ({
       type: "update" as const,
       markers: displayMarkers,
@@ -150,7 +150,6 @@ export function BleLeafletMap({
         color: z.color,
         pts: z.pts,
       })),
-      photoSrc,
       clusterEnabled: editMode ? false : clusterEnabled,
       editMode,
       dirtyIds,
@@ -165,13 +164,21 @@ export function BleLeafletMap({
             }
           : null,
     }),
-    [displayMarkers, zones, photoSrc, clusterEnabled, editMode, dirtyIds, focusTag, query],
+    [displayMarkers, zones, clusterEnabled, editMode, dirtyIds, focusTag, query],
   );
 
   useEffect(() => {
     if (!ready) return;
-    pushMapUpdate(webRef, payload);
-  }, [ready, payload]);
+    pushMapUpdate(webRef, mapPayload);
+  }, [ready, mapPayload]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const json = JSON.stringify(photoSrc);
+    webRef.current?.injectJavaScript(
+      `(function(){ if(window.__updatePhotoSrc) window.__updatePhotoSrc(${json}); })(); true;`,
+    );
+  }, [ready, photoSrc]);
 
   const onMessage = useCallback(
     (ev: WebViewMessageEvent) => {
@@ -185,7 +192,7 @@ export function BleLeafletMap({
         };
         if (data.type === "ready") {
           setReady(true);
-          pushMapUpdate(webRef, payload);
+          pushMapUpdate(webRef, mapPayload);
           return;
         }
         if (data.type === "markerMoved" && data.id != null && data.lat != null && data.lng != null) {
@@ -202,8 +209,12 @@ export function BleLeafletMap({
         /* ignore */
       }
     },
-    [markers, findTag, onPatrol, onMarkerMoved, payload],
+    [markers, findTag, onPatrol, onMarkerMoved, mapPayload],
   );
+
+  const onLoadEnd = useCallback(() => {
+    pushMapUpdate(webRef, mapPayload);
+  }, [mapPayload]);
 
   return (
     <View style={styles.wrap}>
@@ -213,7 +224,7 @@ export function BleLeafletMap({
         source={{ html, baseUrl: "https://local.blemap" }}
         style={styles.web}
         onMessage={onMessage}
-        onLoadEnd={() => pushMapUpdate(webRef, payload)}
+        onLoadEnd={onLoadEnd}
         javaScriptEnabled
         domStorageEnabled
         mixedContentMode="always"

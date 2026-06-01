@@ -97,7 +97,7 @@ export function buildLeafletHtml(): string {
     var BOOT_ZOOM = ${BLE_DEFAULT_CENTER_ZOOM};
     var ZONE_NEON = "${BLE_ZONE_NEON}";
     var ZONE_NEON_FILL = "${BLE_ZONE_NEON_FILL}";
-    var map = L.map("map", { zoomControl:true, attributionControl:false }).setView([59.6603, 28.3967], 16);
+    var map = L.map("map", { zoomControl:true, attributionControl:false, maxZoom:18 }).setView([59.6603, 28.3967], 16);
     map.createPane("bleZones");
     map.getPane("bleZones").classList.add("ble-zones-pane");
     map.createPane("bleMarkers");
@@ -108,16 +108,29 @@ export function buildLeafletHtml(): string {
     var clusterEnabled = true;
     var editMode = false;
     var dirtySet = {};
+    var markerByBle = {};
+    var markerDataByBle = {};
     var HOLD_MS = ${BLE_MARKER_HOLD_MS};
+    var MAP_MAX_ZOOM = 18;
 
-    function makeClusterGroup() {
+    function makeClusterGroup(markerCount) {
+      var heavy = markerCount > 350;
       return L.markerClusterGroup({
-      maxClusterRadius: function(z) { return z < 17 ? 120 : z < 19 ? 40 : 1; },
-      disableClusteringAtZoom: 20,
+      maxClusterRadius: function(z) {
+        if (z >= MAP_MAX_ZOOM - 1) return 0;
+        if (z < 15) return 100;
+        if (z < 17) return 55;
+        return 18;
+      },
+      disableClusteringAtZoom: MAP_MAX_ZOOM,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
-      animate: true,
+      animate: !heavy,
+      animateAddingMarkers: !heavy,
       chunkedLoading: true,
+      chunkInterval: heavy ? 120 : 64,
+      chunkDelay: heavy ? 20 : 8,
+      removeOutsideVisibleBounds: true,
       iconCreateFunction: function(c) {
         var n = c.getChildCount();
         var size = n < 10 ? "small" : n < 50 ? "medium" : "large";
@@ -130,7 +143,7 @@ export function buildLeafletHtml(): string {
       });
     }
 
-    function ensureMarkerTarget(useCluster) {
+    function ensureMarkerTarget(useCluster, markerCount) {
       if (useCluster) {
         if (markerLayer) {
           markerLayer.clearLayers();
@@ -138,8 +151,10 @@ export function buildLeafletHtml(): string {
           markerLayer = null;
         }
         if (!cluster) {
-          cluster = makeClusterGroup();
+          cluster = makeClusterGroup(markerCount || 0);
           map.addLayer(cluster);
+        } else {
+          cluster.clearLayers();
         }
         return cluster;
       }
@@ -396,8 +411,7 @@ export function buildLeafletHtml(): string {
         routeLine + typeLine + locLine + photos + patrol + '</div>';
     }
 
-    function bindPopup(marker, m) {
-      marker.bindPopup(function() { return makePopupHtml(m); }, { maxWidth: 280, minWidth: 160 });
+    function wirePopupDom(marker) {
       marker.on("popupopen", function() {
         var el = marker.getPopup() && marker.getPopup().getElement();
         if (!el) return;
@@ -417,11 +431,22 @@ export function buildLeafletHtml(): string {
         if (btn && window.ReactNativeWebView) {
           btn.addEventListener("click", function(ev) {
             ev.preventDefault();
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: "patrol", ble: String(m.ble) }));
+            var ble = btn.getAttribute("data-patrol-ble");
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: "patrol", ble: String(ble) }));
             marker.closePopup();
           }, { once: true });
         }
       });
+    }
+
+    function ensureMarkerPopup(marker, m) {
+      if (marker.getPopup()) return;
+      marker.bindPopup(function() { return makePopupHtml(m); }, { maxWidth: 280, minWidth: 160 });
+      wirePopupDom(marker);
+    }
+
+    function bindPopup(marker, m) {
+      marker.on("click", function() { ensureMarkerPopup(marker, m); });
     }
 
     function zoneStyleSatellite(z) {
@@ -446,16 +471,17 @@ export function buildLeafletHtml(): string {
 
     function updateMap(payload) {
       if (!payload) return;
-      photoSrcMap = payload.photoSrc || {};
       editMode = !!payload.editMode;
       dirtySet = {};
       (payload.dirtyIds || []).forEach(function(id) { dirtySet[id] = true; });
       document.body.classList.toggle("ble-map--edit", editMode);
       clusterEnabled = editMode ? false : (payload.clusterEnabled !== false);
-      var target = ensureMarkerTarget(clusterEnabled);
-      zoneLayer.clearLayers();
       var markers = payload.markers || [];
       var zones = payload.zones || [];
+      var target = ensureMarkerTarget(clusterEnabled, markers.length);
+      markerByBle = {};
+      markerDataByBle = {};
+      zoneLayer.clearLayers();
       var bounds = [];
 
       zones.forEach(function(z) {
@@ -471,6 +497,8 @@ export function buildLeafletHtml(): string {
         if (m.lat == null || m.lng == null) return;
         var isDirty = m.id != null && !!dirtySet[m.id];
         var mk = L.marker([m.lat, m.lng], { icon: createBleIcon(m, isDirty), pane: "bleMarkers" });
+        markerByBle[String(m.ble)] = mk;
+        markerDataByBle[String(m.ble)] = m;
         if (editMode && m.id != null) {
           mk.bindPopup('<span style="font-size:12px;color:#546E7A">Удержите 1 сек., затем перетащите</span>', { maxWidth: 220 });
           attachMarkerHoldDrag(mk, m);
@@ -484,17 +512,20 @@ export function buildLeafletHtml(): string {
       if (payload.focus && payload.focus.lat != null && !editMode) {
         map.setView([payload.focus.lat, payload.focus.lng], BOOT_ZOOM, { animate: true });
         if (payload.focus.openPopup) {
-          var openAt = function(layer) {
-            if (layer.getLatLng && Math.abs(layer.getLatLng().lat - payload.focus.lat) < 1e-6) {
-              if (clusterEnabled && cluster && cluster.zoomToShowLayer) {
-                cluster.zoomToShowLayer(layer, function() { layer.openPopup(); });
-              } else {
-                layer.openPopup();
-              }
+          var focusBle = String(payload.focus.ble || "");
+          var focusLayer = markerByBle[focusBle];
+          var focusData = markerDataByBle[focusBle];
+          if (focusLayer && focusData) {
+            var openFocus = function() {
+              ensureMarkerPopup(focusLayer, focusData);
+              focusLayer.openPopup();
+            };
+            if (clusterEnabled && cluster && cluster.zoomToShowLayer) {
+              cluster.zoomToShowLayer(focusLayer, openFocus);
+            } else {
+              openFocus();
             }
-          };
-          if (clusterEnabled && cluster) cluster.eachLayer(openAt);
-          else if (markerLayer) markerLayer.eachLayer(openAt);
+          }
         }
       } else if (payload.bootCenter && !userMoved) {
         centerOnBle(markers, payload.bootCenter, BOOT_ZOOM, false);
@@ -506,6 +537,9 @@ export function buildLeafletHtml(): string {
       setTimeout(function() { map.invalidateSize(); }, 120);
     }
     window.__updateMap = updateMap;
+    window.__updatePhotoSrc = function(src) {
+      photoSrcMap = src || {};
+    };
 
     document.getElementById("photoViewerClose").addEventListener("click", function() {
       document.getElementById("photoViewer").classList.remove("open");
