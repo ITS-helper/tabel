@@ -122,6 +122,23 @@ export async function fetchAllBlePaginated(): Promise<RawBlePoint[]> {
   return all;
 }
 
+function extractMapBleRaw(data: unknown): RawBlePoint[] {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  const o = data as Record<string, unknown>;
+  for (const key of ["payload", "items", "content", "data", "results"]) {
+    const v = o[key];
+    if (Array.isArray(v)) return v as RawBlePoint[];
+    if (v && typeof v === "object") {
+      const nested = v as Record<string, unknown>;
+      for (const nk of ["items", "content", "results"]) {
+        if (Array.isArray(nested[nk])) return nested[nk] as RawBlePoint[];
+      }
+    }
+  }
+  return [];
+}
+
 export async function fetchBleMapRaw(
   companyId = BLE_DEFAULT_COMPANY_ID,
 ): Promise<RawBlePoint[]> {
@@ -129,8 +146,9 @@ export async function fetchBleMapRaw(
 
   // 1. Полный map API — coords, фото, bleRoute (cloud fallback через bleClient)
   try {
-    const raw = await bleApiFetch<RawBlePoint[]>(`/api/v1/map/ble/${companyId}`);
-    if (Array.isArray(raw) && raw.some(rawHasCoords)) return raw;
+    const data = await bleApiFetch<unknown>(`/api/v1/map/ble/${companyId}`);
+    const raw = extractMapBleRaw(data);
+    if (raw.some(rawHasCoords)) return raw;
   } catch (e) {
     console.warn("[bleMapApi] /api/v1/map/ble failed", e);
   }

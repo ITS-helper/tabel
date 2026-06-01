@@ -97,8 +97,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncPhotos = useCallback(async (raw: import("../ble/types").RawBlePoint[]) => {
-    if (!raw.length || !(await isOnline())) return;
-    setPhotoSyncNote("Фото: 0%");
+    if (!raw.length) {
+      setPhotoSyncNote(null);
+      return;
+    }
+    if (!(await isOnline())) {
+      setPhotoSyncNote(null);
+      return;
+    }
+    setPhotoSyncNote("Фото: 0…");
     try {
       const result = await syncFieldPhotosFromRaw(raw, (done, total) => {
         setPhotoSyncNote(`Фото: ${done}/${total}`);
@@ -149,14 +156,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch {
         setRoutes([]);
       }
-      void syncPhotos(pack.raw);
-      const hint = snapshotHint(pack.meta.source, pack.meta.savedAt);
+      void syncPhotos(pack.photoRaw);
+      const hint = snapshotHint(
+        pack.meta.source,
+        pack.meta.savedAt,
+        pack.apiRefreshFailed,
+      );
       setError(hint);
     } catch (e) {
       if (localMarkers.length) {
         const meta = await loadOfflineMeta();
         setError(
-          snapshotHint(meta?.source ?? "local", meta?.savedAt) ??
+          snapshotHint(meta?.source ?? "local", meta?.savedAt, true) ??
             (e instanceof Error
               ? `${e.message} · показан локальный кэш`
               : "Ошибка загрузки · показан локальный кэш"),

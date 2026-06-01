@@ -30,9 +30,10 @@ export type OfflineMeta = {
   refreshedAt?: number;
 };
 
+/** Wi‑Fi на объекте часто без «интернета» в NetInfo, но backend.vsm доступен. */
 export async function isOnline(): Promise<boolean> {
   const s = await NetInfo.fetch();
-  return s.isConnected === true && s.isInternetReachable !== false;
+  return s.isConnected === true;
 }
 
 export async function saveOfflineMarkersOnly(markers: BleTagMarker[]): Promise<void> {
@@ -112,17 +113,25 @@ async function loadRawMarkers(companyId: number): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
   snapshotAt?: string;
+  apiFailed?: boolean;
 }> {
+  let apiFailed = false;
   try {
     const raw = await fetchBleMapRaw(companyId);
     if (raw.length) return { raw, source: "api" };
+    apiFailed = true;
   } catch {
-    /* bundled snapshot */
+    apiFailed = true;
   }
 
   const bundled = loadBundledBleCache(companyId);
   if (bundled?.raw.length) {
-    return { raw: bundled.raw, source: "bundle", snapshotAt: bundled.updatedAt };
+    return {
+      raw: bundled.raw,
+      source: "bundle",
+      snapshotAt: bundled.updatedAt,
+      apiFailed,
+    };
   }
 
   throw new Error(
@@ -141,10 +150,14 @@ export async function syncOfflinePack(
   zones: BleZone[];
   meta: OfflineMeta;
   raw: RawBlePoint[];
+  photoRaw: RawBlePoint[];
+  apiRefreshFailed: boolean;
 }> {
   const localMarkers = await loadOfflineMarkers();
   const localZones = await loadOfflineZones(companyId);
   const online = await isOnline();
+
+  const bundledFallback = () => loadBundledBleCache(companyId)?.raw ?? [];
 
   if (!online) {
     if (!localMarkers.length) {
@@ -152,7 +165,14 @@ export async function syncOfflinePack(
       if (bundled?.raw.length) {
         const markers = markersFromRaw(bundled.raw);
         const meta = await saveOfflinePack(markers, localZones, companyId, "bundle");
-        return { markers, zones: localZones, meta, raw: bundled.raw };
+        return {
+          markers,
+          zones: localZones,
+          meta,
+          raw: bundled.raw,
+          photoRaw: bundled.raw,
+          apiRefreshFailed: true,
+        };
       }
     }
     const meta = (await loadOfflineMeta()) ?? {
@@ -164,13 +184,23 @@ export async function syncOfflinePack(
       fromNetwork: false,
       source: "local" as const,
     };
-    return { markers: localMarkers, zones: localZones, meta, raw: [] };
+    const photoRaw = bundledFallback();
+    return {
+      markers: localMarkers,
+      zones: localZones,
+      meta,
+      raw: [],
+      photoRaw,
+      apiRefreshFailed: true,
+    };
   }
 
   try {
-    const { raw, source } = await loadRawMarkers(companyId);
+    const { raw, source, apiFailed } = await loadRawMarkers(companyId);
     const markers = markersFromRaw(raw);
     const zones = await loadZones(companyId, localZones);
+    const photoRaw =
+      raw.some((p) => p.ble_image_url || p.location_image_url) ? raw : bundledFallback();
 
     if (!markers.length && localMarkers.length > 0) {
       const meta = (await loadOfflineMeta()) ?? {
@@ -193,12 +223,21 @@ export async function syncOfflinePack(
         markers: localMarkers,
         zones: mergedZones,
         meta,
-        raw: raw.some((p) => p.ble_image_url || p.location_image_url) ? raw : [],
+        raw: photoRaw.length ? photoRaw : [],
+        photoRaw,
+        apiRefreshFailed: !!apiFailed || source !== "api",
       };
     }
 
     const meta = await saveOfflinePack(markers, zones, companyId, source);
-    return { markers, zones, meta, raw };
+    return {
+      markers,
+      zones,
+      meta,
+      raw,
+      photoRaw,
+      apiRefreshFailed: !!apiFailed || source !== "api",
+    };
   } catch (e) {
     if (localMarkers.length) {
       const meta = (await loadOfflineMeta()) ?? {
@@ -210,22 +249,41 @@ export async function syncOfflinePack(
         fromNetwork: false,
         source: "local" as const,
       };
-      return { markers: localMarkers, zones: localZones, meta, raw: [] };
+      const photoRaw = bundledFallback();
+      return {
+        markers: localMarkers,
+        zones: localZones,
+        meta,
+        raw: [],
+        photoRaw,
+        apiRefreshFailed: true,
+      };
     }
     throw e;
   }
 }
 
-export function snapshotHint(source: OfflineMeta["source"], savedAt?: number): string | null {
-  if (source !== "bundle" && source !== "cache" && source !== "local") return null;
+export function snapshotHint(
+  source: OfflineMeta["source"],
+  savedAt?: number,
+  apiRefreshFailed?: boolean,
+): string | null {
+  if (source === "api" && !apiRefreshFailed) return null;
   const age =
     savedAt && savedAt > 0
       ? formatBundleAge(new Date(savedAt).toISOString())
       : "";
+  if (source === "api" && apiRefreshFailed) {
+    return "Обновление с сервера не удалось — показан последний кэш.";
+  }
+  if (source !== "bundle" && source !== "cache" && source !== "local") return null;
   if (source === "bundle") {
-    return age
-      ? `Офлайн-снимок от ${age}. Обновите ↻ на объекте.`
-      : "Офлайн-снимок меток. Обновите ↻ на объекте.";
+    const base = age
+      ? `Офлайн-снимок от ${age}.`
+      : "Офлайн-снимок меток.";
+    return apiRefreshFailed
+      ? `${base} Не удалось обновить с API — проверьте Wi‑Fi на объекте и нажмите ↻.`
+      : `${base} Обновите ↻ на объекте.`;
   }
   if (source === "cache") {
     return age ? `Кэш от ${age}.` : "Кэш меток.";
