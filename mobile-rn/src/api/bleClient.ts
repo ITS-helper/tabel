@@ -15,8 +15,8 @@ import {
   type WwTransport,
 } from "./wwServiceEndpoints";
 
-const FETCH_TIMEOUT_MS = 120_000;
-const LIST_TIMEOUT_MS = 55_000;
+const FETCH_TIMEOUT_MS = 45_000;
+const LIST_TIMEOUT_MS = 30_000;
 const WORKER_ONLY_TIMEOUT_MS = 18_000;
 const MUTATION_TIMEOUT_MS = 35_000;
 const AUTH_TIMEOUT_MS = 25_000;

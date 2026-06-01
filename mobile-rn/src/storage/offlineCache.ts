@@ -508,12 +508,14 @@ export async function loadImmediateBootstrap(
   if (localMarkers.length) {
     return { markers: localMarkers, zones: localZones, source: "local" };
   }
-  const bootstrap = await loadBootstrapRaw(companyId, []);
-  if (bootstrap.raw.length) {
+  // Только синхронные источники — без сети, чтобы UI показал метки мгновенно.
+  // Свежий снимок (github / Supabase / live) подтянет syncOfflinePack отдельно.
+  const bundled = loadBundledBleCache(companyId);
+  if (bundled?.raw.length) {
     return {
-      markers: markersFromRaw(bootstrap.raw),
+      markers: markersFromRaw(bundled.raw),
       zones: localZones,
-      source: bootstrap.source,
+      source: "bundle",
     };
   }
   return { markers: [], zones: localZones, source: "local" };
