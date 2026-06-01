@@ -2,14 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   BLE_AUTO_PASS,
   BLE_AUTO_USER,
-  BLE_BACKEND_BASE,
   BLE_SUPABASE_BASE,
   BLE_TOKEN_KEY,
   BLE_WORKER_BASE,
   SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
 import {
-  WW_API_TRANSPORTS,
+  isMutationPath,
+  transportOrderForPath,
   WW_MOBILE_AUTH_PATH,
   type WwTransport,
 } from "./wwServiceEndpoints";
@@ -30,8 +30,14 @@ async function setBleToken(token: string): Promise<void> {
   await AsyncStorage.setItem(BLE_TOKEN_KEY, token);
 }
 
-function transportOrder(_path: string): TransportId[] {
-  return [...WW_API_TRANSPORTS];
+function transportOrder(path: string, method?: string): WwTransport[] {
+  return [...transportOrderForPath(path, method)];
+}
+
+function shouldFailover(res: Response, path: string, method?: string): boolean {
+  if (FAILOVER_STATUSES.has(res.status)) return true;
+  if (res.status === 422 && isMutationPath(path, method)) return true;
+  return false;
 }
 
 function defaultFetchHeaders(init: RequestInit): Headers {
@@ -56,8 +62,6 @@ function mergeSupabaseHeaders(headers: HeadersInit, bleToken: string | null): He
 
 function buildUrl(transport: TransportId, path: string): string {
   switch (transport) {
-    case "backend":
-      return `${BLE_BACKEND_BASE}${path}`;
     case "worker":
       return `${BLE_WORKER_BASE}${path}`;
     case "supabase":
@@ -73,10 +77,6 @@ function timeoutForPath(path: string): number {
     return LIST_TIMEOUT_MS;
   }
   return FETCH_TIMEOUT_MS;
-}
-
-function shouldFailover(res: Response): boolean {
-  return FAILOVER_STATUSES.has(res.status);
 }
 
 function isSslHostnameError(e: unknown): boolean {
@@ -101,7 +101,9 @@ export async function bleHttpFetch(
     authHeader?.replace(/^Bearer\s+/i, "") ||
     (await getBleToken());
 
-  for (const tid of transportOrder(path)) {
+  const method = init.method ?? "GET";
+
+  for (const tid of transportOrder(path, method)) {
     const url = buildUrl(tid, path);
     const headers =
       tid === "supabase"
@@ -112,7 +114,7 @@ export async function bleHttpFetch(
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(url, { ...init, headers, signal: ctrl.signal });
-      if (shouldFailover(res)) {
+      if (shouldFailover(res, path, method)) {
         lastErr = new Error(`${tid}_${res.status}`);
         continue;
       }
@@ -133,7 +135,7 @@ export async function bleHttpFetch(
   }
   throw lastErr instanceof Error
     ? lastErr
-    : new Error(`Нет связи с API (${path}).`);
+    : new Error(`Нет связи с API (${path}). Попробуйте Wi‑Fi или VPN.`);
 }
 
 function parseTokenPayload(data: Record<string, unknown>): string | null {
@@ -181,13 +183,21 @@ async function legacyTokenLogin(): Promise<string> {
   return token;
 }
 
+let loginChain: Promise<string> | null = null;
+
 export async function bleAutoLogin(): Promise<string> {
-  try {
-    return await mobileLogin(BLE_AUTO_USER, BLE_AUTO_PASS);
-  } catch (e) {
-    console.warn("[bleClient] mobile login failed, trying /api/v1/token", e);
-    return legacyTokenLogin();
-  }
+  if (loginChain) return loginChain;
+  loginChain = (async () => {
+    try {
+      return await legacyTokenLogin();
+    } catch (e) {
+      console.warn("[bleClient] /api/v1/token failed, trying mobile login", e);
+      return mobileLogin(BLE_AUTO_USER, BLE_AUTO_PASS);
+    } finally {
+      loginChain = null;
+    }
+  })();
+  return loginChain;
 }
 
 async function ensureToken(): Promise<string> {
@@ -262,11 +272,17 @@ export async function bleApiMutate<T>(
   return res.json() as Promise<T>;
 }
 
-export async function ensureBleTokenForField(): Promise<void> {
-  await ensureToken();
+export async function ensureBleTokenForField(): Promise<boolean> {
+  if (await getBleToken()) return true;
+  try {
+    await bleAutoLogin();
+    return !!(await getBleToken());
+  } catch {
+    return false;
+  }
 }
 
-/** Свежий токен перед ↻ — сбрасывает протухший accessToken. */
+/** Сброс токена — только при явной ошибке 401, не перед каждым запросом. */
 export async function bleForceRelogin(): Promise<void> {
   await AsyncStorage.removeItem(BLE_TOKEN_KEY);
   await bleAutoLogin();

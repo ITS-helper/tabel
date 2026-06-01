@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -90,6 +91,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [photoMeta, setPhotoMeta] = useState<PhotoCacheMeta | null>(null);
   const [photoSyncNote, setPhotoSyncNote] = useState<string | null>(null);
   const [pendingMarkerEdits, setPendingMarkerEdits] = useState(0);
+  const packBusyRef = useRef(false);
 
   const refreshMarkerEditCount = useCallback(async () => {
     setPendingMarkerEdits(await countPendingMarkerEdits());
@@ -127,9 +129,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [route.routeId]);
 
   const applyPack = useCallback(async (): Promise<boolean> => {
+    const waitStart = Date.now();
+    while (packBusyRef.current && Date.now() - waitStart < 120_000) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (packBusyRef.current) return false;
+
+    packBusyRef.current = true;
     setLoading(true);
     setError(null);
     let apiOk = false;
+    let photoRaw: import("../ble/types").RawBlePoint[] = [];
 
     const bootstrap = await loadImmediateBootstrap(BLE_DEFAULT_COMPANY_ID);
     const localMarkers = await applyQueuedEditsToMarkers(
@@ -161,7 +171,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch {
         setRoutes([]);
       }
-      await syncPhotos(pack.photoRaw.length ? pack.photoRaw : pack.raw);
+      photoRaw = pack.photoRaw.length ? pack.photoRaw : pack.raw;
       const hint = snapshotHint(
         pack.meta.source,
         pack.meta.savedAt,
@@ -188,10 +198,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       setLoading(false);
+      packBusyRef.current = false;
       await refreshMarkerEditCount();
     }
+
+    if (photoRaw.length) {
+      void syncPhotos(photoRaw);
+    }
+
     return apiOk;
-  }, [refreshPending, refreshMarkerEditCount, syncPhotos]);
+  }, [refreshMarkerEditCount, syncPhotos]);
 
   const patchMarkerCoords = useCallback(
     async (updates: { id: number; lat: number; lng: number }[]) => {

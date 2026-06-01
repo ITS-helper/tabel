@@ -4,7 +4,6 @@ import { coordsFromRaw } from "../storage/markerNormalize";
 import { resolvePhotoUrl } from "./photoUtils";
 import {
   bleApiFetch,
-  bleForceRelogin,
   ensureBleTokenForField,
 } from "./bleClient";
 import { fetchBleMapCacheFromSupabase } from "./bleMapCacheRemote";
@@ -135,7 +134,7 @@ function pageHasNext(data: unknown, page: number, batchLen: number): boolean {
 }
 
 /** Worker отдаёт camelCase — приводим к полям RawBlePoint. */
-function normalizeWorkerBlePoint(point: RawBlePoint): RawBlePoint {
+export function normalizeWorkerBlePoint(point: RawBlePoint): RawBlePoint {
   const row = point as Record<string, unknown>;
   const bleRoute = point.bleRoute;
   const routeTitle =
@@ -203,18 +202,16 @@ function extractMapBleRaw(data: unknown): RawBlePoint[] {
 /** Живой refresh — только /api/v1/map/ble (как refreshBleMapFromApi в ble-map.js). */
 export async function fetchBleMapLive(
   companyId = BLE_DEFAULT_COMPANY_ID,
-  opts: { forceLogin?: boolean } = {},
 ): Promise<{ raw: RawBlePoint[]; channel: BleMapFetchChannel }> {
   lastBleFetchDetail = "";
-  if (opts.forceLogin) {
-    await bleForceRelogin();
-  } else {
-    await ensureBleTokenForField();
+  if (!(await ensureBleTokenForField())) {
+    noteFetch("map_ble", "auth_failed");
+    return { raw: [], channel: "none" };
   }
 
   try {
     const data = await bleApiFetch<unknown>(`/api/v1/map/ble/${companyId}`);
-    const raw = extractMapBleRaw(data);
+    const raw = extractMapBleRaw(data).map(normalizeWorkerBlePoint);
     if (raw.length) {
       noteFetch("map_ble", `${raw.length} markers`);
       return { raw, channel: "map_ble" };
@@ -230,17 +227,12 @@ export async function fetchBleMapLive(
 
 export async function fetchBleMapRaw(
   companyId = BLE_DEFAULT_COMPANY_ID,
-  opts: { forceLogin?: boolean } = {},
 ): Promise<RawBlePoint[]> {
-  const live = await fetchBleMapLive(companyId, opts);
+  const live = await fetchBleMapLive(companyId);
   if (live.raw.length) return live.raw;
 
-  // 2. WW Service: GET /api/v1/ble?page=N
-  if (opts.forceLogin) {
-    await bleForceRelogin();
-  } else {
-    await ensureBleTokenForField();
-  }
+  if (!(await ensureBleTokenForField())) return [];
+
   try {
     const paginated = await fetchAllBlePaginated();
     const withCoords = paginated.filter(rawHasCoords);

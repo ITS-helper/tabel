@@ -266,7 +266,7 @@ export default function MapScreen() {
         <Pressable
           style={[styles.iconBtn, refreshing && styles.iconBtnRefreshing]}
           onPress={onRefresh}
-          disabled={loading || refreshing || editMode}
+          disabled={refreshing || editMode}
         >
           {refreshing ? (
             <ActivityIndicator color={colors.accent} size="small" />

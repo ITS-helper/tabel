@@ -5,6 +5,7 @@ import {
   fetchBleMapLive,
   fetchBleMapRaw,
   getLastBleFetchDetail,
+  normalizeWorkerBlePoint,
   parseZonesFromMapPayload,
   type BleMapFetchChannel,
 } from "../api/bleMapApi";
@@ -117,6 +118,7 @@ function markersFromRaw(raw: RawBlePoint[], prev: BleTagMarker[] = []): BleTagMa
   }
   return normalizeBleMarkers(
     raw
+      .map((p) => normalizeWorkerBlePoint(p))
       .map((p) => {
         const row = p as Record<string, unknown>;
         const bleKey = normalizeBle(String(p.ble_number ?? row.bleNumber ?? ""));
@@ -271,7 +273,7 @@ async function loadRawMarkers(companyId: number): Promise<{
   fetchDetail?: string;
 }> {
   let fetchDetail = "";
-  const live = await fetchBleMapLive(companyId, { forceLogin: true });
+  const live = await fetchBleMapLive(companyId);
   fetchDetail = getLastBleFetchDetail();
   if (live.channel === "map_ble" && live.raw.length) {
     return {
@@ -295,7 +297,7 @@ async function loadRawMarkers(companyId: number): Promise<{
   }
 
   try {
-    const raw = await fetchBleMapRaw(companyId, { forceLogin: false });
+    const raw = await fetchBleMapRaw(companyId);
     fetchDetail = getLastBleFetchDetail();
     if (raw.length) {
       return { raw, source: "api", channel: "ble_page", apiFailed: true, fetchDetail };

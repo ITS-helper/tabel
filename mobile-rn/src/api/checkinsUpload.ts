@@ -1,4 +1,4 @@
-import { bleApiMutate, bleForceRelogin, getBleToken } from "./bleClient";
+import { bleApiMutate, ensureBleTokenForField } from "./bleClient";
 import { buildInspectionBody } from "./bleMapApi";
 import type { BleTagMarker, FieldCheckin } from "../ble/types";
 
@@ -67,8 +67,7 @@ export async function uploadCheckins(
   pending: FieldCheckin[],
   findTag: (ble: string) => BleTagMarker | undefined,
 ): Promise<UploadResult> {
-  await bleForceRelogin();
-  if (!(await getBleToken())) {
+  if (!(await ensureBleTokenForField())) {
     return { ok: 0, fail: pending.length, lastErr: "Не удалось войти в API", uploaded: [] };
   }
   let ok = 0;
