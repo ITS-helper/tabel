@@ -7,6 +7,17 @@ import { WW_BLE_LIST_PATH } from "./wwServiceEndpoints";
 
 const WW_BLE_PAGE_MAX = 120;
 
+function rawHasCoords(point: RawBlePoint): boolean {
+  const { lat, lng } = coordsFromRaw(point);
+  return (
+    lat != null &&
+    lng != null &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0)
+  );
+}
+
 export function classifyBle(point: RawBlePoint, prev?: BleTagMarker): BleTagMarker {
   const LOW = 15;
   const inspectionDays = 1;
@@ -90,21 +101,23 @@ function pageHasNext(data: unknown, page: number, batchLen: number): boolean {
   if (typeof o.hasNext === "boolean") return o.hasNext;
   if (typeof o.totalPages === "number") return page < o.totalPages;
   if (typeof o.last === "boolean") return !o.last;
+  if (typeof o.totalElements === "number" && typeof o.number === "number") {
+    const size = Number(o.size) || batchLen || 1;
+    return (Number(o.number) + 1) * size < Number(o.totalElements);
+  }
   return batchLen >= 50;
 }
 
-/** WW Service: GET /api/v1/ble?page=N (BleDataService.getAllBleTags). */
+/** WW Service: GET /api/v1/ble?page=N — резерв, если нет GPS не используем для карты. */
 export async function fetchAllBlePaginated(): Promise<RawBlePoint[]> {
   await ensureBleTokenForField();
   const all: RawBlePoint[] = [];
-  let page = 1;
-  while (page <= WW_BLE_PAGE_MAX) {
+  for (let page = 0; page <= WW_BLE_PAGE_MAX; page += 1) {
     const data = await bleApiFetch<unknown>(`${WW_BLE_LIST_PATH}?page=${page}`);
     const batch = extractBlePageItems(data);
     if (!batch.length) break;
     all.push(...batch);
     if (!pageHasNext(data, page, batch.length)) break;
-    page += 1;
   }
   return all;
 }
@@ -114,21 +127,53 @@ export async function fetchBleMapRaw(
 ): Promise<RawBlePoint[]> {
   await ensureBleTokenForField();
 
-  try {
-    const paginated = await fetchAllBlePaginated();
-    if (paginated.length) return paginated;
-  } catch (e) {
-    console.warn("[bleMapApi] WW paginated /api/v1/ble failed", e);
-  }
-
+  // 1. Полный map API — coords, фото, bleRoute (cloud fallback через bleClient)
   try {
     const raw = await bleApiFetch<RawBlePoint[]>(`/api/v1/map/ble/${companyId}`);
-    if (Array.isArray(raw) && raw.length) return raw;
+    if (Array.isArray(raw) && raw.some(rawHasCoords)) return raw;
   } catch (e) {
-    console.warn("[bleMapApi] /api/v1/map/ble fallback failed", e);
+    console.warn("[bleMapApi] /api/v1/map/ble failed", e);
+  }
+
+  // 2. WW paginated — только если есть координаты
+  try {
+    const paginated = await fetchAllBlePaginated();
+    if (paginated.some(rawHasCoords)) return paginated;
+  } catch (e) {
+    console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
   }
 
   return [];
+}
+
+/** Маршруты из bleRoute в метках (как unique_ble_routes в WW Service). */
+export function deriveRoutesFromMarkers(markers: BleTagMarker[]): BleRoute[] {
+  const byId = new Map<number, BleRoute>();
+  for (const m of markers) {
+    if (m.routeId == null) continue;
+    const id = Number(m.routeId);
+    if (!Number.isFinite(id)) continue;
+    byId.set(id, {
+      id,
+      title: m.routeTitle?.trim() || `Маршрут ${id}`,
+    });
+  }
+  return [...byId.values()].sort((a, b) =>
+    a.title.localeCompare(b.title, "ru"),
+  );
+}
+
+export async function fetchBleRoutes(
+  markers: BleTagMarker[] = [],
+): Promise<BleRoute[]> {
+  await ensureBleTokenForField();
+  try {
+    const data = await bleApiFetch<BleRoute[]>("/api/v1/ble/route");
+    if (Array.isArray(data) && data.length) return data;
+  } catch (e) {
+    console.warn("[bleMapApi] /api/v1/ble/route failed", e);
+  }
+  return deriveRoutesFromMarkers(markers);
 }
 
 export async function fetchBleMapMarkers(
@@ -136,12 +181,6 @@ export async function fetchBleMapMarkers(
 ): Promise<BleTagMarker[]> {
   const raw = await fetchBleMapRaw(companyId);
   return raw.map((p) => classifyBle(p)).filter((m) => m.lat != null && m.lng != null);
-}
-
-export async function fetchBleRoutes(): Promise<BleRoute[]> {
-  await ensureBleTokenForField();
-  const data = await bleApiFetch<BleRoute[]>("/api/v1/ble/route");
-  return Array.isArray(data) ? data : [];
 }
 
 function apiPointsToPts(points: unknown): [number, number][] {

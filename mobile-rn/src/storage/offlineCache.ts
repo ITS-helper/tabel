@@ -171,6 +171,32 @@ export async function syncOfflinePack(
     const { raw, source } = await loadRawMarkers(companyId);
     const markers = markersFromRaw(raw);
     const zones = await loadZones(companyId, localZones);
+
+    if (!markers.length && localMarkers.length > 0) {
+      const meta = (await loadOfflineMeta()) ?? {
+        companyId,
+        savedAt: 0,
+        markerCount: localMarkers.length,
+        mappableCount: countMappableMarkers(localMarkers),
+        zoneCount: localZones.length,
+        fromNetwork: false,
+        source: "local" as const,
+      };
+      const mergedZones = zones.length ? zones : localZones;
+      if (mergedZones.length && mergedZones !== localZones) {
+        await AsyncStorage.setItem(
+          BLE_ZONES_LS_KEY,
+          JSON.stringify({ companyId, savedAt: Date.now(), zones: mergedZones }),
+        );
+      }
+      return {
+        markers: localMarkers,
+        zones: mergedZones,
+        meta,
+        raw: raw.some((p) => p.ble_image_url || p.location_image_url) ? raw : [],
+      };
+    }
+
     const meta = await saveOfflinePack(markers, zones, companyId, source);
     return { markers, zones, meta, raw };
   } catch (e) {

@@ -7,6 +7,7 @@ import {
 } from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RawBlePoint } from "../ble/types";
+import { BLE_SUPABASE_BASE } from "../config";
 import {
   collectPhotoUrlsFromRaw,
   photoUrlPathnameKey,
@@ -95,14 +96,22 @@ export async function getLocalPhotoUri(url: string): Promise<string | null> {
 }
 
 async function fetchPhotoBytes(url: string): Promise<ArrayBuffer | null> {
-  try {
-    const res = await fetch(url);
+  const tryFetch = async (fetchUrl: string) => {
+    const res = await fetch(fetchUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf = await res.arrayBuffer();
     if (buf.byteLength > PHOTO_MAX_BYTES) throw new Error("too_large");
     return buf;
+  };
+  try {
+    return await tryFetch(url);
   } catch {
-    return null;
+    try {
+      const proxy = `${BLE_SUPABASE_BASE}?path=${encodeURIComponent("/photo")}&url=${encodeURIComponent(url)}`;
+      return await tryFetch(proxy);
+    } catch {
+      return null;
+    }
   }
 }
 

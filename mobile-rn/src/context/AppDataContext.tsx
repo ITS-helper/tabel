@@ -144,10 +144,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setOfflineMeta(pack.meta);
       BleService.setKnownTags(withEdits);
       try {
-        const r = await fetchBleRoutes();
+        const r = await fetchBleRoutes(withEdits);
         setRoutes(r);
       } catch {
-        /* routes optional offline */
+        setRoutes([]);
       }
       void syncPhotos(pack.raw);
       const hint = snapshotHint(pack.meta.source, pack.meta.savedAt);

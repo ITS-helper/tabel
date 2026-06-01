@@ -1,4 +1,4 @@
-/** Конфиг API — RN как WW Service (backend.vsm), не web/workers.dev. */
+/** Конфиг API — auth через backend.vsm; map/zones через backend + cloud fallback. */
 export const SUPABASE_URL = "https://owcuvcshwtivqueftiuk.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_zMRDhywx67zYK6SLGAyg-A_4KXV_Ujc";
@@ -11,8 +11,8 @@ export const BLE_WORKER_BASE =
 export const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
-export const APP_BUILD = "rn-20260601f";
-export const APP_VERSION = "1.0.14";
+export const APP_BUILD = "rn-20260601g";
+export const APP_VERSION = "1.0.15";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";
