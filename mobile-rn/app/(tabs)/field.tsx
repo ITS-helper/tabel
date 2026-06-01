@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { uploadCheckins, uploadOneCheckin } from "../../src/api/checkinsUpload";
+import { uploadCheckins } from "../../src/api/checkinsUpload";
 import { toBlePhotoProxyUrl } from "../../src/api/photoUtils";
 import { BleService } from "../../src/ble/BleService";
 import type { BleTagMarker, FieldCheckin, ScannedDevice } from "../../src/ble/types";
@@ -230,24 +230,6 @@ export default function FieldScreen() {
     }
   }, [devices, tagPatrolMode, focusTag, connectedId, connecting, scanActive, scanPaused, tryAutoConnect]);
 
-  const pushCheckinToServer = useCallback(
-    async (checkin: FieldCheckin): Promise<string | null> => {
-      const result = await uploadOneCheckin(checkin, (ble) => findTag(ble));
-      if (result.ok) {
-        const uploaded = {
-          ...checkin,
-          uploaded: true,
-          uploadedAt: new Date().toISOString(),
-        };
-        await markCheckinsUploaded([uploaded]);
-        await refreshPending();
-        return null;
-      }
-      return result.err ?? "Ошибка отправки";
-    },
-    [findTag, refreshPending],
-  );
-
   const saveCheckinForBle = async (bleNum: string) => {
     if (gattBusy) return;
     const tag =
@@ -280,24 +262,16 @@ export default function FieldScreen() {
         setStatus(`GATT: данных нет (#${tag.ble})`);
         return;
       }
-      const checkin = await saveCheckinRecord(tag, { deviceId: dev.id, rssi: dev.rssi }, live, route);
+      await saveCheckinRecord(tag, { deviceId: dev.id, rssi: dev.rssi }, live, route);
       Vibration.vibrate([22, 36, 28]);
       setPendingOpen(true);
       await refreshDaily();
       const charge = live.chargeValue ?? 100;
-      setStatus(`Отправка обхода #${tag.ble}…`);
-      const uploadErr = await pushCheckinToServer(checkin);
-      if (uploadErr) {
-        setStatus(
-          charge <= LOW_BATTERY_PCT
-            ? `Обход #${tag.ble} сохранён локально (батарея ${charge}%). ${uploadErr.slice(0, 80)}`
-            : `Обход #${tag.ble} сохранён локально. ${uploadErr.slice(0, 80)}`,
-        );
-      } else if (charge <= LOW_BATTERY_PCT) {
-        setStatus(`Обход #${tag.ble} на сервере. Батарейки ${charge}%!`);
-      } else {
-        setStatus(`Обход #${tag.ble} отправлен на сервер (${charge}%)`);
-      }
+      setStatus(
+        charge <= LOW_BATTERY_PCT
+          ? `Обход #${tag.ble} записан (батарея ${charge}%). Внизу «Отправить на сервер».`
+          : `Обход #${tag.ble} записан. Внизу «Отправить на сервер».`,
+      );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка GATT");
     } finally {
@@ -321,7 +295,7 @@ export default function FieldScreen() {
         setStatus(`GATT: данных нет (#${focusTag.ble})`);
         return;
       }
-      const checkin = await saveCheckinRecord(
+      await saveCheckinRecord(
         focusTag,
         { deviceId: connectedId, rssi: dev?.rssi ?? null },
         live,
@@ -338,13 +312,7 @@ export default function FieldScreen() {
       setScanPaused(false);
       setPendingOpen(true);
       await refreshDaily();
-      setStatus(`Отправка обхода #${focusTag.ble}…`);
-      const uploadErr = await pushCheckinToServer(checkin);
-      setStatus(
-        uploadErr
-          ? `Обход #${focusTag.ble} сохранён локально. ${uploadErr.slice(0, 80)}`
-          : `Обход #${focusTag.ble} отправлен на сервер.`,
-      );
+      setStatus(`Обход #${focusTag.ble} записан. Внизу «Отправить на сервер».`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Ошибка чтения");
     } finally {
@@ -463,11 +431,11 @@ export default function FieldScreen() {
           </Text>
           <Text style={styles.focusSub}>
             {connecting
-              ? "Подключение…"
+                ? "Подключение…"
               : gattBusy
                 ? "Читаем GATT…"
                 : connectedId
-                  ? "Подключено — можно отправить обход"
+                  ? "Подключено — можно записать обход"
                   : scanActive
                     ? "Сканирование… поднесите телефон"
                     : "Пауза или ожидание метки"}
@@ -480,7 +448,7 @@ export default function FieldScreen() {
             {gattBusy ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveBtnText}>Отправить обход</Text>
+              <Text style={styles.saveBtnText}>Записать обход</Text>
             )}
           </Pressable>
           <Pressable
@@ -585,7 +553,7 @@ export default function FieldScreen() {
                 {busyBle === tag.ble ? (
                   <ActivityIndicator color={colors.accent} size="small" />
                 ) : (
-                  <Text style={styles.sendBtnText}>Отправить</Text>
+                  <Text style={styles.sendBtnText}>Отметить</Text>
                 )}
               </Pressable>
             </View>
