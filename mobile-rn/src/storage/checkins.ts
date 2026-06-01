@@ -135,3 +135,18 @@ export async function markCheckinsUploaded(updated: FieldCheckin[]): Promise<voi
 export async function pendingCount(): Promise<number> {
   return (await getPendingCheckins()).length;
 }
+
+/** Резервная копия обходов (JSON) — на случай сбоя отправки. */
+export async function exportCheckinsBackup(): Promise<string> {
+  const store = await loadStore();
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      pending: store.checkins.filter((c) => !c.uploaded),
+      all: store.checkins,
+      dailyPatrol: store.dailyPatrol,
+    },
+    null,
+    2,
+  );
+}

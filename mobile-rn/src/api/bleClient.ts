@@ -8,6 +8,7 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
 import {
+  isInspectionPath,
   isMutationPath,
   isWorkerOnlyGetPath,
   transportOrderForPath,
@@ -19,6 +20,7 @@ const FETCH_TIMEOUT_MS = 45_000;
 const LIST_TIMEOUT_MS = 30_000;
 const WORKER_ONLY_TIMEOUT_MS = 18_000;
 const MUTATION_TIMEOUT_MS = 35_000;
+const MUTATION_WORKER_TIMEOUT_MS = 10_000;
 const AUTH_TIMEOUT_MS = 25_000;
 
 const BLE_TRANSPORT_PREF_KEY = "ww-ble-rn-transport-pref";
@@ -54,6 +56,14 @@ async function rememberTransport(id: WwTransport): Promise<void> {
 
 async function transportOrder(path: string, method?: string): Promise<WwTransport[]> {
   const base = [...transportOrderForPath(path, method)];
+  // Обходы/POST — только фиксированный порядок (supabase первым).
+  // Иначе «запомненный» worker на Wi‑Fi объекта блокирует каждую метку на 30+ с.
+  if (isMutationPath(path, method) || isInspectionPath(path)) {
+    return base;
+  }
+  if (path.includes("/token") || path.includes(WW_MOBILE_AUTH_PATH)) {
+    return base;
+  }
   const pref = await getPreferredTransport();
   if (!pref || !base.includes(pref)) return base;
   return [pref, ...base.filter((t) => t !== pref)];
@@ -101,7 +111,7 @@ function timeoutForPath(path: string, method?: string): number {
   if (isWorkerOnlyGetPath(path, method)) {
     return WORKER_ONLY_TIMEOUT_MS;
   }
-  if (isMutationPath(path, method)) {
+  if (isMutationPath(path, method) || isInspectionPath(path)) {
     return MUTATION_TIMEOUT_MS;
   }
   if (path.includes("/api/v1/ble") || path.includes("/map/ble/")) {

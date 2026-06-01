@@ -22,7 +22,7 @@ export const BLE_REMOTE_CACHE_TIMEOUT_MS = 20_000;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
 export const APP_BUILD = "rn-20260601v";
-export const APP_VERSION = "1.0.35";
+export const APP_VERSION = "1.0.36";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";

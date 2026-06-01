@@ -92,7 +92,8 @@ export function transportOrderForPath(path: string, method?: string): WwTranspor
     return ["supabase", "worker"];
   }
   if (isMutationPath(path, method) || isInspectionPath(path)) {
-    return ["supabase", "worker"];
+    // POST обходов через Supabase Edge — работает на Wi‑Fi объекта без worker/VPN.
+    return ["supabase"];
   }
   if (isWorkerOnlyGetPath(path, method)) {
     return ["worker"];

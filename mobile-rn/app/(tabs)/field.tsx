@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -33,8 +34,8 @@ import {
   getDailyDoneSet,
   getPendingCheckins,
   loadStore,
-  markCheckinsUploaded,
   saveCheckinRecord,
+  exportCheckinsBackup,
 } from "../../src/storage/checkins";
 import { useTheme } from "../../src/context/ThemeContext";
 import type { AppColors } from "../../src/theme/palettes";
@@ -73,6 +74,8 @@ export default function FieldScreen() {
     Array<{ label: string; uri: string }>
   >([]);
   const [photoModalLoading, setPhotoModalLoading] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const autoConnectRef = useRef(false);
 
   const refreshDaily = useCallback(async () => {
@@ -321,21 +324,60 @@ export default function FieldScreen() {
   };
 
   const uploadAll = async () => {
+    if (uploadBusy) return;
     const list = await getPendingCheckins();
     if (!list.length) {
       setStatus("Нет обходов для отправки");
       return;
     }
-    setStatus(`Отправка ${list.length}…`);
-    const result = await uploadCheckins(list, (ble) => findTag(ble));
-    if (result.uploaded.length) await markCheckinsUploaded(result.uploaded);
-    await refreshDaily();
-    if (result.fail && result.ok) {
-      setStatus(`Отправлено ${result.ok}, ошибок ${result.fail}`);
-    } else if (result.fail) {
-      setStatus(`Ошибка: ${result.lastErr.slice(0, 120)}`);
-    } else {
-      setStatus(`Все обходы отправлены (${result.ok})`);
+    setUploadBusy(true);
+    setUploadProgress(`0 / ${list.length}`);
+    setStatus(`Отправка ${list.length} обходов…`);
+    try {
+      const result = await uploadCheckins(list, (ble) => findTag(ble), (p) => {
+        setUploadProgress(`${p.done} / ${p.total}`);
+        setStatus(`Отправка ${p.done} / ${p.total} · #${p.currentBle}…`);
+      });
+      await refreshDaily();
+      if (result.fail && result.ok) {
+        setStatus(
+          `Отправлено ${result.ok} из ${list.length}. Осталось ${result.fail} — нажмите ещё раз. ${result.lastErr.slice(0, 80)}`,
+        );
+      } else if (result.fail) {
+        setStatus(
+          `Не отправлено (${result.fail}). Обходы сохранены на телефоне — повторите. ${result.lastErr.slice(0, 100)}`,
+        );
+      } else {
+        setStatus(`Все обходы отправлены (${result.ok})`);
+        setUploadProgress(null);
+      }
+    } catch (e) {
+      setStatus(
+        `Ошибка отправки. ${list.length} обходов сохранены на телефоне — повторите. ${e instanceof Error ? e.message : ""}`.slice(
+          0,
+          200,
+        ),
+      );
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  const backupCheckins = async () => {
+    const list = await getPendingCheckins();
+    if (!list.length) {
+      setStatus("Нет сохранённых обходов для резервной копии");
+      return;
+    }
+    try {
+      const json = await exportCheckinsBackup();
+      await Share.share({
+        message: json,
+        title: `WW обходы ${list.length} шт.`,
+      });
+      setStatus(`Резервная копия ${list.length} обходов — отправьте себе в Telegram/почту`);
+    } catch {
+      setStatus(`${list.length} обходов на телефоне — не удаляйте приложение`);
     }
   };
 
@@ -589,16 +631,33 @@ export default function FieldScreen() {
       ) : null}
 
       <Pressable
-        style={[styles.uploadBtn, !pending.length && styles.uploadBtnOff]}
-        disabled={!pending.length}
+        style={[styles.uploadBtn, (!pending.length || uploadBusy) && styles.uploadBtnOff]}
+        disabled={!pending.length || uploadBusy}
         onPress={uploadAll}
       >
-        <Text style={styles.uploadBtnText}>
-          {pending.length
-            ? `Отправить на сервер (${pending.length})`
-            : "Отправить на сервер"}
-        </Text>
+        {uploadBusy ? (
+          <View style={styles.uploadBtnInner}>
+            <ActivityIndicator color="#fff" size="small" />
+            <Text style={styles.uploadBtnText}>
+              {uploadProgress ? `Отправка ${uploadProgress}…` : "Отправка…"}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.uploadBtnText}>
+            {pending.length
+              ? `Отправить на сервер (${pending.length})`
+              : "Отправить на сервер"}
+          </Text>
+        )}
       </Pressable>
+
+      {pending.length > 0 ? (
+        <Pressable style={styles.backupBtn} onPress={backupCheckins} disabled={uploadBusy}>
+          <Text style={styles.backupBtnText}>
+            Резервная копия ({pending.length}) — не потерять обход
+          </Text>
+        </Pressable>
+      ) : null}
 
       <Modal
         visible={photoModalTag != null}
@@ -860,5 +919,12 @@ const createStyles = (colors: AppColors) =>
     marginTop: 8,
   },
   uploadBtnOff: { opacity: 0.45 },
+  uploadBtnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
   uploadBtnText: { color: "#fff", fontWeight: "700" },
+  backupBtn: {
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  backupBtnText: { color: colors.warning, fontSize: 13, fontWeight: "600" },
   });

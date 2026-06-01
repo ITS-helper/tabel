@@ -1,5 +1,6 @@
-import { bleApiMutate, ensureBleTokenForField } from "./bleClient";
+import { bleApiMutate, bleAutoLogin, getBleToken } from "./bleClient";
 import { buildInspectionBody } from "./bleMapApi";
+import { markCheckinsUploaded } from "../storage/checkins";
 import type { BleTagMarker, FieldCheckin } from "../ble/types";
 
 export type UploadResult = {
@@ -7,6 +8,12 @@ export type UploadResult = {
   fail: number;
   lastErr: string;
   uploaded: FieldCheckin[];
+};
+
+export type UploadProgress = {
+  done: number;
+  total: number;
+  currentBle: string;
 };
 
 const INSPECTION_PATHS = ["/api/v2/ble_inspection", "/api/v1/ble_inspection"] as const;
@@ -19,8 +26,14 @@ function formatUploadError(e: unknown): string {
   if (msg.includes("HTTP 422")) {
     return msg.replace(/^HTTP 422:\s*/, "Сервер отклонил: ").slice(0, 160);
   }
-  if (msg.includes("worker_") || msg.includes("supabase_") || msg.includes("Failed to fetch")) {
-    return "Нет связи с worker. Обходы идут через Supabase — проверьте Wi‑Fi; при блокировке worker нужен VPN.";
+  if (msg.includes("auth_failed") || msg.includes("HTTP 401")) {
+    return "Ошибка входа в API — проверьте интернет и повторите";
+  }
+  if (msg.includes("supabase_") || msg.includes("Failed to fetch") || msg.includes("Таймаут")) {
+    return "Нет связи с сервером обходов — проверьте Wi‑Fi / мобильный интернет";
+  }
+  if (msg.includes("worker_")) {
+    return "Сервер обходов недоступен — проверьте интернет";
   }
   return msg.slice(0, 160);
 }
@@ -66,43 +79,61 @@ function resolveTagForCheckin(
 export async function uploadCheckins(
   pending: FieldCheckin[],
   findTag: (ble: string) => BleTagMarker | undefined,
+  onProgress?: (p: UploadProgress) => void,
 ): Promise<UploadResult> {
-  if (!(await ensureBleTokenForField())) {
+  try {
+    await bleAutoLogin();
+  } catch (e) {
+    console.warn("[checkinsUpload] auth", e);
+  }
+  if (!(await getBleToken())) {
     return { ok: 0, fail: pending.length, lastErr: "Не удалось войти в API", uploaded: [] };
   }
+
   let ok = 0;
   let fail = 0;
   let lastErr = "";
   const uploaded: FieldCheckin[] = [];
-  for (const c of pending) {
+  const total = pending.length;
+
+  for (let i = 0; i < pending.length; i += 1) {
+    const c = pending[i];
+    onProgress?.({ done: i, total, currentBle: String(c.bleNumber) });
+
     const tag = resolveTagForCheckin(c, findTag);
     if (tag?.id == null) {
       fail++;
-      lastErr = `Метка #${c.bleNumber}: нет bleId (обновите карту)`;
+      lastErr = `Метка #${c.bleNumber}: нет bleId (обновите карту ↻)`;
       console.warn("[checkinsUpload] missing bleId", c.bleNumber, c.ble_id);
       continue;
     }
-    const body = buildInspectionBody(c, tag);
+
+    let body: ReturnType<typeof buildInspectionBody>;
+    try {
+      body = buildInspectionBody(c, tag);
+    } catch (e) {
+      fail++;
+      lastErr = formatUploadError(e);
+      continue;
+    }
+
     try {
       await postInspection(body);
-      c.uploaded = true;
-      c.uploadedAt = new Date().toISOString();
-      uploaded.push(c);
+      const uploadedOne: FieldCheckin = {
+        ...c,
+        uploaded: true,
+        uploadedAt: new Date().toISOString(),
+      };
+      uploaded.push(uploadedOne);
+      await markCheckinsUploaded([uploadedOne]);
       ok++;
+      onProgress?.({ done: i + 1, total, currentBle: String(c.bleNumber) });
     } catch (e) {
       fail++;
       lastErr = formatUploadError(e);
       console.warn("[checkinsUpload] fail", c.bleNumber, lastErr);
     }
   }
-  return { ok, fail, lastErr, uploaded };
-}
 
-export async function uploadOneCheckin(
-  checkin: FieldCheckin,
-  findTag: (ble: string) => BleTagMarker | undefined,
-): Promise<{ ok: boolean; err?: string }> {
-  const result = await uploadCheckins([checkin], findTag);
-  if (result.ok) return { ok: true };
-  return { ok: false, err: result.lastErr || "upload_failed" };
+  return { ok, fail, lastErr, uploaded };
 }
