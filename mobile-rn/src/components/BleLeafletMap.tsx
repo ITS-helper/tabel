@@ -39,6 +39,8 @@ type Props = {
   dirtyIds?: number[];
   onMarkerMoved?: (id: number, ble: string, lat: number, lng: number) => void;
   onPatrol?: (tag: BleTagMarker) => void;
+  /** Меняется после syncFieldPhotosFromRaw — перечитать file:// в попапах. */
+  photoCacheTick?: number | null;
 };
 
 function pushMapUpdate(webRef: RefObject<WebView | null>, payload: unknown) {
@@ -79,6 +81,7 @@ export function BleLeafletMap({
   dirtyIds = [],
   onMarkerMoved,
   onPatrol,
+  photoCacheTick = null,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -138,7 +141,7 @@ export function BleLeafletMap({
     return () => {
       cancelled = true;
     };
-  }, [displayMarkers]);
+  }, [displayMarkers, photoCacheTick]);
 
   const mapPayload = useMemo(
     () => ({

@@ -11,8 +11,8 @@ export const BLE_WORKER_BASE =
 export const BLE_SUPABASE_BASE = `${SUPABASE_URL}/functions/v1/ble-map-proxy`;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
-export const APP_BUILD = "rn-20260601q";
-export const APP_VERSION = "1.0.28";
+export const APP_BUILD = "rn-20260601r";
+export const APP_VERSION = "1.0.29";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";

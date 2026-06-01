@@ -125,6 +125,7 @@ export async function syncFieldPhotosFromRaw(
   const index = await loadIndex();
   const pathnameFromRaw = new Set(urls.map(photoUrlPathnameKey));
   const missing: string[] = [];
+  let indexDirty = false;
   for (const u of urls) {
     const pathKey = photoUrlPathnameKey(u);
     const p = index[u] || index[pathKey];
@@ -136,6 +137,7 @@ export async function syncFieldPhotosFromRaw(
     if (!info.exists) {
       delete index[u];
       delete index[pathKey];
+      indexDirty = true;
       missing.push(u);
     }
   }
@@ -143,6 +145,7 @@ export async function syncFieldPhotosFromRaw(
   for (const key of Object.keys(index)) {
     if (key.startsWith("http") && !pathnameFromRaw.has(photoUrlPathnameKey(key))) {
       delete index[key];
+      indexDirty = true;
     }
   }
 
@@ -180,6 +183,9 @@ export async function syncFieldPhotosFromRaw(
   const n = Math.min(PHOTO_BATCH, Math.max(missing.length, 1));
   if (missing.length) {
     await Promise.all(Array.from({ length: n }, () => worker()));
+    indexDirty = true;
+  }
+  if (indexDirty) {
     await saveIndex(index);
   }
 

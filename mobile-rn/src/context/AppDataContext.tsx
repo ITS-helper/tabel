@@ -161,7 +161,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch {
         setRoutes([]);
       }
-      void syncPhotos(pack.photoRaw.length ? pack.photoRaw : pack.raw);
+      await syncPhotos(pack.photoRaw.length ? pack.photoRaw : pack.raw);
       const hint = snapshotHint(
         pack.meta.source,
         pack.meta.savedAt,

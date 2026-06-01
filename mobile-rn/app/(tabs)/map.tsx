@@ -8,6 +8,7 @@ import {
   Switch,
   Text,
   TextInput,
+  Vibration,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -55,6 +56,7 @@ export default function MapScreen() {
   const [query, setQuery] = useState("");
   const [routeOpen, setRouteOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshPhase, setRefreshPhase] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [sessionDirty, setSessionDirty] = useState<Map<number, MarkerEditEntry>>(
     () => new Map(),
@@ -93,13 +95,29 @@ export default function MapScreen() {
   }, [offlineMeta]);
 
   const onRefresh = useCallback(async () => {
+    if (refreshing) return;
+    Vibration.vibrate(16);
     setRefreshing(true);
+    setRefreshPhase("Подключение к API…");
     try {
-      await refresh();
+      setRefreshPhase("Загрузка меток, зон и фото…");
+      const ok = await refresh();
+      if (ok) {
+        Vibration.vibrate([18, 36, 18]);
+        setRefreshPhase("Готово");
+      } else {
+        Vibration.vibrate([28, 48, 28]);
+        setRefreshPhase("Частично: показан кэш — проверьте Wi‑Fi");
+      }
+      setTimeout(() => setRefreshPhase(null), ok ? 1400 : 3200);
+    } catch {
+      Vibration.vibrate([28, 48, 28]);
+      setRefreshPhase("Не удалось обновить — проверьте Wi‑Fi");
+      setTimeout(() => setRefreshPhase(null), 3200);
     } finally {
       setRefreshing(false);
     }
-  }, [refresh]);
+  }, [refresh, refreshing]);
 
   const onPatrol = useCallback(
     (tag: { ble: string }) => {
@@ -246,7 +264,7 @@ export default function MapScreen() {
           <Text style={[styles.iconBtnText, editMode && styles.iconBtnTextActive]}>✎</Text>
         </Pressable>
         <Pressable
-          style={styles.iconBtn}
+          style={[styles.iconBtn, refreshing && styles.iconBtnRefreshing]}
           onPress={onRefresh}
           disabled={loading || refreshing || editMode}
         >
@@ -257,6 +275,17 @@ export default function MapScreen() {
           )}
         </Pressable>
       </View>
+
+      {refreshing || refreshPhase ? (
+        <View style={styles.refreshBar}>
+          {refreshing ? (
+            <ActivityIndicator color={colors.accent} size="small" />
+          ) : null}
+          <Text style={styles.refreshBarText}>
+            {refreshPhase ?? "Обновление…"}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.subbar}>
         <Text style={styles.subText} numberOfLines={2}>
@@ -344,14 +373,15 @@ export default function MapScreen() {
           dirtyIds={sessionDirtyIds}
           onMarkerMoved={onMarkerMoved}
           onPatrol={onPatrol}
+          photoCacheTick={photoMeta?.lastSyncAt ?? null}
         />
         </>
       )}
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          {refreshing
-            ? "Обновление: метки, зоны, фото…"
+          {refreshing || refreshPhase
+            ? refreshPhase ?? "Обновление: метки, зоны, фото…"
             : photoSyncNote
               ? photoSyncNote
               : `Загружено: ${offlineMeta?.markerCount ?? routeMarkers.length} меток (${mappableCount} GPS), ${offlineMeta?.zoneCount ?? zones.length} зон, ${photoMeta?.photoCount ?? 0} фото · ${sourceLabel} · ${cacheLabel}`}
@@ -415,9 +445,26 @@ const createStyles = (colors: AppColors) =>
     borderWidth: 1,
     borderColor: colors.border,
   },
-  iconBtnActive: { backgroundColor: colors.warning },
+  iconBtnActive: { backgroundColor: colors.warning, borderColor: colors.warning },
+  iconBtnRefreshing: { backgroundColor: colors.accent, borderColor: colors.neon },
   iconBtnText: { color: colors.accent, fontSize: 18 },
   iconBtnTextActive: { color: "#fff" },
+  refreshBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: colors.accentSoft,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neon,
+  },
+  refreshBarText: {
+    color: colors.neon,
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+  },
   subbar: {
     flexDirection: "row",
     alignItems: "center",
