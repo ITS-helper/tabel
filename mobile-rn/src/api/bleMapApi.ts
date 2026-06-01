@@ -2,10 +2,28 @@ import type { BleRoute, BleTagMarker, BleZone, RawBlePoint } from "../ble/types"
 import { BLE_DEFAULT_COMPANY_ID } from "../config";
 import { coordsFromRaw } from "../storage/markerNormalize";
 import { resolvePhotoUrl } from "./photoUtils";
-import { bleApiFetch, ensureBleTokenForField } from "./bleClient";
+import {
+  bleApiFetch,
+  bleForceRelogin,
+  ensureBleTokenForField,
+} from "./bleClient";
+import { fetchBleMapCacheFromSupabase } from "./bleMapCacheRemote";
 import { WW_BLE_LIST_PATH } from "./wwServiceEndpoints";
 
 const WW_BLE_PAGE_MAX = 120;
+
+let lastBleFetchDetail = "";
+
+export function getLastBleFetchDetail(): string {
+  return lastBleFetchDetail;
+}
+
+function noteFetch(step: string, err?: unknown): void {
+  const msg = err instanceof Error ? err.message : err ? String(err) : "empty";
+  lastBleFetchDetail = lastBleFetchDetail
+    ? `${lastBleFetchDetail}; ${step}: ${msg}`
+    : `${step}: ${msg}`;
+}
 
 function rawHasCoords(point: RawBlePoint): boolean {
   const { lat, lng } = coordsFromRaw(point);
@@ -141,24 +159,53 @@ function extractMapBleRaw(data: unknown): RawBlePoint[] {
 
 export async function fetchBleMapRaw(
   companyId = BLE_DEFAULT_COMPANY_ID,
+  opts: { forceLogin?: boolean } = {},
 ): Promise<RawBlePoint[]> {
-  await ensureBleTokenForField();
+  lastBleFetchDetail = "";
+  if (opts.forceLogin) {
+    await bleForceRelogin();
+  } else {
+    await ensureBleTokenForField();
+  }
 
-  // 1. Полный map API — coords, фото, bleRoute (cloud fallback через bleClient)
+  // 1. WW Service (libapp.so): GET /api/v1/ble?page=N — backend/proxy на объекте
+  try {
+    const paginated = await fetchAllBlePaginated();
+    const withCoords = paginated.filter(rawHasCoords);
+    if (withCoords.length) {
+      noteFetch("ble_page", `${withCoords.length} GPS`);
+      return paginated;
+    }
+    noteFetch("ble_page", "no GPS in list");
+  } catch (e) {
+    noteFetch("ble_page", e);
+    console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
+  }
+
+  // 2. Cloud map API — полные фото/bleRoute (worker/supabase)
   try {
     const data = await bleApiFetch<unknown>(`/api/v1/map/ble/${companyId}`);
     const raw = extractMapBleRaw(data);
-    if (raw.some(rawHasCoords)) return raw;
+    if (raw.some(rawHasCoords)) {
+      noteFetch("map_ble", `${raw.length} markers`);
+      return raw;
+    }
+    noteFetch("map_ble", "no GPS");
   } catch (e) {
+    noteFetch("map_ble", e);
     console.warn("[bleMapApi] /api/v1/map/ble failed", e);
   }
 
-  // 2. WW paginated — только если есть координаты
+  // 3. Supabase REST-снимок (без VPN, если таблица заполнена)
   try {
-    const paginated = await fetchAllBlePaginated();
-    if (paginated.some(rawHasCoords)) return paginated;
+    const cached = await fetchBleMapCacheFromSupabase(companyId);
+    if (cached?.raw.some(rawHasCoords)) {
+      noteFetch("supabase_cache", cached.updatedAt || "ok");
+      return cached.raw;
+    }
+    noteFetch("supabase_cache", "empty");
   } catch (e) {
-    console.warn("[bleMapApi] /api/v1/ble?page= failed", e);
+    noteFetch("supabase_cache", e);
   }
 
   return [];

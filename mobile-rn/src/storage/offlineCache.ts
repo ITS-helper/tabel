@@ -3,6 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import {
   classifyBle,
   fetchBleMapRaw,
+  getLastBleFetchDetail,
   parseZonesFromMapPayload,
 } from "../api/bleMapApi";
 import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
@@ -114,14 +115,18 @@ async function loadRawMarkers(companyId: number): Promise<{
   source: OfflineMeta["source"];
   snapshotAt?: string;
   apiFailed?: boolean;
+  fetchDetail?: string;
 }> {
   let apiFailed = false;
+  let fetchDetail = "";
   try {
-    const raw = await fetchBleMapRaw(companyId);
-    if (raw.length) return { raw, source: "api" };
+    const raw = await fetchBleMapRaw(companyId, { forceLogin: true });
+    fetchDetail = getLastBleFetchDetail();
+    if (raw.length) return { raw, source: "api", fetchDetail };
     apiFailed = true;
-  } catch {
+  } catch (e) {
     apiFailed = true;
+    fetchDetail = getLastBleFetchDetail() || (e instanceof Error ? e.message : "error");
   }
 
   const bundled = loadBundledBleCache(companyId);
@@ -131,6 +136,7 @@ async function loadRawMarkers(companyId: number): Promise<{
       source: "bundle",
       snapshotAt: bundled.updatedAt,
       apiFailed,
+      fetchDetail,
     };
   }
 
@@ -152,6 +158,7 @@ export async function syncOfflinePack(
   raw: RawBlePoint[];
   photoRaw: RawBlePoint[];
   apiRefreshFailed: boolean;
+  fetchDetail?: string;
 }> {
   const localMarkers = await loadOfflineMarkers();
   const localZones = await loadOfflineZones(companyId);
@@ -196,7 +203,7 @@ export async function syncOfflinePack(
   }
 
   try {
-    const { raw, source, apiFailed } = await loadRawMarkers(companyId);
+    const { raw, source, apiFailed, fetchDetail } = await loadRawMarkers(companyId);
     const markers = markersFromRaw(raw);
     const zones = await loadZones(companyId, localZones);
     const photoRaw =
@@ -226,6 +233,7 @@ export async function syncOfflinePack(
         raw: photoRaw.length ? photoRaw : [],
         photoRaw,
         apiRefreshFailed: !!apiFailed || source !== "api",
+        fetchDetail,
       };
     }
 
@@ -237,6 +245,7 @@ export async function syncOfflinePack(
       raw,
       photoRaw,
       apiRefreshFailed: !!apiFailed || source !== "api",
+      fetchDetail,
     };
   } catch (e) {
     if (localMarkers.length) {
@@ -257,6 +266,7 @@ export async function syncOfflinePack(
         raw: [],
         photoRaw,
         apiRefreshFailed: true,
+        fetchDetail: getLastBleFetchDetail() || (e instanceof Error ? e.message : undefined),
       };
     }
     throw e;
@@ -267,14 +277,17 @@ export function snapshotHint(
   source: OfflineMeta["source"],
   savedAt?: number,
   apiRefreshFailed?: boolean,
+  fetchDetail?: string,
 ): string | null {
   if (source === "api" && !apiRefreshFailed) return null;
+  const detail = fetchDetail?.trim();
+  const detailSuffix = detail ? ` (${detail})` : "";
   const age =
     savedAt && savedAt > 0
       ? formatBundleAge(new Date(savedAt).toISOString())
       : "";
   if (source === "api" && apiRefreshFailed) {
-    return "Обновление с сервера не удалось — показан последний кэш.";
+    return `Обновление с сервера не удалось — показан последний кэш.${detailSuffix}`;
   }
   if (source !== "bundle" && source !== "cache" && source !== "local") return null;
   if (source === "bundle") {
@@ -282,7 +295,7 @@ export function snapshotHint(
       ? `Офлайн-снимок от ${age}.`
       : "Офлайн-снимок меток.";
     return apiRefreshFailed
-      ? `${base} Не удалось обновить с API — проверьте Wi‑Fi на объекте и нажмите ↻.`
+      ? `${base} Не удалось обновить с API — проверьте Wi‑Fi на объекте и нажмите ↻.${detailSuffix}`
       : `${base} Обновите ↻ на объекте.`;
   }
   if (source === "cache") {

@@ -161,6 +161,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         pack.meta.source,
         pack.meta.savedAt,
         pack.apiRefreshFailed,
+        pack.fetchDetail,
       );
       setError(hint);
     } catch (e) {

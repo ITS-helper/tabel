@@ -10,7 +10,9 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
 import {
+  isBleListPagePath,
   isMapApiPath,
+  WW_BLE_LIST_TRANSPORTS,
   WW_CORPORATE_TRANSPORTS,
   WW_MAP_TRANSPORTS,
   WW_MOBILE_AUTH_PATH,
@@ -35,9 +37,21 @@ async function setBleToken(token: string): Promise<void> {
 }
 
 function transportOrder(path: string): TransportId[] {
-  return isMapApiPath(path)
-    ? [...WW_MAP_TRANSPORTS]
-    : [...WW_CORPORATE_TRANSPORTS];
+  if (isBleListPagePath(path)) return [...WW_BLE_LIST_TRANSPORTS];
+  if (isMapApiPath(path)) return [...WW_MAP_TRANSPORTS];
+  return [...WW_CORPORATE_TRANSPORTS];
+}
+
+function defaultFetchHeaders(init: RequestInit): Headers {
+  const h = new Headers(init.headers ?? {});
+  if (!h.has("User-Agent")) {
+    h.set(
+      "User-Agent",
+      "WORK-WATCH-BLE-RN/1.0 (Android; compatible; +its-helper.github.io/tabel)",
+    );
+  }
+  if (!h.has("Origin")) h.set("Origin", "https://its-helper.github.io");
+  return h;
 }
 
 function mergeSupabaseHeaders(headers: HeadersInit, bleToken: string | null): Headers {
@@ -92,8 +106,8 @@ export async function bleHttpFetch(
     const url = buildUrl(tid, path);
     const headers =
       tid === "supabase"
-        ? mergeSupabaseHeaders(init.headers ?? {}, bleToken)
-        : new Headers(init.headers ?? {});
+        ? mergeSupabaseHeaders(defaultFetchHeaders(init), bleToken)
+        : defaultFetchHeaders(init);
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -249,4 +263,10 @@ export async function bleApiMutate<T>(
 
 export async function ensureBleTokenForField(): Promise<void> {
   await ensureToken();
+}
+
+/** Свежий токен перед ↻ — сбрасывает протухший accessToken. */
+export async function bleForceRelogin(): Promise<void> {
+  await AsyncStorage.removeItem(BLE_TOKEN_KEY);
+  await bleAutoLogin();
 }
