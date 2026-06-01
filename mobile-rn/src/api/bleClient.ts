@@ -3,7 +3,6 @@ import {
   BLE_AUTO_PASS,
   BLE_AUTO_USER,
   BLE_BACKEND_BASE,
-  BLE_PROXY_BACKEND_BASE,
   BLE_SUPABASE_BASE,
   BLE_TOKEN_KEY,
   BLE_WORKER_BASE,
@@ -66,8 +65,6 @@ function buildUrl(transport: TransportId, path: string): string {
   switch (transport) {
     case "backend":
       return `${BLE_BACKEND_BASE}${path}`;
-    case "proxy":
-      return `${BLE_PROXY_BACKEND_BASE}${path}`;
     case "worker":
       return `${BLE_WORKER_BASE}${path}`;
     case "supabase":
@@ -87,6 +84,15 @@ function timeoutForPath(path: string): number {
 
 function shouldFailover(res: Response): boolean {
   return FAILOVER_STATUSES.has(res.status);
+}
+
+function isSslHostnameError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    msg.includes("SSLPeerUnverifiedException") ||
+    msg.includes("not verified") ||
+    msg.includes("CERTIFICATE_VERIFY_FAILED")
+  );
 }
 
 export async function bleHttpFetch(
@@ -119,7 +125,9 @@ export async function bleHttpFetch(
       }
       return res;
     } catch (e) {
-      lastErr = e;
+      lastErr = isSslHostnameError(e)
+        ? new Error(`${tid}_ssl_hostname`)
+        : e;
     } finally {
       clearTimeout(timer);
     }

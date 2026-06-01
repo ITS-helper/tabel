@@ -6,14 +6,14 @@ export const WW_MOBILE_AUTH_PATH = "/mobile/v1/auth/login";
 export const WW_BLE_LIST_PATH = "/api/v1/ble";
 export const WW_BLE_INSPECTION_PHOTO_PATH = "/api/v1/ble_inspection_w_photo";
 
-/** Auth и список обхода — только корпоративный контур. */
-export const WW_CORPORATE_TRANSPORTS = ["backend", "proxy"] as const;
+/** Auth и список — только backend (proxy.backend: SSL CN=backend.vsm, Android отклоняет). */
+export const WW_CORPORATE_TRANSPORTS = ["backend"] as const;
 
-/** Список меток WW Service (libapp.so) — только backend/proxy. */
-export const WW_BLE_LIST_TRANSPORTS = ["backend", "proxy"] as const;
+/** Список меток WW Service — GET /api/v1/ble?page=N */
+export const WW_BLE_LIST_TRANSPORTS = ["backend"] as const;
 
-/** map/ble, зоны — backend, затем cloud (supabase до worker: proxy SSL часто ломается). */
-export const WW_MAP_TRANSPORTS = ["backend", "proxy", "supabase", "worker"] as const;
+/** map/ble, зоны — backend, затем cloud */
+export const WW_MAP_TRANSPORTS = ["backend", "supabase", "worker"] as const;
 
 export type WwCorporateTransport = (typeof WW_CORPORATE_TRANSPORTS)[number];
 export type WwMapTransport = (typeof WW_MAP_TRANSPORTS)[number];
