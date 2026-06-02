@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Animated, Easing } from "react-native";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Ellipse, Path, Rect } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 
 function useNeonPulse(active: boolean) {
@@ -72,30 +72,28 @@ function NeonWrap({
   );
 }
 
-/** Карты — как в WorkWatch sidebar. */
+/** Карта — глобус. */
 export function TabMapIcon({ active, size = 24 }: IconProps) {
   return (
     <NeonWrap active={active} size={size}>
       {({ primary, glow, blue }) => (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Circle cx={12} cy={12} r={8.5} stroke={primary} strokeWidth={1.6} />
+          <Ellipse cx={12} cy={12} rx={3.8} ry={8.5} stroke={glow} strokeWidth={1.3} />
+          <Path d="M3.5 12h17" stroke={glow} strokeWidth={1.2} strokeLinecap="round" />
           <Path
-            d="M4 6.5 9 4.5v13L4 19.5V6.5Z"
-            stroke={glow}
-            strokeWidth={1.4}
-            strokeLinejoin="round"
-          />
-          <Path
-            d="M9 4.5 15 6.5v13L9 17.5V4.5Z"
-            stroke={primary}
-            strokeWidth={1.6}
-            strokeLinejoin="round"
-          />
-          <Path
-            d="M15 6.5 20 8.5v13l-5-2V6.5Z"
+            d="M5.2 8.2c1.8 1 3.8 1.5 6.8 1.5s5-0.5 6.8-1.5"
             stroke={blue}
-            strokeWidth={1.4}
-            strokeLinejoin="round"
-            opacity={active ? 1 : 0.7}
+            strokeWidth={1.1}
+            strokeLinecap="round"
+            opacity={active ? 0.9 : 0.65}
+          />
+          <Path
+            d="M5.2 15.8c1.8-1 3.8-1.5 6.8-1.5s5 0.5 6.8 1.5"
+            stroke={blue}
+            strokeWidth={1.1}
+            strokeLinecap="round"
+            opacity={active ? 0.9 : 0.65}
           />
         </Svg>
       )}
@@ -103,52 +101,71 @@ export function TabMapIcon({ active, size = 24 }: IconProps) {
   );
 }
 
-/** Обход — BLE / радиоволны. */
+/** Обход — рабочий ботинок. */
 export function TabPatrolIcon({ active, size = 24 }: IconProps) {
   return (
     <NeonWrap active={active} size={size}>
       {({ primary, glow, blue }) => (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <Circle cx={12} cy={14} r={2.2} fill={primary} />
           <Path
-            d="M8.5 11.5a5.5 5.5 0 0 1 7 0"
-            stroke={glow}
-            strokeWidth={1.5}
-            strokeLinecap="round"
+            d="M7 18.5h11.5c1.2 0 2-.8 2-2v-1.2H5v1.2c0 1.2.8 2 2 2Z"
+            fill={blue}
+            opacity={active ? 0.35 : 0.2}
           />
           <Path
-            d="M6 9a9 9 0 0 1 12 0"
+            d="M5 15.3h14.5v1.2H5v-1.2Z"
+            stroke={glow}
+            strokeWidth={1.3}
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M8.2 15.3V9.8c0-1.8 1.2-3.2 2.8-3.2h2c1.6 0 2.8 1.4 2.8 3.2v5.5"
             stroke={primary}
             strokeWidth={1.6}
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
           <Path
-            d="M3.5 6.5a13 13 0 0 1 17 0"
-            stroke={blue}
-            strokeWidth={1.4}
+            d="M8.2 11.5h7.6"
+            stroke={glow}
+            strokeWidth={1.2}
             strokeLinecap="round"
-            opacity={active ? 1 : 0.65}
           />
-          <Rect x={10.5} y={2} width={3} height={2.5} rx={0.8} fill={glow} opacity={active ? 1 : 0.5} />
+          <Path
+            d="M6.5 18.5c.8.6 1.8.9 3 .9h5c1.2 0 2.2-.3 3-.9"
+            stroke={primary}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
+          <Rect x={10.2} y={7.2} width={3.6} height={1.4} rx={0.5} fill={glow} opacity={active ? 0.85 : 0.5} />
         </Svg>
       )}
     </NeonWrap>
   );
 }
 
-/** Поиск — лупа. */
+/** Поиск — лупа с перекрестием внутри. */
 export function TabSearchIcon({ active, size = 24 }: IconProps) {
   return (
     <NeonWrap active={active} size={size}>
       {({ primary, glow, blue }) => (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <Circle cx={10.5} cy={10.5} r={5.5} stroke={primary} strokeWidth={1.7} />
-          <Circle cx={10.5} cy={10.5} r={3.2} stroke={glow} strokeWidth={0.9} opacity={0.75} />
+          <Circle cx={10.2} cy={10.2} r={6.2} stroke={primary} strokeWidth={1.7} />
+          <Path d="M9.2 10.2h2" stroke={glow} strokeWidth={1.4} strokeLinecap="round" />
+          <Path d="M10.2 9.2v2" stroke={glow} strokeWidth={1.4} strokeLinecap="round" />
+          <Circle cx={10.2} cy={10.2} r={2.1} stroke={blue} strokeWidth={1.1} opacity={active ? 0.85 : 0.55} />
           <Path
-            d="M15 15 20 20"
-            stroke={blue}
-            strokeWidth={2}
+            d="M14.8 14.8 20.5 20.5"
+            stroke={primary}
+            strokeWidth={2.2}
             strokeLinecap="round"
+          />
+          <Path
+            d="M17.2 17.2 19.8 19.8"
+            stroke={glow}
+            strokeWidth={1.1}
+            strokeLinecap="round"
+            opacity={0.7}
           />
         </Svg>
       )}

@@ -207,7 +207,7 @@ export function buildNearbyRows(
   scopeMarkers: BleTagMarker[],
   opts: {
     scanPaused: boolean;
-    tagPatrolMode: boolean;
+    showPassedMarkers: boolean;
     dailyDone: Set<string>;
     findTag?: (ble: string) => BleTagMarker | undefined;
   },
@@ -228,7 +228,7 @@ export function buildNearbyRows(
     }
   }
   let rows = [...byBle.values()];
-  if (!opts.tagPatrolMode) {
+  if (!opts.showPassedMarkers) {
     rows = rows.filter((r) => !r.saved);
   }
   rows.sort((a, b) => (b.dev.rssi ?? -999) - (a.dev.rssi ?? -999));

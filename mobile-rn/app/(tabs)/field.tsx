@@ -8,6 +8,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   Vibration,
@@ -53,6 +54,8 @@ export default function FieldScreen() {
     setFocusBle,
     pendingUploads,
     refreshPending,
+    showPassedMarkers,
+    setShowPassedMarkers,
   } = useAppData();
 
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
@@ -153,11 +156,11 @@ export default function FieldScreen() {
     () =>
       buildNearbyRows(devices, routeMarkers, {
         scanPaused,
-        tagPatrolMode,
+        showPassedMarkers,
         dailyDone,
         findTag,
       }),
-    [devices, routeMarkers, scanPaused, tagPatrolMode, dailyDone, findTag],
+    [devices, routeMarkers, scanPaused, showPassedMarkers, dailyDone, findTag],
   );
 
   const liveCount = useMemo(
@@ -508,9 +511,19 @@ export default function FieldScreen() {
 
       <View style={styles.sectionHead}>
         <Text style={styles.sectionLabel}>Метки рядом (BLE)</Text>
-        <Pressable style={styles.scanBtn} onPress={toggleScan}>
-          <Text style={styles.scanBtnText}>{scanBtnLabel}</Text>
-        </Pressable>
+        <View style={styles.sectionActions}>
+          <View style={styles.toggleItem}>
+            <Text style={styles.toggleLabel}>Пройденные</Text>
+            <Switch
+              value={showPassedMarkers}
+              onValueChange={setShowPassedMarkers}
+              trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+            />
+          </View>
+          <Pressable style={styles.scanBtn} onPress={toggleScan}>
+            <Text style={styles.scanBtnText}>{scanBtnLabel}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {nearbyRows.length === 0 ? (
@@ -760,11 +773,22 @@ const createStyles = (colors: AppColors) =>
   saveBtnText: { color: "#fff", fontWeight: "700" },
   cancel: { color: colors.textMuted, textAlign: "center" },
   sectionHead: {
+    marginTop: 8,
+    gap: 8,
+  },
+  sectionActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
+    gap: 8,
   },
+  toggleItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  toggleLabel: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   sectionLabel: { color: colors.text, fontWeight: "600" },
   scanBtn: {
     paddingHorizontal: 12,
