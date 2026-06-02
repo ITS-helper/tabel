@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchBleRoutes } from "../api/bleMapApi";
+import { fetchBleRoutes, getLastBleFetchDetail } from "../api/bleMapApi";
 import type { BleRoute, BleTagMarker, BleZone, RouteRef } from "../ble/types";
 import { normalizeBle } from "../ble/wwAdvert";
 import { BleService } from "../ble/BleService";
@@ -191,10 +191,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (localMarkers.length) {
         const meta = await loadOfflineMeta();
         setError(
-          snapshotHint(meta?.source ?? "local", meta?.savedAt, true) ??
-            (e instanceof Error
-              ? `${e.message} · показан локальный кэш`
-              : "Ошибка загрузки · показан локальный кэш"),
+          snapshotHint(
+            meta?.source ?? "local",
+            meta?.savedAt,
+            true,
+            getLastBleFetchDetail() || (e instanceof Error ? e.message : undefined),
+          ) ??
+            (e instanceof Error ? e.message : "Не удалось обновить с сервера"),
         );
         BleService.setKnownTags(localMarkers);
       } else {

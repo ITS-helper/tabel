@@ -2,17 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import {
   classifyBle,
+  fetchAllBlePaginated,
   fetchBleMapLive,
-  fetchBleMapRaw,
   getLastBleFetchDetail,
   normalizeWorkerBlePoint,
   parseZonesFromMapPayload,
   type BleMapFetchChannel,
 } from "../api/bleMapApi";
-import {
-  fetchBleMapCacheFromGithub,
-  fetchBleMapCacheFromSupabase,
-} from "../api/bleMapCacheRemote";
+import { bleAutoLogin } from "../api/bleClient";
 import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
 import { loadBleZonesFull } from "../api/zonesLoader";
 import type { BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
@@ -180,119 +177,28 @@ function rawHasCoords(point: RawBlePoint): boolean {
   );
 }
 
-function countRawWithCoords(raw: RawBlePoint[]): number {
-  return raw.filter(rawHasCoords).length;
-}
-
-function parseSnapshotMs(iso?: string): number {
-  if (!iso) return 0;
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : 0;
-}
-
-/** Выбираем самый полный/свежий снимок при сбое live API. */
-function pickBestFallbackRaw(
-  candidates: Array<{
-    raw: RawBlePoint[];
-    source: OfflineMeta["source"];
-    channel?: BleMapFetchChannel;
-    snapshotAt?: string;
-  }>,
-): {
-  raw: RawBlePoint[];
-  source: OfflineMeta["source"];
-  channel?: BleMapFetchChannel;
-  snapshotAt?: string;
-} | null {
-  let best: (typeof candidates)[number] | null = null;
-  for (const c of candidates) {
-    if (!c.raw.some(rawHasCoords)) continue;
-    if (!best) {
-      best = c;
-      continue;
-    }
-    const countDiff = countRawWithCoords(c.raw) - countRawWithCoords(best.raw);
-    if (countDiff > 0) {
-      best = c;
-      continue;
-    }
-    if (
-      countDiff === 0 &&
-      parseSnapshotMs(c.snapshotAt) > parseSnapshotMs(best.snapshotAt)
-    ) {
-      best = c;
-    }
-  }
-  return best;
-}
-
-/** Офлайн-снимок: github.io (свежий) → Supabase REST → bundled → local. */
+/** Первый запуск без кэша: только bundled APK, без github/Supabase-снимков. */
 async function loadBootstrapRaw(
   companyId: number,
-  localMarkers: BleTagMarker[],
 ): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
   channel?: BleMapFetchChannel;
   snapshotAt?: string;
 }> {
-  const candidates: Array<{
-    raw: RawBlePoint[];
-    source: OfflineMeta["source"];
-    channel?: BleMapFetchChannel;
-    snapshotAt?: string;
-  }> = [];
-
-  // Свежий снимок с сайта (github.io) — обновляется без пересборки APK,
-  // доступен даже когда worker заблокирован на сети объекта.
-  try {
-    const remote = await fetchBleMapCacheFromGithub(companyId);
-    if (remote?.raw.some(rawHasCoords)) {
-      candidates.push({
-        raw: remote.raw,
-        source: "cache",
-        channel: "github_cache",
-        snapshotAt: remote.updatedAt,
-      });
-    }
-  } catch {
-    /* ignore */
-  }
-
   const bundled = loadBundledBleCache(companyId);
   if (bundled?.raw.some(rawHasCoords)) {
-    candidates.push({
+    return {
       raw: bundled.raw,
       source: "bundle",
       channel: "none",
       snapshotAt: bundled.updatedAt,
-    });
+    };
   }
-
-  try {
-    const cached = await fetchBleMapCacheFromSupabase(companyId);
-    if (cached?.raw.some(rawHasCoords)) {
-      candidates.push({
-        raw: cached.raw,
-        source: "cache",
-        channel: "supabase_cache",
-        snapshotAt: cached.updatedAt,
-      });
-    }
-  } catch {
-    /* ignore */
-  }
-
-  const best = pickBestFallbackRaw(candidates);
-  if (best) return best;
-
-  if (localMarkers.length) {
-    return { raw: [], source: "local" };
-  }
-
   return { raw: [], source: "bundle" };
 }
 
+/** Живой API: map/ble → paginated ble. Без github/снимков. */
 async function loadRawMarkers(companyId: number): Promise<{
   raw: RawBlePoint[];
   source: OfflineMeta["source"];
@@ -302,6 +208,12 @@ async function loadRawMarkers(companyId: number): Promise<{
   fetchDetail?: string;
 }> {
   let fetchDetail = "";
+  try {
+    await bleAutoLogin();
+  } catch (e) {
+    console.warn("[offlineCache] auth before live refresh", e);
+  }
+
   const live = await fetchBleMapLive(companyId);
   fetchDetail = getLastBleFetchDetail();
   if (live.channel === "map_ble" && live.raw.length) {
@@ -314,30 +226,25 @@ async function loadRawMarkers(companyId: number): Promise<{
     };
   }
 
-  let apiFailed = true;
-  const bootstrap = await loadBootstrapRaw(companyId, await loadOfflineMarkers());
-  if (bootstrap.raw.length) {
-    return {
-      ...bootstrap,
-      channel:
-        bootstrap.channel ??
-        (bootstrap.source === "cache" ? "supabase_cache" : "none"),
-      apiFailed,
-      fetchDetail: fetchDetail || `snapshot: ${bootstrap.channel ?? bootstrap.source}`,
-    };
-  }
-
   try {
-    const raw = await fetchBleMapRaw(companyId);
+    const paginated = await fetchAllBlePaginated();
     fetchDetail = getLastBleFetchDetail();
-    if (raw.length) {
-      return { raw, source: "api", channel: "ble_page", apiFailed: true, fetchDetail };
+    if (paginated.length) {
+      return {
+        raw: paginated,
+        source: "api",
+        channel: "ble_page",
+        apiFailed: false,
+        fetchDetail,
+      };
     }
   } catch (e) {
     fetchDetail = getLastBleFetchDetail() || (e instanceof Error ? e.message : "error");
+    console.warn("[offlineCache] paginated ble failed", e);
   }
 
-  throw new Error("Не удалось загрузить метки. Проверьте Wi‑Fi и нажмите ↻.");
+  const detail = fetchDetail || "нет ответа API";
+  throw new Error(`Не удалось обновить с сервера (${detail}). Проверьте интернет.`);
 }
 
 async function loadZones(companyId: number, local: BleZone[]): Promise<BleZone[]> {
@@ -366,7 +273,10 @@ export async function syncOfflinePack(
     const markers = fromNetwork.length ? fromNetwork : localMarkers;
     const zones = await loadZones(companyId, localZones);
     const photoRaw = resolvePhotoRaw(raw, markers, bundledFallback());
-    const liveRefresh = channel === "map_ble" && fromNetwork.length > 0;
+    const liveRefresh =
+      (channel === "map_ble" || channel === "ble_page") &&
+      fromNetwork.length > 0 &&
+      !apiFailed;
 
     if (!fromNetwork.length && localMarkers.length > 0) {
       const meta = (await loadOfflineMeta()) ?? {
@@ -434,10 +344,10 @@ export async function syncOfflinePack(
       };
     }
 
-    const bootstrap = await loadBootstrapRaw(companyId, []);
+    const bootstrap = await loadBootstrapRaw(companyId);
     if (bootstrap.raw.length) {
       const markers = markersFromRaw(bootstrap.raw);
-      const meta = await saveOfflinePack(markers, localZones, companyId, bootstrap.source);
+      const meta = await saveOfflinePack(markers, localZones, companyId, "bundle");
       return {
         markers,
         zones: localZones,

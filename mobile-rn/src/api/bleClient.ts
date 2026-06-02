@@ -8,19 +8,19 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
 } from "../config";
 import {
+  isBleListPagePath,
   isInspectionPath,
+  isMapDataBlePath,
   isMutationPath,
-  isWorkerOnlyGetPath,
+  isHeavyBleListGetPath,
   transportOrderForPath,
   WW_MOBILE_AUTH_PATH,
   type WwTransport,
 } from "./wwServiceEndpoints";
 
 const FETCH_TIMEOUT_MS = 45_000;
-const LIST_TIMEOUT_MS = 30_000;
-const WORKER_ONLY_TIMEOUT_MS = 18_000;
+const LIST_TIMEOUT_MS = 90_000;
 const MUTATION_TIMEOUT_MS = 35_000;
-const MUTATION_WORKER_TIMEOUT_MS = 10_000;
 const AUTH_TIMEOUT_MS = 25_000;
 
 const BLE_TRANSPORT_PREF_KEY = "ww-ble-rn-transport-pref";
@@ -56,12 +56,17 @@ async function rememberTransport(id: WwTransport): Promise<void> {
 
 async function transportOrder(path: string, method?: string): Promise<WwTransport[]> {
   const base = [...transportOrderForPath(path, method)];
-  // Обходы/POST — только фиксированный порядок (supabase первым).
-  // Иначе «запомненный» worker на Wi‑Fi объекта блокирует каждую метку на 30+ с.
-  if (isMutationPath(path, method) || isInspectionPath(path)) {
-    return base;
-  }
-  if (path.includes("/token") || path.includes(WW_MOBILE_AUTH_PATH)) {
+  // Фиксированный порядок для auth, POST и живых GET карты (как ble-map.js).
+  if (
+    isMutationPath(path, method) ||
+    isInspectionPath(path) ||
+    path.includes("/token") ||
+    path.includes(WW_MOBILE_AUTH_PATH) ||
+    path.includes("/map/ble/") ||
+    isBleListPagePath(path) ||
+    isMapDataBlePath(path) ||
+    isHeavyBleListGetPath(path, method)
+  ) {
     return base;
   }
   const pref = await getPreferredTransport();
@@ -108,13 +113,10 @@ function timeoutForPath(path: string, method?: string): number {
   if (path.includes(WW_MOBILE_AUTH_PATH) || path.includes("/token")) {
     return AUTH_TIMEOUT_MS;
   }
-  if (isWorkerOnlyGetPath(path, method)) {
-    return WORKER_ONLY_TIMEOUT_MS;
-  }
   if (isMutationPath(path, method) || isInspectionPath(path)) {
     return MUTATION_TIMEOUT_MS;
   }
-  if (path.includes("/api/v1/ble") || path.includes("/map/ble/")) {
+  if (path.includes("/map/ble/") || isBleListPagePath(path)) {
     return LIST_TIMEOUT_MS;
   }
   return FETCH_TIMEOUT_MS;
@@ -128,11 +130,7 @@ function formatBleTransportError(err: unknown, path: string): Error {
     );
   }
   if (raw === "worker_500" || raw === "supabase_500") {
-    if (isWorkerOnlyGetPath(path)) {
-      return new Error(
-        "worker_500: список меток недоступен без worker/VPN — используется офлайн-снимок",
-      );
-    }
+    return new Error(`${raw}: сервер не ответил — проверьте интернет и нажмите ↻ ещё раз`);
   }
   if (raw.startsWith("worker_") || raw.startsWith("supabase_")) {
     return new Error(raw);

@@ -1,5 +1,6 @@
 /** Утилиты URL фото — как pickFirstUrl / collectPhotoUrlsFromRaw в ble-map.js */
 import type { RawBlePoint } from "../ble/types";
+import { BLE_SUPABASE_BASE, SUPABASE_PUBLISHABLE_KEY } from "../config";
 
 const TAG_KEYS = ["ble_image_url", "bleImageUrl", "ble_image"] as const;
 const PLACE_KEYS = [
@@ -75,7 +76,12 @@ export function isYandexPhotoUrl(url: string): boolean {
   }
 }
 
-/** Нативное приложение — прямой URL (WW Service / Capacitor), без supabase-прокси для CORS. */
+/** Прокси через Supabase Edge (ble-map.js → /ble-image). */
 export function toBlePhotoProxyUrl(url: string): string {
-  return url;
+  if (!url || !isYandexPhotoUrl(url)) return url;
+  const proxy = new URL(BLE_SUPABASE_BASE);
+  proxy.searchParams.set("path", "/ble-image");
+  proxy.searchParams.set("url", url);
+  proxy.searchParams.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  return proxy.toString();
 }

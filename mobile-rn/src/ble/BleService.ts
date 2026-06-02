@@ -1,4 +1,4 @@
-import { BleManager, Device, State } from "react-native-ble-plx";
+import { BleManager, Device, ScanMode as BlePlxScanMode, State } from "react-native-ble-plx";
 import {
   gattCharUuid,
   GATT_BATTERY_CHAR,
@@ -11,33 +11,28 @@ import { GATT_READ_ORDER, parseGattReads } from "./gattTelemetry";
 import { requestBlePermissions } from "./requestBlePermissions";
 import type { AdvTelemetry, BleTagMarker, GattLiveTelemetry, ScannedDevice } from "./types";
 import {
+  advertBytesFromScan,
   bleFromDeviceName,
   bleFromManufacturerData,
   isWwAdvertisement,
-  manufacturerDataToRecord,
   normalizeBle,
   normalizeMac,
+  serviceUuidsFromScan,
 } from "./wwAdvert";
 
-const SCAN_MODE = { allowDuplicates: true };
+const SCAN_OPTIONS = {
+  allowDuplicates: true,
+  scanMode: BlePlxScanMode.LowLatency,
+};
 
 type ScanListener = (devices: ScannedDevice[]) => void;
 type ScanMode = "field" | "finder";
 
 function parseWwAdvTelemetry(
   manufacturerData: string | Record<string, string> | null,
+  rawScanRecord?: string | null,
 ): AdvTelemetry | null {
-  const rec = manufacturerDataToRecord(manufacturerData);
-  const nums: number[] = [];
-  for (const val of Object.values(rec)) {
-    if (!val) continue;
-    try {
-      const binary = atob(val);
-      for (let i = 0; i < binary.length; i++) nums.push(binary.charCodeAt(i) & 0xff);
-    } catch {
-      /* skip */
-    }
-  }
+  const nums = advertBytesFromScan({ manufacturerData, rawScanRecord });
   for (let i = 0; i <= nums.length - 6; i++) {
     if (nums[i] === 0xa5 && nums[i + 1] === 8 && nums[i + 2] === 0 && nums[i + 3] === 1) {
       const out: AdvTelemetry = {};
@@ -60,6 +55,7 @@ class BleServiceImpl {
   private listener: ScanListener | null = null;
   private connectedId: string | null = null;
   private knownTags: BleTagMarker[] = [];
+  private findTagByBle: ((ble: string) => BleTagMarker | undefined) | null = null;
   private scanMode: ScanMode = "field";
   private finderTargets = new Set<string>();
   private finderWatchMode = false;
@@ -72,6 +68,10 @@ class BleServiceImpl {
 
   setKnownTags(tags: BleTagMarker[]) {
     this.knownTags = tags;
+  }
+
+  setFindTag(fn: ((ble: string) => BleTagMarker | undefined) | null) {
+    this.findTagByBle = fn;
   }
 
   setFinderTargets(bles: string[]) {
@@ -112,6 +112,7 @@ class BleServiceImpl {
     if (bleFromAdv) {
       const key = normalizeBle(bleFromAdv);
       if (this.knownTags.some((t) => normalizeBle(t.ble) === key)) return true;
+      if (this.findTagByBle?.(key)) return true;
     }
     return false;
   }
@@ -198,18 +199,32 @@ class BleServiceImpl {
 
   async startScan(mode: ScanMode = "field"): Promise<void> {
     await this.ensureReady();
-    if (this.paused || this.scanning) return;
-    this.scanMode = mode;
-    this.scanning = true;
-    this.startPruneTimer();
-    this.ble.startDeviceScan(null, SCAN_MODE, (error, device) => {
-      if (error) {
-        console.warn("[BleService] scan", error.message);
-        return;
+    if (this.paused) return;
+    if (this.scanning) {
+      try {
+        await this.ble.stopDeviceScan();
+      } catch {
+        /* restart scan */
       }
-      if (!device || this.paused) return;
-      this.ingestDevice(device);
-    });
+      this.scanning = false;
+    }
+    this.scanMode = mode;
+    this.startPruneTimer();
+    try {
+      await this.ble.startDeviceScan(null, SCAN_OPTIONS, (error, device) => {
+        if (error) {
+          console.warn("[BleService] scan", error.message);
+          return;
+        }
+        if (!device || this.paused) return;
+        this.ingestDevice(device);
+      });
+      this.scanning = true;
+    } catch (e) {
+      this.scanning = false;
+      this.stopPruneTimer();
+      throw e;
+    }
   }
 
   async pauseScan(): Promise<void> {
@@ -266,13 +281,17 @@ class BleServiceImpl {
 
   private ingestDevice(device: Device) {
     const mdRaw = device.manufacturerData ?? null;
-    const md = manufacturerDataToRecord(mdRaw);
+    const rawScanRecord = device.rawScanRecord ?? null;
     const bleFromAdv =
-      bleFromManufacturerData(mdRaw) ||
+      bleFromManufacturerData(mdRaw, rawScanRecord) ||
       bleFromDeviceName(device.name ?? device.localName);
     const isWw = isWwAdvertisement({
       manufacturerData: mdRaw,
-      serviceUUIDs: device.serviceUUIDs,
+      rawScanRecord,
+      serviceUUIDs: serviceUuidsFromScan({
+        serviceUUIDs: device.serviceUUIDs,
+        rawScanRecord,
+      }),
     });
 
     if (!this.acceptDevice(device, bleFromAdv, isWw)) return;
@@ -284,7 +303,7 @@ class BleServiceImpl {
       lastSeen: Date.now(),
       bleFromAdv: bleFromAdv || "",
       isWw,
-      advTelemetry: parseWwAdvTelemetry(mdRaw) ?? undefined,
+      advTelemetry: parseWwAdvTelemetry(mdRaw, rawScanRecord) ?? undefined,
     };
 
     this.devices.set(device.id, entry);

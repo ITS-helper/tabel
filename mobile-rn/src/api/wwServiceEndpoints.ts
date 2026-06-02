@@ -86,20 +86,24 @@ export function isWorkerOnlyGetPath(path: string, method?: string): boolean {
   return false;
 }
 
-/** Порядок каналов для RN на объекте (Wi‑Fi без VPN). */
+/** Порядок каналов — как ble-map.js в браузере: supabase → worker для живых GET. */
 export function transportOrderForPath(path: string, method?: string): WwTransport[] {
   if (path.includes("/token") || path.includes(WW_MOBILE_AUTH_PATH)) {
     return ["supabase", "worker"];
   }
   if (isMutationPath(path, method) || isInspectionPath(path)) {
-    // POST обходов через Supabase Edge — работает на Wi‑Fi объекта без worker/VPN.
     return ["supabase"];
   }
-  if (isWorkerOnlyGetPath(path, method)) {
-    return ["worker"];
+  if (
+    isHeavyBleListGetPath(path, method) ||
+    isMapDataBlePath(path) ||
+    isWorkerPreferredBlePath(path) ||
+    (path.includes("/api/v1/map/") && !path.includes("/api/v1/ble/route"))
+  ) {
+    return ["supabase", "worker"];
   }
   if (path.includes("/api/v1/ble/route")) {
-    return ["worker", "supabase"];
+    return ["supabase", "worker"];
   }
-  return ["worker", "supabase"];
+  return ["supabase", "worker"];
 }

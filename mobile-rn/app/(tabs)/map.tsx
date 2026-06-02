@@ -123,7 +123,7 @@ export default function MapScreen() {
         setRefreshPhase("Готово");
       } else {
         Vibration.vibrate([28, 48, 28]);
-        setRefreshPhase("Частично: показан кэш — проверьте Wi‑Fi");
+        setRefreshPhase("Не удалось обновить — проверьте интернет");
       }
       setTimeout(() => setRefreshPhase(null), ok ? 1400 : 3200);
     } catch {
