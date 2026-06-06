@@ -1,6 +1,12 @@
 import { bleApiMutate, bleAutoLogin, getBleToken } from "./bleClient";
-import { buildInspectionBody } from "./bleMapApi";
+import {
+  buildInspectionBody,
+  clampInspectionMovabilityType,
+  fetchBleIdByNumber,
+} from "./bleMapApi";
 import { markCheckinsUploaded } from "../storage/checkins";
+import { tagMacKeys } from "../field/fieldHelpers";
+import { normalizeBle, normalizeMac } from "../ble/wwAdvert";
 import type { BleTagMarker, FieldCheckin } from "../ble/types";
 
 export type UploadResult = {
@@ -22,6 +28,17 @@ function formatUploadError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (msg.includes("bleId") || msg.includes("ble_id")) {
     return "Нет ID метки в базе — обновите карту (↻) и повторите";
+  }
+  if (msg.includes("movabilityType") || msg.includes("enumeration member")) {
+    return "Сервер отклонил тип маяка — обновите приложение и повторите";
+  }
+  if (
+    msg.includes("power") &&
+    (msg.includes("greater than") ||
+      msg.includes("not_ge") ||
+      msg.includes('"power"'))
+  ) {
+    return "Сервер отклонил: мощность (power) должна быть 1–10. Перезапишите обход или обновите приложение.";
   }
   if (msg.includes("HTTP 422")) {
     return msg.replace(/^HTTP 422:\s*/, "Сервер отклонил: ").slice(0, 160);
@@ -52,34 +69,64 @@ async function postInspection(body: unknown): Promise<void> {
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? "upload_failed"));
 }
 
-function resolveTagForCheckin(
+function findTagInMarkers(
+  ble: string,
+  markers: BleTagMarker[],
+  mac?: string | null,
+): BleTagMarker | undefined {
+  const key = normalizeBle(ble);
+  let tag = markers.find((m) => normalizeBle(m.ble) === key);
+  if (tag) return tag;
+  const macKey = normalizeMac(mac);
+  if (!macKey) return undefined;
+  return markers.find((t) => tagMacKeys(t).includes(macKey));
+}
+
+async function resolveTagForCheckin(
   checkin: FieldCheckin,
   findTag: (ble: string) => BleTagMarker | undefined,
-): BleTagMarker | null {
-  const tag = findTag(String(checkin.bleNumber));
-  if (tag?.id != null) return tag;
-  if (checkin.ble_id != null) {
-    return {
-      ble: String(checkin.bleNumber),
-      id: checkin.ble_id,
-      lat: checkin.latitude ?? undefined,
-      lng: checkin.longitude ?? undefined,
-      movabilityType: checkin.movabilityType,
-      charge: checkin.chargeValue ?? null,
-      statusCode: checkin.statusCode,
-      power: checkin.power,
-      frequency: checkin.frequency,
-      bleTypeNum: checkin.bleType ?? null,
-      firmwareVersion: checkin.firmwareVersion,
-    };
+  markers: BleTagMarker[],
+): Promise<BleTagMarker | null> {
+  let tag =
+    findTag(String(checkin.bleNumber)) ??
+    findTagInMarkers(String(checkin.bleNumber), markers, checkin.mac_address);
+
+  let bleId = tag?.id ?? checkin.ble_id ?? null;
+  if (bleId == null) {
+    const fetched = await fetchBleIdByNumber(checkin.bleNumber);
+    if (fetched != null) bleId = fetched;
   }
-  return tag ?? null;
+
+  if (bleId == null) return tag ?? null;
+
+  const base = tag ?? {
+    ble: String(checkin.bleNumber),
+    lat: checkin.latitude ?? undefined,
+    lng: checkin.longitude ?? undefined,
+    movabilityType: checkin.movabilityType,
+    charge: checkin.chargeValue ?? null,
+    statusCode: checkin.statusCode,
+    power: checkin.power,
+    frequency: checkin.frequency,
+    bleTypeNum: checkin.bleType ?? null,
+    firmwareVersion: checkin.firmwareVersion,
+    mac: checkin.mac_address ?? "",
+  };
+
+  return {
+    ...base,
+    id: bleId,
+    movabilityType: clampInspectionMovabilityType(
+      base.movabilityType ?? checkin.movabilityType ?? 1,
+    ),
+  };
 }
 
 export async function uploadCheckins(
   pending: FieldCheckin[],
   findTag: (ble: string) => BleTagMarker | undefined,
   onProgress?: (p: UploadProgress) => void,
+  markers: BleTagMarker[] = [],
 ): Promise<UploadResult> {
   try {
     await bleAutoLogin();
@@ -100,7 +147,7 @@ export async function uploadCheckins(
     const c = pending[i];
     onProgress?.({ done: i, total, currentBle: String(c.bleNumber) });
 
-    const tag = resolveTagForCheckin(c, findTag);
+    const tag = await resolveTagForCheckin(c, findTag, markers);
     if (tag?.id == null) {
       fail++;
       lastErr = `Метка #${c.bleNumber}: нет bleId (обновите карту ↻)`;
@@ -110,7 +157,14 @@ export async function uploadCheckins(
 
     let body: ReturnType<typeof buildInspectionBody>;
     try {
-      body = buildInspectionBody(c, tag);
+      body = buildInspectionBody(
+        {
+          ...c,
+          ble_id: tag.id,
+          movabilityType: clampInspectionMovabilityType(c.movabilityType ?? tag.movabilityType),
+        },
+        tag,
+      );
     } catch (e) {
       fail++;
       lastErr = formatUploadError(e);
@@ -121,6 +175,7 @@ export async function uploadCheckins(
       await postInspection(body);
       const uploadedOne: FieldCheckin = {
         ...c,
+        ble_id: tag.id,
         uploaded: true,
         uploadedAt: new Date().toISOString(),
       };

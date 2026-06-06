@@ -21,6 +21,21 @@ export function pickFirstUrl(
 }
 
 export function isPhotoUrlExpired(url: string): boolean {
+  if (!url) return true;
+  const dateM = String(url).match(/[?&]X-Amz-Date=([^&]+)/);
+  const expM = String(url).match(/[?&]X-Amz-Expires=(\d+)/);
+  if (dateM && expM) {
+    const d = dateM[1];
+    const t0 = Date.UTC(
+      +d.slice(0, 4),
+      +d.slice(4, 6) - 1,
+      +d.slice(6, 8),
+      +d.slice(9, 11),
+      +d.slice(11, 13),
+      +d.slice(13, 15),
+    );
+    return Date.now() > t0 + parseInt(expM[1], 10) * 1000;
+  }
   const m = url.match(/[?&]Expires=(\d+)/i);
   if (!m) return false;
   return Date.now() > Number(m[1]) * 1000;

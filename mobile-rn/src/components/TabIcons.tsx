@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { Animated, Easing } from "react-native";
-import Svg, { Circle, Ellipse, Path, Rect } from "react-native-svg";
+import { Animated, Easing, Image } from "react-native";
+import Svg, { Circle, Ellipse, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 
 function useNeonPulse(active: boolean) {
@@ -101,44 +101,23 @@ export function TabMapIcon({ active, size = 24 }: IconProps) {
   );
 }
 
-/** Обход — рабочий ботинок. */
+const TAB_PATROL_BOOT = require("../../assets/tab-patrol-boot.png");
+
+/** Обход — иконка ботинка (PNG с прозрачным фоном, tint как у остальных вкладок). */
 export function TabPatrolIcon({ active, size = 24 }: IconProps) {
   return (
     <NeonWrap active={active} size={size}>
-      {({ primary, glow, blue }) => (
-        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <Path
-            d="M7 18.5h11.5c1.2 0 2-.8 2-2v-1.2H5v1.2c0 1.2.8 2 2 2Z"
-            fill={blue}
-            opacity={active ? 0.35 : 0.2}
-          />
-          <Path
-            d="M5 15.3h14.5v1.2H5v-1.2Z"
-            stroke={glow}
-            strokeWidth={1.3}
-            strokeLinejoin="round"
-          />
-          <Path
-            d="M8.2 15.3V9.8c0-1.8 1.2-3.2 2.8-3.2h2c1.6 0 2.8 1.4 2.8 3.2v5.5"
-            stroke={primary}
-            strokeWidth={1.6}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <Path
-            d="M8.2 11.5h7.6"
-            stroke={glow}
-            strokeWidth={1.2}
-            strokeLinecap="round"
-          />
-          <Path
-            d="M6.5 18.5c.8.6 1.8.9 3 .9h5c1.2 0 2.2-.3 3-.9"
-            stroke={primary}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-          />
-          <Rect x={10.2} y={7.2} width={3.6} height={1.4} rx={0.5} fill={glow} opacity={active ? 0.85 : 0.5} />
-        </Svg>
+      {({ primary }) => (
+        <Image
+          source={TAB_PATROL_BOOT}
+          resizeMode="contain"
+          accessibilityLabel="Обход"
+          style={{
+            width: size,
+            height: size,
+            tintColor: primary,
+          }}
+        />
       )}
     </NeonWrap>
   );

@@ -1,4 +1,8 @@
 import type { BleTagMarker, ScannedDevice } from "../ble/types";
+import {
+  markerZoneTypeLabel,
+  resolveZoneTypeForMarker,
+} from "../ble/zoneType";
 import { ZONE_SHORT } from "../config";
 import { bleFromDeviceName, normalizeBle, normalizeMac } from "../ble/wwAdvert";
 import { darkCyber, lightCyber, type AppColors } from "../theme/palettes";
@@ -39,11 +43,7 @@ export function resolveTagForDevice(
 }
 
 export function zoneTypeNum(tag: BleTagMarker): number {
-  if (tag.bleTypeNum != null && Number(tag.bleTypeNum) > 0) {
-    return Number(tag.bleTypeNum) || 0;
-  }
-  const m = String(tag.bleTypeLabel ?? "").match(/^(\d+)/);
-  return m ? Number(m[1]) : 0;
+  return resolveZoneTypeForMarker(tag);
 }
 
 export type ZoneRowStyle = {
@@ -175,8 +175,13 @@ export function zoneRowColors(tag: BleTagMarker): ZoneRowStyle | null {
 }
 
 export function zoneShortLabel(tag: BleTagMarker): string {
+  const text = markerZoneTypeLabel(tag);
+  if (text) {
+    const m = text.match(/^(\d+)\s*[-–—]\s*(.+)$/);
+    return m ? m[2].trim() : text;
+  }
   const n = zoneTypeNum(tag);
-  return ZONE_SHORT[n] || (n ? `Тип ${n}` : "");
+  return ZONE_SHORT[n] || "";
 }
 
 export type NearbyRow = {
@@ -200,6 +205,40 @@ export function tagHasPhotos(tag: BleTagMarker): boolean {
 
 export function isPatrolDone(tag: BleTagMarker, dailyDone: Set<string>): boolean {
   return dailyDone.has(normalizeBle(tag.ble)) || !!tag.isInspected;
+}
+
+function patrolDoneForRoute(
+  tag: BleTagMarker,
+  todayPatrol: Record<string, string[]>,
+  filterRouteId: string,
+): boolean {
+  if (tag.isInspected) return true;
+  const ble = normalizeBle(tag.ble);
+  const markerRouteId = String(tag.routeId ?? "") || "all";
+  const buckets = new Set<string>(["all"]);
+  if (filterRouteId) buckets.add(filterRouteId);
+  else buckets.add(markerRouteId);
+
+  for (const bucket of buckets) {
+    const list = todayPatrol[bucket] ?? [];
+    if (list.some((b) => normalizeBle(b) === ble)) return true;
+  }
+  return false;
+}
+
+export function routeProgressFor(
+  markers: BleTagMarker[],
+  todayPatrol: Record<string, string[]>,
+  filterRouteId = "",
+): { done: number; total: number } {
+  const list = filterRouteId
+    ? markers.filter((m) => String(m.routeId ?? "") === filterRouteId)
+    : markers;
+  let done = 0;
+  for (const m of list) {
+    if (patrolDoneForRoute(m, todayPatrol, filterRouteId)) done++;
+  }
+  return { done, total: list.length };
 }
 
 export function buildNearbyRows(

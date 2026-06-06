@@ -39,6 +39,11 @@ export type RawBlePoint = {
   ble_zone_id?: number;
   ble_zoneId?: number;
   bleRoute?: { id?: number; title?: string };
+  ble_route?: { id?: number; title?: string } | number | string;
+  ble_route_id?: number;
+  bleRouteId?: number;
+  route_title?: string;
+  bleRouteTitle?: string;
   ble_image_url?: string;
   bleImageUrl?: string;
   ble_image?: string;

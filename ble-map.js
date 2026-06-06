@@ -30,7 +30,9 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260530s";
+  const BLE_MAP_BUILD = "20260606a";
+  /** Авто-↻: та же логика, что кнопка «Обновить» (mapRetryBtn). */
+  const BLE_MAP_AUTO_REFRESH_MS = 30 * 60 * 1000;
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
   const BLE_ZONE_REFINE_CONCURRENCY = 8;
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
@@ -2915,7 +2917,10 @@
     document.body.classList.toggle("ble-map--draw-parallel", bleDrawTool === "parallel");
     const toZone = document.getElementById("mapDrawToZoneBtn");
     const showToZone =
-      bleDrawTool === "line" && bleSelectedZoneId != null && bleDrawSession.linePts.length > 0;
+      !isBleNativeApp() &&
+      bleDrawTool === "line" &&
+      bleSelectedZoneId != null &&
+      bleDrawSession.linePts.length > 0;
     if (toZone) toZone.hidden = !showToZone;
     const finishBtn = document.getElementById("mapDrawFinishBtn");
     const clearBtn = document.getElementById("mapDrawClearBtn");
@@ -3745,7 +3750,7 @@
     document.body.classList.toggle("ble-map--edit", bleEditMode);
     document.body.classList.toggle("ble-map--zone-edit", bleEditMode && isZoneEditAllowed());
     if (bleEditMode) {
-      if (bleBaseLayerCurrent === "street" && !opts.keepBaseLayer) {
+      if (bleBaseLayerCurrent === "street" && !opts.keepBaseLayer && !isBleNativeApp()) {
         setBleBaseLayer("hybrid");
       }
       enterEmbeddedEditLayout();
@@ -4228,9 +4233,11 @@
     const layerActions = document.getElementById("mapLayerFieldActions");
     const layerDock = document.getElementById("mapLayerFieldDock");
     const toolsField = document.getElementById("mapToolsFieldDock");
-    if (layerActions) layerActions.hidden = bleEditMode;
-    if (layerDock) layerDock.hidden = !bleEditMode;
+    if (layerActions) layerActions.hidden = isBleNativeApp() || bleEditMode;
+    if (layerDock) layerDock.hidden = isBleNativeApp() || !bleEditMode;
     if (toolsField) toolsField.hidden = isBleNativeApp() ? true : !bleEditMode;
+    const drawExtras = document.getElementById("mapDrawExtras");
+    if (drawExtras && isBleNativeApp()) drawExtras.hidden = true;
     syncGenplanCalibMenuVisibility();
   }
 
@@ -4256,9 +4263,9 @@
     const native = isBleNativeApp();
     return {
       detectRetina: false,
-      updateWhenIdle: mobile || native,
-      updateWhenZooming: !native,
-      keepBuffer: native ? 2 : 4,
+      updateWhenIdle: native ? false : mobile,
+      updateWhenZooming: true,
+      keepBuffer: native ? 3 : 4,
       minZoom: BLE_MAP_MIN_ZOOM,
       maxZoom: BLE_MAP_EDIT_MAX_ZOOM,
       maxNativeZoom: nativeZoom,
@@ -4315,7 +4322,7 @@
 
   function buildBleTileLayers(mobile) {
     const satellite = L.tileLayer(satelliteTileUrlTemplate(), satelliteTileLayerOpts(mobile));
-    const street = useBundledSatelliteTiles() ? satellite : buildBleStreetTileLayer(mobile);
+    const street = buildBleStreetTileLayer(mobile);
     const layers = { satellite, street, hybrid: satellite, satelliteUnderlay: null };
     if (bleGenplanMeta) {
       layers.genplan = buildGenplanOverlay();
@@ -4328,20 +4335,21 @@
   }
 
   function normalizeBaseLayerId(layerId) {
-    if (isBleNativeApp() && (layerId === "street" || layerId === "hybrid")) return "satellite";
+    if (isBleNativeApp()) return "satellite";
     if (layerId === "genplan" && !isGenplanLayerAvailable()) return "hybrid";
     if (BLE_BASE_LAYERS.includes(layerId)) return layerId;
     return "street";
   }
 
   function syncGenplanLayerMenuVisibility() {
-    const show = isGenplanLayerAvailable();
+    const show = isGenplanLayerAvailable() && !isBleNativeApp();
     document
       .querySelectorAll(
         "#mapBaseLayerGenplanOpt, #mapBaseLayerGenplanOptActions, #mapFsBaseLayerGenplanOpt"
       )
       .forEach((opt) => {
         opt.hidden = !show;
+        opt.textContent = "Генплан";
       });
     syncGenplanCalibMenuVisibility();
   }
@@ -6916,7 +6924,8 @@ if(cards.length)selectIdx(0);
   }
 
   function makeClusterGroup() {
-    const lite = isCoarseMobile() || isBleNativeApp();
+    const perfLite = isCoarseMobile() && !isBleNativeApp();
+    const native = isBleNativeApp();
     return L.markerClusterGroup({
       maxClusterRadius(zoom) {
         if (zoom < 17) return 120;
@@ -6926,11 +6935,11 @@ if(cards.length)selectIdx(0);
       disableClusteringAtZoom: 20,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
-      animate: !lite,
-      animateAddingMarkers: false,
+      animate: !perfLite,
+      animateAddingMarkers: native,
       chunkedLoading: true,
-      chunkInterval: lite ? 120 : 80,
-      chunkDelay: lite ? 24 : 16,
+      chunkInterval: native ? 64 : perfLite ? 120 : 80,
+      chunkDelay: native ? 8 : perfLite ? 24 : 16,
       removeOutsideVisibleBounds: true,
       iconCreateFunction(cluster) {
         const count = cluster.getChildCount();
@@ -7243,10 +7252,40 @@ if(cards.length)selectIdx(0);
   }
 
   function setRouteFieldsVisible(visible) {
+    if (isBleNativeApp()) {
+      const nativeField = document.getElementById("mapRouteFieldNative");
+      if (nativeField) nativeField.hidden = !visible;
+      ["mapRouteFieldDock", "mapRouteFieldFs", "mapRouteFieldCompact", "mapRouteSepCompact"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = true;
+      });
+      return;
+    }
     ["mapRouteFieldDock", "mapRouteFieldFs", "mapRouteFieldCompact", "mapRouteSepCompact"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !visible;
     });
+  }
+
+  let nativeRouteWidthMeasurer = null;
+
+  function syncNativeRouteSelectWidth() {
+    if (!isBleNativeApp()) return;
+    const sel = document.getElementById("mapRouteSelectNative");
+    if (!sel || sel.hidden) return;
+    if (!nativeRouteWidthMeasurer) {
+      nativeRouteWidthMeasurer = document.createElement("span");
+      nativeRouteWidthMeasurer.className = "map-route-native-measurer";
+      nativeRouteWidthMeasurer.setAttribute("aria-hidden", "true");
+      document.body.appendChild(nativeRouteWidthMeasurer);
+    }
+    const opt = sel.options[sel.selectedIndex];
+    const text = opt?.textContent?.trim() || "Все маршруты";
+    nativeRouteWidthMeasurer.textContent = text;
+    const textW = nativeRouteWidthMeasurer.offsetWidth;
+    const pad = 44;
+    const max = Math.max(140, window.innerWidth - 24);
+    sel.style.width = `${Math.min(Math.max(textW + pad, 140), max)}px`;
   }
 
   function populateRouteSelect() {
@@ -7264,6 +7303,7 @@ if(cards.length)selectIdx(0);
     });
     const compact = document.getElementById("mapRouteSelectCompact");
     if (compact?.options[0]) compact.options[0].textContent = "Все";
+    syncNativeRouteSelectWidth();
   }
 
   let bleRouteFilterApplying = false;
@@ -7332,6 +7372,7 @@ if(cards.length)selectIdx(0);
       if (sel.value !== bleMapRouteFilter) sel.value = bleMapRouteFilter;
     });
     bleRouteFilterApplying = false;
+    syncNativeRouteSelectWidth();
 
     if (routeFilterNeedsFullData(next)) {
       void (async () => {
@@ -7560,14 +7601,22 @@ if(cards.length)selectIdx(0);
       longitude: tag?.lng ?? checkin?.longitude ?? null,
       movabilityType: tag?.movabilityType ?? checkin?.movabilityType ?? 1,
       recordDt,
-      chargeValue: tag?.charge ?? checkin?.chargeValue ?? 100,
+      chargeValue: checkin?.chargeValue ?? tag?.charge ?? 100,
       status: tag?.statusCode ?? checkin?.statusCode ?? 4,
-      power: tag?.power ?? checkin?.power ?? 6,
-      frequency: tag?.frequency ?? checkin?.frequency ?? 3,
-      bleType: tag?.bleTypeNum ?? checkin?.bleType ?? 10,
+      power: checkin?.power ?? tag?.power ?? 6,
+      frequency: checkin?.frequency ?? tag?.frequency ?? 3,
+      bleType: checkin?.bleType ?? tag?.bleTypeNum ?? 10,
       firmwareVersion: tag?.firmwareVersion || checkin?.firmwareVersion || "bt1",
       rssi: checkin?.rssi ?? null,
     };
+  }
+
+  function initBleFinderModule() {
+    if (!isBleNativeApp() || !window.WwBleFinder?.init) return;
+    window.WwBleFinder.init({
+      isNative: isBleNativeApp,
+      findTag: findBlePointByNumber,
+    });
   }
 
   function initBleFieldModule() {
@@ -7602,22 +7651,18 @@ if(cards.length)selectIdx(0);
     const back = document.getElementById("bleMapBackLink");
     if (back) back.hidden = true;
     document.getElementById("mapRouteExportBtn")?.setAttribute("hidden", "");
-    document
-      .querySelectorAll(
-        '#mapBaseLayerSelect option[value="street"], #mapBaseLayerSelect option[value="hybrid"], #mapBaseLayerSelectActions option[value="street"], #mapBaseLayerSelectActions option[value="hybrid"], #mapFsBaseLayerSelect option[value="street"], #mapFsBaseLayerSelect option[value="hybrid"]'
-      )
-      .forEach((opt) => {
-        opt.hidden = true;
-        opt.disabled = true;
-      });
-    const packBtn = document.getElementById("mapFieldPackBtn");
-    if (packBtn) {
-      packBtn.title = "Скачать фото выбранного маршрута или всех маршрутов в память телефона (Wi‑Fi/VPN)";
-      packBtn.querySelector(".map-toolbar-text--long") &&
-        (packBtn.querySelector(".map-toolbar-text--long").textContent = "Скачать фото");
-      packBtn.querySelector(".map-toolbar-text--short") &&
-        (packBtn.querySelector(".map-toolbar-text--short").textContent = "Фото");
-    }
+    document.getElementById("mapFieldPackBtn")?.setAttribute("hidden", "");
+    document.getElementById("mapPolygonExportBtn")?.setAttribute("hidden", "");
+    document.getElementById("mapDrawToZoneBtn")?.setAttribute("hidden", "");
+    document.getElementById("mapToolsFieldDock")?.setAttribute("hidden", "");
+    document.getElementById("mapLayerFieldActions")?.setAttribute("hidden", "");
+    document.getElementById("mapLayerFieldDock")?.setAttribute("hidden", "");
+    document.getElementById("mapNativeFloatControls")?.removeAttribute("hidden");
+    syncGenplanLayerMenuVisibility();
+    setBleBaseLayer("satellite", { persist: false });
+    const searchInput = document.getElementById("mapBleSearch");
+    if (searchInput) searchInput.placeholder = "№ метки";
+    syncNativeRouteSelectWidth();
     const retryBtn = document.getElementById("mapRetryBtn");
     if (retryBtn) {
       retryBtn.title = "Обновить координаты меток и полигоны с сервера (Wi‑Fi/VPN)";
@@ -7632,6 +7677,7 @@ if(cards.length)selectIdx(0);
       logo.style.opacity = "0.85";
     }
     initBleFieldModule();
+    initBleFinderModule();
   }
 
   function loadClusterTogglePref() {
@@ -7752,6 +7798,7 @@ if(cards.length)selectIdx(0);
     const onLayoutChange = () => {
       scheduleMapResize();
       updateMapFloatDockTopInset();
+      syncNativeRouteSelectWidth();
     };
     window.addEventListener("resize", onLayoutChange, { passive: true });
     window.addEventListener("orientationchange", onLayoutChange, { passive: true });
@@ -7867,27 +7914,57 @@ if(cards.length)selectIdx(0);
     }
   }
 
-  async function retryBleMapRefresh() {
+  let bleMapAutoRefreshTimer = null;
+
+  function scheduleBleMapAutoRefresh() {
+    if (bleMapAutoRefreshTimer) clearInterval(bleMapAutoRefreshTimer);
+    bleMapAutoRefreshTimer = setInterval(() => {
+      void runBleMapAutoRefresh();
+    }, BLE_MAP_AUTO_REFRESH_MS);
+    console.info(
+      "[ble-map] авто-↻ каждые",
+      Math.round(BLE_MAP_AUTO_REFRESH_MS / 60_000),
+      "мин (только при открытой вкладке; кэш на Pages — GitHub Actions cron)",
+    );
+  }
+
+  async function runBleMapAutoRefresh() {
+    const btn = document.getElementById("mapRetryBtn");
+    if (btn?.dataset.busy === "1") return;
+    if (!navigator.onLine) return;
+    if (bleEditMode) return;
+    console.info("[ble-map] авто-↻…");
+    await retryBleMapRefresh({ silent: true });
+  }
+
+  async function retryBleMapRefresh(opts = {}) {
+    const silent = !!opts.silent;
     const btn = document.getElementById("mapRetryBtn");
     if (btn) {
       btn.disabled = true;
       btn.dataset.busy = "1";
     }
-    hideMapMsg();
+    if (!silent) hideMapMsg();
     try {
       if (!navigator.onLine) {
-        alert("Нужен интернет (Wi‑Fi/VPN) для обновления координат и зон.");
+        if (!silent) {
+          alert("Нужен интернет (Wi‑Fi/VPN) для обновления координат и зон.");
+        }
         return;
       }
-      showMapMsg("Обновление координат и зон…", "busy");
+      if (!silent) showMapMsg("Обновление координат и зон…", "busy");
       // Без VPN живой API меток (workers.dev / тяжёлый список через Edge)
       // часто недоступен. Если токен не получить — отдаём кэш-снимок.
       if (!(await ensureBleTokenForField())) {
         const snap = await refreshBleMapFromCacheSnapshot();
         if (snap) {
-          showMapMsg(bleSnapshotMessage(snap.updatedAt), "info");
-          setTimeout(hideMapMsg, 6000);
-        } else {
+          if (silent) {
+            console.info("[ble-map] авто-↻", bleSnapshotMessage(snap.updatedAt));
+          } else {
+            showMapMsg(bleSnapshotMessage(snap.updatedAt), "info");
+            setTimeout(hideMapMsg, 6000);
+          }
+        } else if (!silent) {
           showMapMsg(
             "Нет доступа к API без VPN и нет сохранённого снимка меток. Включите VPN и повторите.",
             "error"
@@ -7904,25 +7981,35 @@ if(cards.length)selectIdx(0);
       if (bleMap && bleZoneData.length) drawZones(bleMap);
       if (bleMapFS && isMapFullscreenOpen() && bleZoneData.length) drawZones(bleMapFS);
       if (!bleZoneData.length) {
-        showMapMsg(
-          "Метки обновлены, но полигоны не загрузились. Проверьте VPN и нажмите ↺ ещё раз.",
-          "error"
-        );
+        const zoneWarn =
+          "Метки обновлены, но полигоны не загрузились. Проверьте VPN и нажмите ↺ ещё раз.";
+        if (silent) console.warn("[ble-map] авто-↻", zoneWarn);
+        else showMapMsg(zoneWarn, "error");
         void syncChangedFieldPhotosAfterRefresh(cid);
         return;
       }
-      showMapMsg(`Координаты меток и ${bleZoneData.length} полигонов обновлены.`, "success");
-      setTimeout(hideMapMsg, 4000);
+      const okMsg = `Координаты меток и ${bleZoneData.length} полигонов обновлены.`;
+      if (silent) console.info("[ble-map] авто-↻", okMsg);
+      else {
+        showMapMsg(okMsg, "success");
+        setTimeout(hideMapMsg, 4000);
+      }
       void syncChangedFieldPhotosAfterRefresh(cid);
     } catch (e) {
       // Живой запрос упал (например, тяжёлый список отдаёт 500 из региона
       // Supabase, а workers.dev заблокирован без VPN) — пробуем кэш-снимок.
       const snap = await refreshBleMapFromCacheSnapshot(bleCompanyId);
       if (snap) {
-        showMapMsg(bleSnapshotMessage(snap.updatedAt), "info");
-        setTimeout(hideMapMsg, 6000);
-      } else {
+        if (silent) {
+          console.info("[ble-map] авто-↻", bleSnapshotMessage(snap.updatedAt));
+        } else {
+          showMapMsg(bleSnapshotMessage(snap.updatedAt), "info");
+          setTimeout(hideMapMsg, 6000);
+        }
+      } else if (!silent) {
         showMapMsg("Ошибка обновления: " + formatBleError(e), "error");
+      } else {
+        console.warn("[ble-map] авто-↻", formatBleError(e));
       }
     } finally {
       if (btn) {
@@ -8493,6 +8580,7 @@ if(cards.length)selectIdx(0);
     updateOfflineEditChrome();
     loadBleMap();
     scheduleMapResize();
+    scheduleBleMapAutoRefresh();
   }
 
   function bindBleMapAccessGate(onUnlocked) {

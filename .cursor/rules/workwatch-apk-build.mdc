@@ -1,0 +1,41 @@
+---
+description: Сборка и именование Android APK (Capacitor, BLE-карта)
+globs: android/**,scripts/build-android-apk.mjs,scripts/sync-mobile-www.mjs,package.json
+alwaysApply: false
+---
+
+# APK — версии и архив
+
+## Перед каждой новой сборкой APK
+
+1. **`android/app/build.gradle`** — увеличить `versionCode` и обновить `versionName` (краткая метка изменения, напр. `1.5-gatt3`).
+2. **`ble-map.js`** — при правках web-части bump `BLE_MAP_BUILD` и query `?v=` в `ble-map.html`.
+3. **`npm run mobile:sync`** (или `npm run mobile:build`) — обновить `mobile/www` перед `cap sync`.
+
+## Сборка
+
+```bash
+npm run mobile:sync
+npx cap sync android
+node scripts/build-android-apk.mjs --label GATT
+```
+
+Метка `--label` (GATT, patrol, …) — часть имени файла, не заменяет `versionName`.
+
+## Имена файлов
+
+Скрипт `scripts/build-android-apk.mjs` кладёт APK в **`dist/`**:
+
+`workwatch-ble-map-v{versionName}-vc{code}-web{BLE_MAP_BUILD}[-{label}].apk`
+
+Пример: `workwatch-ble-map-v1-5-gatt3-vc8-web20260530v-GATT.apk`
+
+## Архив старых сборок
+
+Перед записью нового APK все **`dist/workwatch-ble-map*.apk`** переносятся в **`dist/apk-archive/`** (не перезаписывать — при коллизии добавляется timestamp).
+
+Не использовать фиксированные имена вроде `workwatch-ble-map-debug.apk` без версии.
+
+## После сборки
+
+Сообщить пользователю полный путь, `versionName`, `versionCode`, `BLE_MAP_BUILD` и метку `--label`.

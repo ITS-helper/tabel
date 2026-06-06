@@ -3,6 +3,7 @@ import {
   EncodingType,
   getInfoAsync,
   makeDirectoryAsync,
+  readAsStringAsync,
   writeAsStringAsync,
 } from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -94,6 +95,18 @@ export async function getLocalPhotoUri(url: string): Promise<string | null> {
   if (!path) return null;
   const info = await getInfoAsync(path);
   return info.exists ? path : null;
+}
+
+/** Data URI для WebView — file:// в img внутри WebView на Android не работает. */
+export async function getLocalPhotoDataUri(url: string): Promise<string | null> {
+  const path = await getLocalPhotoUri(url);
+  if (!path) return null;
+  try {
+    const b64 = await readAsStringAsync(path, { encoding: EncodingType.Base64 });
+    return b64 ? `data:image/jpeg;base64,${b64}` : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchPhotoBytes(url: string): Promise<ArrayBuffer | null> {

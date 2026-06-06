@@ -70,6 +70,7 @@ function patchHtml(html) {
   );
   out = out.replace(/href="ble-map\.css\?[^"]+"/, 'href="ble-map.css"');
   out = out.replace(/href="ble-field\.css\?[^"]+"/, 'href="ble-field.css"');
+  out = out.replace(/href="ble-finder\.css\?[^"]+"/, 'href="ble-finder.css"');
   out = out.replace(
     /https:\/\/unpkg\.com\/leaflet@1\.9\.4\/dist\/leaflet\.js/g,
     "vendor/leaflet.js"
@@ -89,6 +90,7 @@ function patchHtml(html) {
   out = out.replace(/src="ble-genplan-mask\.js\?[^"]+"/, 'src="ble-genplan-mask.js"');
   out = out.replace(/src="ble-map\.js\?[^"]+"/, 'src="ble-map.js"');
   out = out.replace(/src="ble-field\.js\?[^"]+"/, 'src="ble-field.js"');
+  out = out.replace(/src="ble-finder\.js\?[^"]+"/, 'src="ble-finder.js"');
   out = out.replace(
     /src="ble-map-fullscreen-patch\.js\?[^"]+"/,
     'src="ble-map-fullscreen-patch.js"'
@@ -181,6 +183,8 @@ async function main() {
     "ble-map.css",
     "ble-field.js",
     "ble-field.css",
+    "ble-finder.js",
+    "ble-finder.css",
     "ble-genplan-mask.js",
     "ble-map-fullscreen-patch.js",
   ]) {

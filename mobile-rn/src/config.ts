@@ -21,12 +21,14 @@ export const BLE_REMOTE_CACHE_URLS = [
 export const BLE_REMOTE_CACHE_TIMEOUT_MS = 20_000;
 
 export const BLE_DEFAULT_COMPANY_ID = 1;
-export const APP_BUILD = "rn-20260601v";
-export const APP_VERSION = "1.0.37";
+export const APP_VERSION = "1.0.55";
+export const APP_BUILD = "rn-20260606-finder-bg";
 
 export const BLE_AUTO_USER = "impl_dept";
 export const BLE_AUTO_PASS = "impl_dept_vsm_2024";
-export const BLE_TOKEN_KEY = "accessToken";
+export const BLE_TOKEN_KEY = "ww-ble-rn-access-token";
+/** @deprecated миграция с ранних сборок */
+export const BLE_TOKEN_KEY_LEGACY = "accessToken";
 
 export const BLE_CLUSTER_TOGGLE_KEY = "ww-ble-cluster-enabled";
 export const BLE_SHOW_PASSED_MARKERS_KEY = "ww-ble-rn-show-passed-markers";
@@ -34,6 +36,7 @@ export const THEME_STORAGE_KEY = "ww-ble-rn-theme";
 export const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
 export const BLE_OFFLINE_MARKERS_KEY = "ww-ble-rn-offline-markers";
 export const BLE_OFFLINE_META_KEY = "ww-ble-rn-offline-meta";
+export const BLE_OFFLINE_ROUTES_KEY = "ww-ble-rn-offline-routes";
 export const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-rn-offline-marker-edits";
 export const BLE_MARKER_HOLD_MS = 1000;
 
@@ -46,6 +49,7 @@ export const WW_MANUFACTURER_MAGIC = [0xa5, 0x08, 0x00, 0x01] as const;
 
 export const CHECKINS_STORAGE_KEY = "ww-ble-field-checkins-v1";
 export const FOUND_SOUND_COOLDOWN_MS = 10_000;
+export const FINDER_BG_STORAGE_KEY = "ww-ble-finder-bg-session-v1";
 export const DAILY_KEEP_DAYS = 14;
 export const LOW_BATTERY_PCT = 20;
 export const NEARBY_TTL_MS = 20_000;

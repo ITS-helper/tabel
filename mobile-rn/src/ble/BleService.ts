@@ -10,6 +10,7 @@ import {
 import { GATT_READ_ORDER, parseGattReads } from "./gattTelemetry";
 import { requestBlePermissions } from "./requestBlePermissions";
 import type { AdvTelemetry, BleTagMarker, GattLiveTelemetry, ScannedDevice } from "./types";
+import { isValidZoneTypeNum } from "./zoneType";
 import {
   advertBytesFromScan,
   bleFromDeviceName,
@@ -26,7 +27,13 @@ const SCAN_OPTIONS = {
 };
 
 type ScanListener = (devices: ScannedDevice[]) => void;
+type FieldPatrolListener = (active: boolean) => void;
 type ScanMode = "field" | "finder";
+
+export type FinderSessionConfig = {
+  targets: string[];
+  watchMode: boolean;
+};
 
 function parseWwAdvTelemetry(
   manufacturerData: string | Record<string, string> | null,
@@ -37,7 +44,7 @@ function parseWwAdvTelemetry(
     if (nums[i] === 0xa5 && nums[i + 1] === 8 && nums[i + 2] === 0 && nums[i + 3] === 1) {
       const out: AdvTelemetry = {};
       if (nums.length > i + 6 && nums[i + 6] <= 100) out.chargeValue = nums[i + 6];
-      if (nums.length > i + 7 && nums[i + 7] >= 1 && nums[i + 7] <= 20) {
+      if (nums.length > i + 7 && isValidZoneTypeNum(nums[i + 7])) {
         out.bleType = nums[i + 7];
       }
       if (nums.length > i + 8 && nums[i + 8] <= 10) out.power = nums[i + 8];
@@ -53,12 +60,15 @@ class BleServiceImpl {
   private scanning = false;
   private paused = false;
   private listener: ScanListener | null = null;
+  private fieldPatrolListener: FieldPatrolListener | null = null;
   private connectedId: string | null = null;
   private knownTags: BleTagMarker[] = [];
   private findTagByBle: ((ble: string) => BleTagMarker | undefined) | null = null;
   private scanMode: ScanMode = "field";
   private finderTargets = new Set<string>();
   private finderWatchMode = false;
+  private finderSession: FinderSessionConfig | null = null;
+  private fieldPatrolActive = false;
   private pruneTimer: ReturnType<typeof setInterval> | null = null;
 
   private get ble(): BleManager {
@@ -80,6 +90,81 @@ class BleServiceImpl {
 
   setFinderWatchMode(v: boolean) {
     this.finderWatchMode = v;
+  }
+
+  isFinderSessionActive(): boolean {
+    return this.finderSession != null;
+  }
+
+  getFinderSession(): FinderSessionConfig | null {
+    return this.finderSession;
+  }
+
+  isFieldPatrolActive(): boolean {
+    return this.fieldPatrolActive;
+  }
+
+  getScanMode(): ScanMode {
+    return this.scanMode;
+  }
+
+  onFieldPatrolChange(listener: FieldPatrolListener | null): void {
+    this.fieldPatrolListener = listener;
+    if (listener) listener(this.fieldPatrolActive);
+  }
+
+  /** Обход / GATT / подключение к метке — ставит фоновый поиск на паузу. */
+  setFieldPatrolActive(active: boolean): void {
+    const prev = this.fieldPatrolActive;
+    this.fieldPatrolActive = active;
+    this.fieldPatrolListener?.(active);
+    if (active && !prev && this.finderSession && this.scanning) {
+      void this.pauseScanKeepList();
+      return;
+    }
+    if (!active && prev) {
+      void this.resumeFinderIfNeeded();
+    }
+  }
+
+  private applyFinderSessionConfig(session: FinderSessionConfig): void {
+    this.setFinderWatchMode(session.watchMode);
+    this.setFinderTargets(session.targets);
+  }
+
+  private async resumeFinderIfNeeded(): Promise<void> {
+    if (!this.finderSession || this.fieldPatrolActive) return;
+    this.applyFinderSessionConfig(this.finderSession);
+    this.paused = false;
+    if (!this.scanning) {
+      await this.startScan("finder");
+    }
+  }
+
+  /** Фоновый поиск меток/часов — живёт между вкладками. */
+  async startFinderSession(session: FinderSessionConfig): Promise<void> {
+    await this.ensureReady();
+    this.finderSession = session;
+    this.applyFinderSessionConfig(session);
+    if (this.fieldPatrolActive) return;
+    await this.stopScan(true);
+    await this.startScan("finder");
+  }
+
+  async stopFinderSession(): Promise<void> {
+    this.finderSession = null;
+    if (this.scanMode === "finder") {
+      await this.stopScan(true);
+    }
+  }
+
+  /** После обхода: field-режим, поиск остаётся в паузе до setFieldPatrolActive(false). */
+  async beginFieldScan(fresh = true): Promise<void> {
+    this.scanMode = "field";
+    if (this.finderSession && this.scanning) {
+      await this.pauseScanKeepList();
+    }
+    await this.beginScanOnly(fresh);
   }
 
   private tagMacKeys(tag: BleTagMarker): string[] {
@@ -377,7 +462,13 @@ class BleServiceImpl {
     } finally {
       await this.disconnect();
       this.paused = false;
-      if (this.listener) await this.startScan(this.scanMode);
+      if (!this.fieldPatrolActive) {
+        if (this.finderSession) {
+          await this.resumeFinderIfNeeded();
+        } else if (this.listener) {
+          await this.startScan(this.scanMode);
+        }
+      }
     }
   }
 

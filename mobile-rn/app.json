@@ -3,7 +3,7 @@
     "name": "WORK WATCH BLE",
     "slug": "workwatch-ble-map-rn",
     "scheme": "workwatch-ble",
-    "version": "1.0.38",
+    "version": "1.0.55",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,14 +14,20 @@
     },
     "android": {
       "package": "com.workwatch.blemap",
-      "versionCode": 39,
+      "versionCode": 56,
       "adaptiveIcon": {
         "backgroundColor": "#0f1419",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -37,7 +43,7 @@
       [
         "react-native-ble-plx",
         {
-          "isBackgroundEnabled": false,
+          "isBackgroundEnabled": true,
           "modes": ["central"],
           "neverForLocation": false,
           "bluetoothAlwaysPermission": "Bluetooth для сканирования BLE-меток WORK WATCH"

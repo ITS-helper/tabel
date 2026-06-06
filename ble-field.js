@@ -1,4 +1,4 @@
-/* Обход BLE-меток в native APK: скан → «Сохранить обход» локально → отправка на сервер из офиса. */
+/* Обход BLE-меток в native APK: скан → GATT-чтение → локальное сохранение → отправка на сервер. */
 (() => {
   "use strict";
 
@@ -6,6 +6,13 @@
   const DAILY_KEEP_DAYS = 14;
   const NEARBY_TTL_MS = 20000;
   const LOW_BATTERY_PCT = 20;
+  const GATT_READ_TIMEOUT_MS = 3000;
+  const GATT_CONNECT_TIMEOUT_MS = 12000;
+  const GATT_TELEMETRY_DEADLINE_MS = 12000;
+
+  /** Стандартный Battery Service и WW-сервис (как в оригинальном APK). */
+  /** fff6/fff8 в оригинале — только запись (мощность/период), не читаем. */
+  const GATT_WW_READ_SUFFIXES = ["fff2", "fff3", "fff4", "fff5"];
 
   const ZONE_SHORT = {
     1: "Работы",
@@ -27,6 +34,9 @@
   let deps = null;
   let scanListener = null;
   let scanActive = false;
+  let scanPaused = false;
+  let pendingExpanded = false;
+  let lastSavedBle = null;
   let renderTimer = null;
   let focusBle = null;
   let tagPatrolMode = false;
@@ -34,6 +44,7 @@
   /** @type {{ deviceId: string, rssi?: number, lastSeen?: number } | null} */
   let focusConnectedDev = null;
   let connecting = false;
+  let gattBusy = false;
   /** @type {Map<string, { deviceId: string, name?: string, rssi?: number, lastSeen: number, bleFromAdv?: string, isWw?: boolean }>} */
   const devices = new Map();
 
@@ -238,7 +249,9 @@
   }
 
   function isTagHiddenFromNearby(tag) {
-    return isTagSavedPending(tag) || isTagDoneToday(tag);
+    if (isTagSavedPending(tag)) return true;
+    if (!getRoute().routeId) return false;
+    return isTagDoneToday(tag);
   }
 
   function dataViewToNumbers(dv) {
@@ -366,9 +379,19 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  function isLowBattery(tag) {
-    const n = chargeNum(tag);
+  function chargeNumValue(n) {
+    if (n == null || n === "") return null;
+    const v = Math.round(Number(n));
+    return Number.isFinite(v) ? v : null;
+  }
+
+  function isLowBatteryCharge(charge) {
+    const n = chargeNumValue(charge);
     return n != null && n < LOW_BATTERY_PCT;
+  }
+
+  function isLowBattery(tag) {
+    return isLowBatteryCharge(chargeNum(tag));
   }
 
   function photosForPatrol(tag) {
@@ -432,10 +455,14 @@
   }
 
   function nearbyActionsHtml(tag) {
+    const sendBtn = `<button type="button" class="ble-field-nearby__save" data-save-ble="${esc(tag.ble)}"${gattBusy ? " disabled" : ""}>Отправить</button>`;
+    if (deps?.isNative?.()) {
+      return `<div class="ble-field-nearby__actions">${sendBtn}</div>`;
+    }
     const photoBtn = tagHasPhotos(tag)
       ? `<button type="button" class="ble-field-nearby__photo" data-photo-ble="${esc(tag.ble)}" title="Фото места и метки">Фото</button>`
       : `<button type="button" class="ble-field-nearby__photo ble-field-nearby__photo--disabled" disabled title="Нет фото — скачайте фото маршрута">Фото</button>`;
-    return `<div class="ble-field-nearby__actions">${photoBtn}<button type="button" class="ble-field-nearby__save" data-save-ble="${esc(tag.ble)}">Сохранить</button></div>`;
+    return `<div class="ble-field-nearby__actions">${photoBtn}${sendBtn}</div>`;
   }
 
   function bindNearbyRowActions(list) {
@@ -443,7 +470,10 @@
     list.querySelectorAll("[data-save-ble]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        saveCheckinForBle(btn.dataset.saveBle);
+        triggerSendButtonFeedback(btn);
+        void saveCheckinForBle(btn.dataset.saveBle).catch((err) =>
+          setStatus(String(err?.message || err).slice(0, 160), "error")
+        );
       });
     });
     list.querySelectorAll("[data-photo-ble]").forEach((btn) => {
@@ -521,12 +551,35 @@
     return Number.isFinite(n) ? `${n}%` : "—";
   }
 
+  function deviceInNearbyWindow(dev) {
+    if (scanPaused) return true;
+    return Date.now() - dev.lastSeen <= NEARBY_TTL_MS;
+  }
+
+  function findDeviceForTag(tag, opts = {}) {
+    if (!tag) return null;
+    const ignoreTtl = opts.ignoreTtl ?? scanPaused;
+    for (const d of devices.values()) {
+      if (!ignoreTtl && Date.now() - d.lastSeen > NEARBY_TTL_MS) continue;
+      const t = resolveTagForDevice(d, [tag]);
+      if (t && normalizeBle(t.ble) === normalizeBle(tag.ble)) return d;
+    }
+    return null;
+  }
+
+  function updateScanButton() {
+    const btn = $("bleFieldScanBtn");
+    if (!btn) return;
+    if (scanActive) btn.textContent = "Пауза";
+    else if (scanPaused) btn.textContent = "Продолжить";
+    else btn.textContent = "Сканировать";
+  }
+
   function buildNearbyRows() {
-    const now = Date.now();
     const scope = getScopeMarkers();
     const byBle = new Map();
     for (const dev of devices.values()) {
-      if (now - dev.lastSeen > NEARBY_TTL_MS) continue;
+      if (!deviceInNearbyWindow(dev)) continue;
       const tag = resolveTagForDevice(dev, scope);
       if (!tag) continue;
       const key = normalizeBle(tag.ble);
@@ -553,10 +606,9 @@
   }
 
   function countLiveDevices() {
-    const now = Date.now();
     let n = 0;
     for (const d of devices.values()) {
-      if (now - d.lastSeen <= NEARBY_TTL_MS) n++;
+      if (deviceInNearbyWindow(d)) n++;
     }
     return n;
   }
@@ -666,22 +718,73 @@
     await openTagPatrol(tag);
   }
 
-  function renderRouteLine() {
-    const el = $("bleFieldRouteLine");
-    if (!el) return;
+  function hapticTap(ms = 28) {
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function hapticSaved() {
+    try {
+      navigator.vibrate?.([22, 36, 28]);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function triggerSendButtonFeedback(btn) {
+    hapticTap(28);
+    if (!btn) return;
+    btn.classList.add("ble-field-nearby__save--press");
+    window.setTimeout(() => btn.classList.remove("ble-field-nearby__save--press"), 360);
+  }
+
+  function pulsePendingSection() {
+    const section = $("bleFieldPendingSection");
+    if (!section) return;
+    section.classList.remove("ble-field-section--highlight");
+    void section.offsetWidth;
+    section.classList.add("ble-field-section--highlight");
+    window.setTimeout(() => section.classList.remove("ble-field-section--highlight"), 1200);
+  }
+
+  function renderPanelHeader() {
+    const titleEl = $("bleFieldPanelTitle");
+    const routeEl = $("bleFieldPanelRoute");
+    const sepEl = $("bleFieldPanelRouteSep");
+    if (!titleEl) return;
     const route = getRoute();
-    if (!route.routeId) {
-      el.innerHTML =
-        '<span class="ble-field-route__label">Маршрут:</span> <span class="ble-field-route--all">все — показываем любую видимую метку</span>';
+    if (tagPatrolMode && focusBle) {
+      titleEl.textContent = `Обход · #${focusBle}`;
+      if (routeEl) {
+        if (route.routeId) {
+          routeEl.textContent = route.routeTitle;
+          if (sepEl) sepEl.hidden = false;
+        } else {
+          routeEl.textContent = "";
+          if (sepEl) sepEl.hidden = true;
+        }
+      }
       return;
     }
-    el.innerHTML = `<span class="ble-field-route__label">Маршрут:</span> ${esc(route.routeTitle)}`;
+    titleEl.textContent = "Обход маршрута";
+    if (routeEl) {
+      if (route.routeId) {
+        routeEl.textContent = route.routeTitle;
+        if (sepEl) sepEl.hidden = false;
+      } else {
+        routeEl.textContent = "все маршруты";
+        if (sepEl) sepEl.hidden = false;
+      }
+    }
   }
 
   function renderNearbyList() {
     const list = $("bleFieldNearbyList");
     if (!list) return;
-    if (!scanActive) {
+    if (!scanActive && !scanPaused) {
       list.innerHTML =
         '<li class="ble-field-nearby ble-field-nearby--empty">Нажмите «Сканировать» и подойдите к метке.</li>';
       return;
@@ -695,6 +798,9 @@
       if (savedNearby > 0 && live > 0) {
         list.innerHTML =
           '<li class="ble-field-nearby ble-field-nearby--empty">Видимые метки уже пройдены — идите к следующей.</li>';
+      } else if (scanPaused) {
+        list.innerHTML =
+          '<li class="ble-field-nearby ble-field-nearby--empty">Список пуст. Нажмите «Продолжить» и поднесите телефон к метке.</li>';
       } else {
         list.innerHTML = `<li class="ble-field-nearby ble-field-nearby--empty">BLE в эфире: ${live}. Сопоставленных меток нет — поднесите телефон ближе${scopeN ? ` (в базе ${scopeN} меток)` : ""}.</li>`;
       }
@@ -713,7 +819,9 @@
           !getRoute().routeId && tag.routeTitle
             ? `<span class="ble-field-nearby__route">${esc(tag.routeTitle)}</span>`
             : "";
-        const charge = formatCharge(tag);
+        const charge = dev.advTelemetry?.chargeValue != null
+          ? `${dev.advTelemetry.chargeValue}%`
+          : formatCharge(tag);
         const chargeLow = isLowBattery(tag) ? " ble-field-nearby__meta--low" : "";
         return `<li class="ble-field-nearby${zoneCls ? ` ${zoneCls}` : ""}${focus}" data-nearby-ble="${esc(tag.ble)}">
           <div class="ble-field-nearby__main">
@@ -734,6 +842,8 @@
       const route = getRoute();
       const scope = route.routeId ? `маршрута` : "базы";
       setStatus(`Сканирование… BLE: ${live}, меток ${scope}: ${rows.length}`, "busy");
+    } else if (scanPaused) {
+      setStatus(`Пауза — ${rows.length} меток в списке. Можно подключиться и отправить обход.`, "info");
     }
   }
 
@@ -741,7 +851,29 @@
     const pending = pendingCheckins();
     const countEl = $("bleFieldPendingCount");
     if (countEl) countEl.textContent = String(pending.length);
+    const section = $("bleFieldPendingSection");
+    const toggle = $("bleFieldPendingToggle");
+    const hint = $("bleFieldPendingHint");
+    const body = $("bleFieldPendingBody");
     const list = $("bleFieldPendingList");
+    if (section) {
+      section.classList.toggle("ble-field-section--pending-open", pendingExpanded && pending.length > 0);
+      section.classList.toggle("ble-field-section--pending-empty", !pending.length);
+    }
+    if (toggle) {
+      toggle.disabled = !pending.length;
+      toggle.setAttribute("aria-expanded", pending.length && pendingExpanded ? "true" : "false");
+    }
+    if (hint) {
+      if (!pending.length) {
+        hint.textContent = "";
+      } else if (!pendingExpanded && pending.length > 1) {
+        hint.textContent = `+ ещё ${pending.length - 1}`;
+      } else {
+        hint.textContent = "";
+      }
+    }
+    if (body) body.classList.toggle("ble-field-pending__body--open", pendingExpanded && pending.length > 0);
     if (list) {
       if (!pending.length) {
         list.innerHTML = '<li class="ble-field-pending ble-field-pending--empty">Пока нет сохранённых обходов</li>';
@@ -752,10 +884,12 @@
           .map((c) => {
             const when = c.checkedAt ? new Date(c.checkedAt).toLocaleString("ru-RU") : "";
             const tag = tagByBle(c.bleNumber);
-            const photoBtn = tagHasPhotos(tag)
-              ? `<button type="button" class="ble-field-pending__photo" data-photo-ble="${esc(c.bleNumber)}">Фото</button>`
-              : "";
-            return `<li class="ble-field-pending">
+            const isNew = lastSavedBle && normalizeBle(c.bleNumber) === normalizeBle(lastSavedBle);
+            const photoBtn =
+              !deps?.isNative?.() && tagHasPhotos(tag)
+                ? `<button type="button" class="ble-field-pending__photo" data-photo-ble="${esc(c.bleNumber)}">Фото</button>`
+                : "";
+            return `<li class="ble-field-pending${isNew ? " ble-field-pending--new" : ""}">
               <div class="ble-field-pending__main">
                 <span class="ble-field-pending__num">#${esc(c.bleNumber)}</span>
                 <span class="ble-field-pending__meta">${esc(c.routeTitle || "")}${when ? ` · ${esc(when)}` : ""}</span>
@@ -766,6 +900,11 @@
           .join("");
         bindNearbyRowActions(list);
       }
+    }
+    if (lastSavedBle) {
+      window.setTimeout(() => {
+        lastSavedBle = null;
+      }, 700);
     }
     const uploadBtn = $("bleFieldUploadBtn");
     if (uploadBtn) {
@@ -784,7 +923,7 @@
     updatePatrolLayout();
     renderTagPatrolBlock();
     syncPatrolSearchInput();
-    renderRouteLine();
+    renderPanelHeader();
     renderProgress();
     renderNearbyList();
     renderPendingBlock();
@@ -794,11 +933,6 @@
   function updatePatrolLayout() {
     const panel = $("bleFieldPanel");
     if (panel) panel.classList.toggle("ble-field-panel--tag-focus", tagPatrolMode);
-    const title = $("bleFieldPanelTitle");
-    if (title) {
-      title.textContent =
-        tagPatrolMode && focusBle ? `Обход · #${focusBle}` : "Обход маршрута";
-    }
   }
 
   function renderTagPatrolBlock() {
@@ -813,28 +947,270 @@
     const titleEl = $("bleFieldFocusTitle");
     const statusEl = $("bleFieldFocusConn");
     const saveBtn = $("bleFieldFocusSaveBtn");
+    const connectBtn = $("bleFieldFocusConnectBtn");
     if (titleEl) {
       const zone = tag ? zoneShortLabel(tag) : "";
       titleEl.textContent = zone ? `Метка #${focusBle} · ${zone}` : `Метка #${focusBle}`;
     }
     let connText = scanActive
       ? "Сканирование… поднесите телефон к метке"
-      : "Запуск сканирования…";
+      : scanPaused
+        ? "Пауза — можно подключиться к метке из списка"
+        : "Запуск сканирования…";
     let connCls = "ble-field-focus__conn";
     if (connecting) {
       connText = "Подключение по Bluetooth…";
       connCls += " ble-field-focus__conn--busy";
+    } else if (gattBusy) {
+      connText = "Читаем данные с метки…";
+      connCls += " ble-field-focus__conn--busy";
     } else if (connectedDeviceId) {
-      connText = "Метка подключена — можно сохранить обход";
+      connText = "Метка подключена — можно отправить обход";
       connCls += " ble-field-focus__conn--ok";
-    } else if (!scanActive) {
-      connText = "Сканирование остановлено";
     }
     if (statusEl) {
       statusEl.textContent = connText;
       statusEl.className = connCls;
     }
-    if (saveBtn) saveBtn.disabled = !connectedDeviceId || connecting;
+    if (saveBtn) saveBtn.disabled = !connectedDeviceId || connecting || gattBusy;
+    if (connectBtn) {
+      const canConnect =
+        tagPatrolMode &&
+        focusBle &&
+        !connectedDeviceId &&
+        !connecting &&
+        !gattBusy &&
+        Boolean(findDeviceForTag(tag, { ignoreTtl: true }));
+      connectBtn.hidden = !canConnect;
+      connectBtn.disabled = !canConnect;
+    }
+  }
+
+  function uuidSuffix(uuid) {
+    const s = String(uuid || "")
+      .toLowerCase()
+      .replace(/-/g, "");
+    return s.length >= 8 ? s.slice(4, 8) : s;
+  }
+
+  function fullBleUuid(suffix4) {
+    const s = String(suffix4 || "")
+      .toLowerCase()
+      .replace(/[^0-9a-f]/g, "")
+      .slice(-4);
+    return `0000${s}-0000-1000-8000-00805f9b34fb`;
+  }
+
+  function bytesFromReadResult(result) {
+    if (!result?.value) return [];
+    const v = result.value;
+    if (typeof v === "string") {
+      const hex = v.replace(/[^0-9a-fA-F]/g, "");
+      const out = [];
+      for (let i = 0; i + 1 < hex.length; i += 2) {
+        out.push(parseInt(hex.slice(i, i + 2), 16));
+      }
+      return out;
+    }
+    return dataViewToNumbers(v);
+  }
+
+  function parseWwAdvTelemetry(result) {
+    const md = result?.manufacturerData;
+    if (!md || typeof md !== "object") return null;
+    for (const val of Object.values(md)) {
+      const nums = dataViewToNumbers(val);
+      for (let i = 0; i <= nums.length - 6; i++) {
+        if (nums[i] === 0xa5 && nums[i + 1] === 8 && nums[i + 2] === 0 && nums[i + 3] === 1) {
+          const out = {};
+          if (nums.length > i + 6 && nums[i + 6] <= 100) out.chargeValue = nums[i + 6];
+          if (nums.length > i + 7 && nums[i + 7] >= 1 && nums[i + 7] <= 20) out.bleType = nums[i + 7];
+          if (nums.length > i + 8 && nums[i + 8] <= 10) out.power = nums[i + 8];
+          if (Object.keys(out).length) return out;
+        }
+      }
+    }
+    return null;
+  }
+
+  function findCharInServices(services, serviceSuffix, charSuffix) {
+    if (!services?.length) return null;
+    for (const svc of services) {
+      if (uuidSuffix(svc.uuid) !== serviceSuffix) continue;
+      for (const ch of svc.characteristics || []) {
+        if (uuidSuffix(ch.uuid) !== charSuffix) continue;
+        if (ch.properties?.read === false) continue;
+        return { service: svc.uuid, characteristic: ch.uuid };
+      }
+    }
+    return null;
+  }
+
+  function applyByteCandidates(out, suffix, bytes) {
+    if (!bytes?.length) return;
+    const b0 = bytes[0] & 0xff;
+    if (out.chargeValue == null && b0 <= 100 && (suffix === "2a19" || suffix === "fff2" || suffix === "fff3" || bytes.length === 1)) {
+      out.chargeValue = b0;
+    }
+    if (out.power == null && b0 <= 10 && (suffix === "fff6" || suffix === "fff5")) {
+      out.power = b0;
+    }
+    if (out.frequency == null && b0 <= 20 && suffix === "fff8") {
+      out.frequency = b0;
+    }
+    if (out.bleType == null && b0 >= 1 && b0 <= 20 && suffix !== "fff6" && suffix !== "fff8" && suffix !== "2a19") {
+      out.bleType = b0;
+    }
+  }
+
+  async function readGattBytes(p, deviceId, service, characteristic, timeoutMs = GATT_READ_TIMEOUT_MS) {
+    const result = await p.read({
+      deviceId,
+      service,
+      characteristic,
+      timeout: timeoutMs,
+    });
+    return bytesFromReadResult(result);
+  }
+
+  function gattReadTimeoutLeft(deadlineMs) {
+    return Math.max(400, Math.min(GATT_READ_TIMEOUT_MS, deadlineMs - Date.now()));
+  }
+
+  /** Чтение заряда и типа с метки — последовательно, только известные UUID (как NativeBleService). */
+  async function readTagGattTelemetry(deviceId, tag, scanHint) {
+    const p = plugin();
+    if (!p) throw new Error("BluetoothLe plugin недоступен");
+    const deadlineMs = Date.now() + GATT_TELEMETRY_DEADLINE_MS;
+    const out = {
+      chargeValue: null,
+      power: null,
+      frequency: null,
+      bleType: null,
+      rssi: scanHint?.rssi ?? null,
+      fromGatt: false,
+      debug: { services: 0, reads: [] },
+    };
+
+    const recordRead = (suffix, bytes) => {
+      if (!bytes?.length) return;
+      out.debug.reads.push({
+        suffix,
+        hex: bytes.map((b) => b.toString(16).padStart(2, "0")).join(""),
+      });
+      applyByteCandidates(out, suffix, bytes);
+    };
+
+    await new Promise((r) => setTimeout(r, 350));
+
+    if (Date.now() < deadlineMs) {
+      try {
+        const rssiRes = await p.readRssi({
+          deviceId,
+          timeout: gattReadTimeoutLeft(deadlineMs),
+        });
+        if (rssiRes?.value != null) out.rssi = rssiRes.value;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    let services = [];
+    try {
+      const res = await p.getServices({ deviceId });
+      services = res?.services || [];
+      out.debug.services = services.length;
+    } catch (e) {
+      console.warn("[ble-field] getServices", e?.message || e);
+    }
+
+    const seen = new Set();
+    const readOne = async (serviceSuffix, charSuffix) => {
+      if (Date.now() >= deadlineMs) return;
+      const key = `${serviceSuffix}:${charSuffix}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const timeoutMs = gattReadTimeoutLeft(deadlineMs);
+      const hit = findCharInServices(services, serviceSuffix, charSuffix);
+      const service = hit?.service || fullBleUuid(serviceSuffix);
+      const characteristic = hit?.characteristic || fullBleUuid(charSuffix);
+      try {
+        const bytes = await readGattBytes(p, deviceId, service, characteristic, timeoutMs);
+        recordRead(charSuffix, bytes);
+      } catch (e) {
+        console.warn("[ble-field] GATT read", charSuffix, e?.message || e);
+      }
+    };
+
+    await readOne("180f", "2a19");
+    for (const suffix of GATT_WW_READ_SUFFIXES) {
+      await readOne("fff0", suffix);
+    }
+
+    if (out.chargeValue != null && out.chargeValue > 100) out.chargeValue = null;
+
+    const adv = scanHint?.advTelemetry;
+    if (adv) {
+      if (out.chargeValue == null && adv.chargeValue != null) out.chargeValue = adv.chargeValue;
+      if (out.power == null && adv.power != null) out.power = adv.power;
+      if (out.bleType == null && adv.bleType != null) out.bleType = adv.bleType;
+    }
+
+    out.fromGatt =
+      out.debug.reads.length > 0 ||
+      out.chargeValue != null ||
+      out.power != null ||
+      out.bleType != null ||
+      out.frequency != null;
+
+    if (!out.fromGatt) {
+      console.warn("[ble-field] GATT: no telemetry", tag?.ble || deviceId, out.debug);
+    } else {
+      console.info("[ble-field] GATT telemetry", tag?.ble || deviceId, out);
+    }
+
+    return out;
+  }
+
+  async function pauseScanForGatt() {
+    stopRenderTimer();
+    const p = plugin();
+    if (!scanActive || !p) return;
+    try {
+      await p.stopLEScan();
+    } catch {
+      /* ignore */
+    }
+    scanActive = false;
+  }
+
+  async function resumeScanForGatt() {
+    const p = plugin();
+    if (scanActive || scanPaused || !scanListener || !p) return;
+    try {
+      await p.requestLEScan({ allowDuplicates: true });
+      scanActive = true;
+      startRenderTimer();
+      updateScanButton();
+    } catch (e) {
+      console.warn("[ble-field] resume scan", e?.message || e);
+    }
+  }
+
+  async function withGattSession(deviceId, fn) {
+    const wasScanning = scanActive;
+    gattBusy = true;
+    renderTagPatrolBlock();
+    try {
+      await pauseScanForGatt();
+      await connectToDevice(deviceId);
+      return await fn();
+    } finally {
+      await disconnectDevice();
+      if (wasScanning) await resumeScanForGatt();
+      gattBusy = false;
+      renderTagPatrolBlock();
+    }
   }
 
   function scrollToPendingSection() {
@@ -845,12 +1221,16 @@
     window.setTimeout(() => section.classList.remove("ble-field-section--highlight"), 1400);
   }
 
-  function saveCheckinRecord(tag, dev) {
+  function saveCheckinRecord(tag, dev, live) {
     const route = getRoute();
     const routeId = route.routeId ? String(route.routeId) : String(tag.routeId ?? "");
     const routeTitle = route.routeId ? route.routeTitle : tag.routeTitle || "—";
     const store = loadStore();
     const keyBle = normalizeBle(tag.ble);
+    const chargeValue = live?.chargeValue ?? tag.charge ?? 100;
+    const power = live?.power ?? tag.power ?? 6;
+    const frequency = live?.frequency ?? tag.frequency ?? 3;
+    const bleType = live?.bleType ?? tag.bleTypeNum ?? 10;
     store.checkins = store.checkins.filter(
       (c) => !(normalizeBle(c.bleNumber) === keyBle && String(c.routeId) === routeId && !c.uploaded)
     );
@@ -863,27 +1243,38 @@
       mac_address: dev.deviceId,
       latitude: tag.lat ?? null,
       longitude: tag.lng ?? null,
-      rssi: dev.rssi ?? null,
+      rssi: live?.rssi ?? dev.rssi ?? null,
       checkedAt: new Date().toISOString(),
       uploaded: false,
       movabilityType: tag.movabilityType ?? 1,
-      chargeValue: tag.charge ?? 100,
+      chargeValue,
       statusCode: tag.statusCode ?? 4,
-      power: tag.power ?? 6,
-      frequency: tag.frequency ?? 3,
-      bleType: tag.bleTypeNum ?? 10,
+      power,
+      frequency,
+      bleType,
       firmwareVersion: tag.firmwareVersion || "bt1",
+      gattLive: !!live?.fromGatt,
     });
     persistStore(store);
     recordDailyVisit(routeId, tag.ble);
-    if (isLowBattery(tag)) {
-      setStatus(`Обход #${tag.ble} сохранён. Батарейки, брат! (${chargeNum(tag)}%)`, "warn");
+    lastSavedBle = tag.ble;
+    hapticSaved();
+    pulsePendingSection();
+    const chargeLabel = chargeNumValue(chargeValue);
+    if (isLowBatteryCharge(chargeValue)) {
+      setStatus(`Обход #${tag.ble} отправлен. Батарейки, брат! (${chargeLabel}%)`, "warn");
+    } else if (live?.fromGatt) {
+      setStatus(
+        `Обход #${tag.ble} отправлен (заряд ${chargeLabel ?? "—"}%, мощность ${power}, тип ${bleType})`,
+        "ok"
+      );
     } else {
-      setStatus(`Обход метки #${tag.ble} сохранён на телефоне`, "ok");
+      setStatus(`Обход #${tag.ble} добавлен в сохранённые`, "ok");
     }
   }
 
-  function saveCheckinForBle(bleNum) {
+  async function saveCheckinForBle(bleNum) {
+    if (gattBusy) return;
     const tag =
       getScopeMarkers().find((t) => normalizeBle(t.ble) === normalizeBle(bleNum)) ||
       deps?.findTag?.(bleNum);
@@ -891,31 +1282,73 @@
       setStatus("Метка не найдена в данных карты", "error");
       return;
     }
-    const dev = (() => {
-      for (const d of devices.values()) {
-        if (Date.now() - d.lastSeen > NEARBY_TTL_MS) continue;
-        const t = resolveTagForDevice(d, [tag]);
-        if (t && normalizeBle(t.ble) === normalizeBle(tag.ble)) return d;
-      }
-      return null;
-    })();
+    const dev = findDeviceForTag(tag, { ignoreTtl: scanPaused });
     if (!dev) {
-      setStatus("Метка не видна по Bluetooth. Подойдите ближе и дождитесь сканирования.", "error");
+      setStatus(
+        scanPaused
+          ? "Метки нет в замороженном списке. Нажмите «Продолжить» и поднесите телефон."
+          : "Метка не видна по Bluetooth. Подойдите ближе и дождитесь сканирования.",
+        "error"
+      );
       return;
     }
-    saveCheckinRecord(tag, dev);
+    await ensureBleReady();
+    setStatus(`Подключение к метке #${tag.ble}…`, "busy");
+    let live;
+    try {
+      live = await withGattSession(dev.deviceId, () =>
+        readTagGattTelemetry(dev.deviceId, tag, {
+          rssi: dev.rssi,
+          advTelemetry: dev.advTelemetry,
+        })
+      );
+    } catch (e) {
+      setStatus(`Подключение/чтение: ${String(e?.message || e).slice(0, 140)}`, "error");
+      return;
+    }
+    if (!live?.fromGatt) {
+      const n = live?.debug?.services ?? 0;
+      setStatus(
+        `GATT: данных нет (сервисов ${n}). Убедитесь, что метка bt1/WW, не чужой BLE.`,
+        "error"
+      );
+      return;
+    }
+    saveCheckinRecord(tag, dev, live);
     renderAll();
   }
 
   async function saveCheckinForFocus() {
-    if (!tagPatrolMode || !focusBle || !connectedDeviceId) return;
+    if (!tagPatrolMode || !focusBle || !connectedDeviceId || gattBusy) return;
     const tag = tagByBle(focusBle);
     if (!tag) {
       setStatus("Метка не найдена в данных карты", "error");
       return;
     }
     const dev = focusConnectedDev || { deviceId: connectedDeviceId, rssi: null, lastSeen: Date.now() };
-    saveCheckinRecord(tag, dev);
+    gattBusy = true;
+    renderTagPatrolBlock();
+    setStatus(`Читаем данные метки #${tag.ble}…`, "busy");
+    let live;
+    try {
+      live = await readTagGattTelemetry(connectedDeviceId, tag, {
+        rssi: dev.rssi,
+        advTelemetry: focusConnectedDev?.advTelemetry || dev.advTelemetry,
+      });
+    } catch (e) {
+      gattBusy = false;
+      renderTagPatrolBlock();
+      setStatus(`Не удалось прочитать метку: ${String(e?.message || e).slice(0, 140)}`, "error");
+      return;
+    }
+    gattBusy = false;
+    if (!live?.fromGatt) {
+      renderTagPatrolBlock();
+      const n = live?.debug?.services ?? 0;
+      setStatus(`GATT: данных нет (сервисов ${n}). Повторите подключение.`, "error");
+      return;
+    }
+    saveCheckinRecord(tag, { ...dev, rssi: live.rssi ?? dev.rssi }, live);
     await disconnectDevice();
     tagPatrolMode = false;
     focusBle = null;
@@ -966,8 +1399,8 @@
     if (!p) throw new Error("BluetoothLe plugin недоступен");
     if (connectedDeviceId === deviceId) return;
     if (connectedDeviceId) await disconnectDevice();
-    await p.connect({ deviceId, timeout: 10000 });
-    await p.discoverServices({ deviceId });
+    await p.connect({ deviceId, timeout: GATT_CONNECT_TIMEOUT_MS });
+    await p.discoverServices({ deviceId, timeout: GATT_CONNECT_TIMEOUT_MS });
     connectedDeviceId = deviceId;
   }
 
@@ -981,7 +1414,7 @@
     try {
       await connectToDevice(dev.deviceId);
       focusConnectedDev = { ...dev, lastSeen: Date.now() };
-      setStatus(`Метка #${tag.ble} подключена. Нажмите «Сохранить обход».`, "ok");
+      setStatus(`Метка #${tag.ble} подключена. Нажмите «Отправить обход».`, "ok");
     } catch (e) {
       setStatus(`Не удалось подключиться: ${String(e?.message || e).slice(0, 120)}`, "error");
     } finally {
@@ -990,29 +1423,122 @@
     }
   }
 
-  async function stopScan() {
+  async function connectToTagFromCache(bleNum) {
+    if (connecting || gattBusy) return;
+    const tag = tagByBle(bleNum) || deps?.findTag?.(bleNum);
+    if (!tag) {
+      setStatus("Метка не найдена в данных карты", "error");
+      return;
+    }
+    const dev = findDeviceForTag(tag, { ignoreTtl: true });
+    if (!dev) {
+      setStatus("Метки нет в списке. Нажмите «Продолжить» и поднесите телефон.", "error");
+      return;
+    }
+    await ensureBleReady();
+    connecting = true;
+    renderTagPatrolBlock();
+    setStatus(`Подключение к метке #${tag.ble}…`, "busy");
+    try {
+      if (scanActive) await pauseScan();
+      await connectToDevice(dev.deviceId);
+      focusConnectedDev = { ...dev, lastSeen: Date.now() };
+      setStatus(`Метка #${tag.ble} подключена. Можно отправить обход.`, "ok");
+    } catch (e) {
+      setStatus(`Не удалось подключиться: ${String(e?.message || e).slice(0, 120)}`, "error");
+    } finally {
+      connecting = false;
+      renderTagPatrolBlock();
+    }
+  }
+
+  async function pauseScan() {
+    if (!scanActive) return;
     stopRenderTimer();
     const p = plugin();
-    if (!p || !scanActive) return;
-    try {
-      if (scanListener?.remove) await scanListener.remove();
-    } catch {
-      /* ignore */
-    }
-    scanListener = null;
-    try {
-      await p.stopLEScan();
-    } catch {
-      /* ignore */
+    if (p) {
+      try {
+        await p.stopLEScan();
+      } catch {
+        /* ignore */
+      }
     }
     scanActive = false;
-    $("bleFieldScanBtn") && ($("bleFieldScanBtn").textContent = "Сканировать");
+    scanPaused = true;
+    updateScanButton();
     renderNearbyList();
     renderTagPatrolBlock();
   }
 
-  async function beginScanOnly() {
+  async function resumeScan() {
+    if (scanActive) return;
+    await ensureBleReady();
+    if (!scanListener) {
+      await beginScanOnly({ fresh: false });
+      return;
+    }
+    const p = plugin();
+    if (!p) return;
+    scanPaused = false;
+    try {
+      await p.requestLEScan({ allowDuplicates: true });
+      scanActive = true;
+      startRenderTimer();
+      updateScanButton();
+      const route = getRoute();
+      setStatus(
+        tagPatrolMode && focusBle
+          ? `Сканирование метки #${focusBle}… поднесите телефон`
+          : route.routeId
+            ? `Сканирование маршрута «${route.routeTitle}»…`
+            : "Сканирование всех меток… подойдите к метке",
+        "busy"
+      );
+    } catch (e) {
+      setStatus(String(e?.message || e), "error");
+      return;
+    }
+    renderNearbyList();
+    renderTagPatrolBlock();
+  }
+
+  async function stopScan() {
+    stopRenderTimer();
+    const p = plugin();
+    if (scanActive && p) {
+      try {
+        if (scanListener?.remove) await scanListener.remove();
+      } catch {
+        /* ignore */
+      }
+      scanListener = null;
+      try {
+        await p.stopLEScan();
+      } catch {
+        /* ignore */
+      }
+    } else if (scanListener?.remove) {
+      try {
+        await scanListener.remove();
+      } catch {
+        /* ignore */
+      }
+      scanListener = null;
+    }
+    scanActive = false;
+    scanPaused = false;
     devices.clear();
+    updateScanButton();
+    renderNearbyList();
+    renderTagPatrolBlock();
+  }
+
+  async function beginScanOnly(opts = {}) {
+    const fresh = opts.fresh !== false;
+    if (fresh) {
+      devices.clear();
+      scanPaused = false;
+    }
     renderNearbyList();
 
     const p = plugin();
@@ -1029,12 +1555,14 @@
       const id = result.device.deviceId;
       const prev = devices.get(id);
       const bleFromAdv = bleFromManufacturerData(result) || prev?.bleFromAdv || "";
+      const advTelemetry = parseWwAdvTelemetry(result) || prev?.advTelemetry || null;
       devices.set(id, {
         deviceId: id,
         name: result.device.name || result.localName || prev?.name,
         rssi: result.rssi ?? prev?.rssi,
         lastSeen: Date.now(),
         bleFromAdv,
+        advTelemetry,
         isWw: isWwAdvertisement(result),
       });
       if (tagPatrolMode && focusBle && !connectedDeviceId && !connecting) {
@@ -1049,8 +1577,9 @@
     });
     await p.requestLEScan({ allowDuplicates: true });
     scanActive = true;
+    scanPaused = false;
     startRenderTimer();
-    $("bleFieldScanBtn") && ($("bleFieldScanBtn").textContent = "Стоп");
+    updateScanButton();
     const route = getRoute();
     setStatus(
       tagPatrolMode && focusBle
@@ -1066,8 +1595,11 @@
   async function startScan() {
     await ensureBleReady();
     if (scanActive) {
-      await stopScan();
-      setStatus("Сканирование остановлено", "info");
+      await pauseScan();
+      return;
+    }
+    if (scanPaused) {
+      await resumeScan();
       return;
     }
     await beginScanOnly();
@@ -1138,6 +1670,7 @@
   }
 
   function openPanel(tag) {
+    void window.WwBleFinder?.close?.();
     focusBle = tag?.ble ? String(tag.ble) : null;
     const panel = $("bleFieldPanel");
     if (panel) {
@@ -1188,6 +1721,7 @@
     focusBle = null;
     focusConnectedDev = null;
     connecting = false;
+    pendingExpanded = false;
     clearPatrolSearch();
     const panel = $("bleFieldPanel");
     if (panel) {
@@ -1205,7 +1739,17 @@
     $("bleFieldUploadBtn")?.addEventListener("click", () => {
       void uploadPending();
     });
+    $("bleFieldPendingToggle")?.addEventListener("click", () => {
+      if (!pendingCheckins().length) return;
+      hapticTap(18);
+      pendingExpanded = !pendingExpanded;
+      renderPendingBlock();
+    });
+    $("bleFieldFocusConnectBtn")?.addEventListener("click", () => {
+      if (focusBle) void connectToTagFromCache(focusBle);
+    });
     $("bleFieldFocusSaveBtn")?.addEventListener("click", () => {
+      hapticTap(28);
       void saveCheckinForFocus();
     });
     $("bleFieldCloseBtn")?.addEventListener("click", () => {
@@ -1263,6 +1807,7 @@
       void openTagPatrol(tag);
     },
     close: closePanel,
+    suspendScan: stopScan,
     onRouteChanged() {
       renderAll();
     },

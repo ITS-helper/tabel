@@ -45,6 +45,21 @@ export async function fetchBleMapCacheFromGithub(
   return null;
 }
 
+/** Как fetchBleListOffline в ble-map.js: github.io → Supabase REST. */
+export async function fetchBleListOffline(
+  companyId: number,
+): Promise<{ raw: RawBlePoint[]; updatedAt: string } | null> {
+  const fromSite = await fetchBleMapCacheFromGithub(companyId);
+  if (fromSite?.raw.length) {
+    return { raw: fromSite.raw, updatedAt: fromSite.updatedAt };
+  }
+  const fromDb = await fetchBleMapCacheFromSupabase(companyId);
+  if (fromDb?.raw.length) {
+    return { raw: fromDb.raw, updatedAt: fromDb.updatedAt };
+  }
+  return null;
+}
+
 /** Кэш из Supabase REST (как fetchBleListCached в ble-map.js). */
 export async function fetchBleMapCacheFromSupabase(
   companyId: number,

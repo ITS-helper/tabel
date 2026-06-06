@@ -420,7 +420,39 @@ export function buildLeafletHtml(): string {
 
     function photoDisplaySrc(url) {
       if (!url) return "";
-      return photoSrcMap[url] || url;
+      return photoSrcMap[url] || "";
+    }
+
+    function applyPhotoToImg(img, url) {
+      if (!img || !url) return;
+      var src = photoDisplaySrc(url);
+      if (src) {
+        img.src = src;
+        return;
+      }
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: "photoResolve", url: url }));
+      }
+    }
+
+    function wirePopupPhotos(el) {
+      if (!el) return;
+      el.querySelectorAll("img.ble-popup-photo[data-photo-url]").forEach(function(img) {
+        var url = img.getAttribute("data-photo-url");
+        if (!url) return;
+        img.onerror = function() {
+          if (this.dataset.blePhotoTried === "proxy") {
+            this.removeAttribute("src");
+            this.classList.add("ble-popup-photo--missing");
+            return;
+          }
+          this.dataset.blePhotoTried = "proxy";
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: "photoResolve", url: url, force: true }));
+          }
+        };
+        applyPhotoToImg(img, url);
+      });
     }
 
     function makePopupHtml(m) {
@@ -433,6 +465,10 @@ export function buildLeafletHtml(): string {
       var locLine = m.locationDesc
         ? '<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">' + esc(m.locationDesc) + '</div>'
         : "";
+      var inspLine = '<div style="font-size:12px;margin-bottom:2px;color:' +
+        (m.isInspected ? '#2E7D32' : '#C62828') + ';">' +
+        (m.isInspected ? 'Обход: ' + esc(m.recordDt || 'сегодня') : 'Не обходилась' + (m.recordDt && m.recordDt !== 'Не обходилась' ? ' (посл. ' + esc(m.recordDt) + ')' : '')) +
+        '</div>';
       var photos = "";
       var urls = [m.photoTag, m.photoPlace].filter(Boolean);
       if (!urls.length) {
@@ -440,16 +476,15 @@ export function buildLeafletHtml(): string {
       } else {
         photos = '<div class="ble-popup-photos">';
         urls.forEach(function(url, idx) {
-          var src = photoDisplaySrc(url);
           photos += '<a class="ble-popup-photo-link" href="#" data-photo="' + esc(url) + '">' +
-            '<img class="ble-popup-photo" src="' + esc(src) + '" alt="" loading="' + (idx ? "lazy" : "eager") + '" referrerpolicy="no-referrer"/></a>';
+            '<img class="ble-popup-photo" data-photo-url="' + esc(url) + '" src="" alt="" loading="' + (idx ? "lazy" : "eager") + '" referrerpolicy="no-referrer"/></a>';
         });
         photos += '</div>';
       }
       var patrol = '<button type="button" class="ble-popup-patrol-btn" data-patrol-ble="' + esc(m.ble) + '">Обход (BLE)</button>';
       return '<div class="ble-popup-body" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;">' +
         '<div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #' + esc(m.ble) + '</div>' +
-        routeLine + typeLine + locLine + photos + patrol + '</div>';
+        routeLine + typeLine + locLine + inspLine + photos + patrol + '</div>';
     }
 
     function wirePopupDom(marker) {
@@ -463,11 +498,20 @@ export function buildLeafletHtml(): string {
             var img = document.getElementById("photoViewerImg");
             var ov = document.getElementById("photoViewer");
             if (img && ov && url) {
-              img.src = photoDisplaySrc(url);
-              ov.classList.add("open");
+              var src = photoDisplaySrc(url);
+              if (src) {
+                img.src = src;
+                ov.classList.add("open");
+              } else {
+                window.__photoViewerPendingUrl = url;
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: "photoResolve", url: url, force: true, viewer: true }));
+                }
+              }
             }
           });
         });
+        wirePopupPhotos(el);
         var btn = el.querySelector("[data-patrol-ble]");
         if (btn && window.ReactNativeWebView) {
           btn.addEventListener("click", function(ev) {
@@ -715,11 +759,24 @@ export function buildLeafletHtml(): string {
       var target = ensureMarkerTarget(clusterEnabled, markers.length);
       var markerBounds;
 
-      if (editMode || (viewOnly && !plainAddRaf)) {
+      if (editMode) {
+        syncMarkerRegistry(markers);
+        target.clearLayers();
         markers.forEach(function(m) {
           if (m.lat == null || m.lng == null) return;
           var isDirty = m.id != null && !!dirtySet[m.id];
-          var mk = getOrCreateMarker(m, isDirty, editMode);
+          var mk = getOrCreateMarker(m, isDirty, true);
+          target.addLayer(mk);
+          markerByBle[String(m.ble)] = mk;
+          markerDataByBle[String(m.ble)] = m;
+        });
+        markerBounds = markers.filter(function(m) { return m.lat != null && m.lng != null; })
+          .map(function(m) { return [m.lat, m.lng]; });
+      } else if (viewOnly && !plainAddRaf) {
+        markers.forEach(function(m) {
+          if (m.lat == null || m.lng == null) return;
+          var isDirty = m.id != null && !!dirtySet[m.id];
+          var mk = getOrCreateMarker(m, isDirty, false);
           markerByBle[String(m.ble)] = mk;
           markerDataByBle[String(m.ble)] = m;
         });
@@ -738,6 +795,26 @@ export function buildLeafletHtml(): string {
     window.__updateMap = updateMap;
     window.__updatePhotoSrc = function(src) {
       photoSrcMap = src || {};
+      document.querySelectorAll("img.ble-popup-photo[data-photo-url]").forEach(function(img) {
+        var url = img.getAttribute("data-photo-url");
+        var next = photoDisplaySrc(url);
+        if (next && img.src !== next) {
+          img.removeAttribute("data-ble-photo-tried");
+          img.classList.remove("ble-popup-photo--missing");
+          img.src = next;
+        }
+      });
+      var pending = window.__photoViewerPendingUrl;
+      if (pending) {
+        var vsrc = photoDisplaySrc(pending);
+        var vimg = document.getElementById("photoViewerImg");
+        var ov = document.getElementById("photoViewer");
+        if (vsrc && vimg && ov) {
+          vimg.src = vsrc;
+          ov.classList.add("open");
+          window.__photoViewerPendingUrl = null;
+        }
+      }
     };
 
     document.getElementById("photoViewerClose").addEventListener("click", function() {

@@ -1,5 +1,5 @@
 import { useRouter, useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   Vibration,
   View,
 } from "react-native";
@@ -15,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { flushMarkerEditQueue, sessionEntryFromMove } from "../../src/api/markerEditsApi";
 import { BleLeafletMap } from "../../src/components/BleLeafletMap";
 import { RoutePickerModal } from "../../src/components/RoutePickerModal";
+import { SearchField } from "../../src/components/SearchField";
 import { useAppData } from "../../src/context/AppDataContext";
 import { APP_BUILD } from "../../src/config";
 import { zonesForRouteMarkers } from "../../src/map/mapHelpers";
@@ -45,10 +45,12 @@ export default function MapScreen() {
     setShowPassedMarkers,
     loading,
     error,
+    statusLine,
     offlineMeta,
     refresh,
     routeProgress,
     dailyDone,
+    todayPatrol,
     refreshPending,
     setFocusBle,
     photoMeta,
@@ -68,6 +70,7 @@ export default function MapScreen() {
   );
   const [editBusy, setEditBusy] = useState(false);
   const [editNote, setEditNote] = useState<string | null>(null);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
 
   const sessionDirtyIds = useMemo(
     () => [...sessionDirty.keys()],
@@ -120,10 +123,24 @@ export default function MapScreen() {
       const ok = await refresh();
       if (ok) {
         Vibration.vibrate([18, 36, 18]);
-        setRefreshPhase("Готово");
+        const cacheMsg =
+          error?.includes("снимок") ||
+          error?.includes("API недоступен") ||
+          error?.includes("Живой API") ||
+          error?.includes("не удалось");
+        setRefreshPhase(
+          cacheMsg
+            ? `Кэш · ${error?.slice(0, 100) ?? "загружен"}`
+            : "Метки обновлены · фото в фоне",
+        );
       } else {
         Vibration.vibrate([28, 48, 28]);
-        setRefreshPhase("Не удалось обновить — проверьте интернет");
+        const detail = error?.trim();
+        setRefreshPhase(
+          detail && detail.length > 10
+            ? detail.slice(0, 200)
+            : "Не удалось обновить — см. текст под картой",
+        );
       }
       setTimeout(() => setRefreshPhase(null), ok ? 1400 : 3200);
     } catch {
@@ -133,7 +150,7 @@ export default function MapScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [refresh, refreshing]);
+  }, [refresh, refreshing, error]);
 
   const onPatrol = useCallback(
     (tag: { ble: string }) => {
@@ -256,6 +273,24 @@ export default function MapScreen() {
             ? "локально"
             : "—";
 
+  const hasInfoAlert = useMemo(
+    () =>
+      !!(refreshing || refreshPhase || editNote || error || photoSyncNote) ||
+      pendingMarkerEdits > 0,
+    [refreshing, refreshPhase, editNote, error, photoSyncNote, pendingMarkerEdits],
+  );
+
+  const compactSummary = useMemo(() => {
+    const parts = [`${routeProgress.done}/${routeProgress.total}`, `${mappableCount} GPS`];
+    if (pendingMarkerEdits > 0) parts.push(`↗${pendingMarkerEdits}`);
+    if (editMode) parts.push("правка");
+    return parts.join(" · ");
+  }, [routeProgress, mappableCount, pendingMarkerEdits, editMode]);
+
+  useEffect(() => {
+    if (editMode || pendingMarkerEdits > 0) setInfoPanelOpen(true);
+  }, [editMode, pendingMarkerEdits]);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.toolbar}>
@@ -264,8 +299,8 @@ export default function MapScreen() {
             {route.routeTitle}
           </Text>
         </Pressable>
-        <TextInput
-          style={styles.search}
+        <SearchField
+          style={styles.searchInput}
           placeholder="№ метки"
           placeholderTextColor={colors.textMuted}
           value={query}
@@ -292,44 +327,91 @@ export default function MapScreen() {
         </Pressable>
       </View>
 
-      {refreshing || refreshPhase ? (
-        <View style={styles.refreshBar}>
-          {refreshing ? (
-            <ActivityIndicator color={colors.accent} size="small" />
-          ) : null}
-          <Text style={styles.refreshBarText}>
-            {refreshPhase ?? "Обновление…"}
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.subbar}>
-        <Text style={styles.subText} numberOfLines={2}>
-          {editMode
-            ? "Удержите метку 1 сек., перетащите"
-            : `${routeProgress.done}/${routeProgress.total} · ${mappableCount} на карте · ${route.routeId ? `${routeZones.length} зон` : `${zones.length} зон`}${query.trim() ? ` · «${query.trim()}»` : ""}`}
+      <Pressable
+        style={styles.panelToggle}
+        onPress={() => setInfoPanelOpen((v) => !v)}
+      >
+        <Text style={styles.panelToggleIcon}>{infoPanelOpen ? "▲" : "▼"}</Text>
+        <Text style={styles.panelToggleText} numberOfLines={1}>
+          {infoPanelOpen ? "Скрыть статус и настройки" : compactSummary}
         </Text>
-        {!editMode ? (
-          <View style={styles.togglesRow}>
-            <View style={styles.toggleItem}>
-              <Text style={styles.toggleLabel}>Пройденные</Text>
-              <Switch
-                value={showPassedMarkers}
-                onValueChange={setShowPassedMarkers}
-                trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
-              />
-            </View>
-            <View style={styles.toggleItem}>
-              <Text style={styles.toggleLabel}>Кластеры</Text>
-              <Switch
-                value={clusterEnabled}
-                onValueChange={setClusterEnabled}
-                trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
-              />
-            </View>
-          </View>
+        {!infoPanelOpen && hasInfoAlert ? (
+          <View style={styles.panelAlertDot} />
         ) : null}
-      </View>
+      </Pressable>
+
+      {infoPanelOpen ? (
+        <>
+          {refreshing || refreshPhase ? (
+            <View style={styles.refreshBar}>
+              {refreshing ? (
+                <ActivityIndicator color={colors.accent} size="small" />
+              ) : null}
+              <Text style={styles.refreshBarText}>
+                {refreshPhase ?? "Обновление…"}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.subbar}>
+            <Text style={styles.subText} numberOfLines={2}>
+              {editMode
+                ? "Удержите метку 1 сек., перетащите"
+                : `${routeProgress.done}/${routeProgress.total} · ${mappableCount} на карте · ${route.routeId ? `${routeZones.length} зон` : `${zones.length} зон`}${query.trim() ? ` · «${query.trim()}»` : ""}`}
+            </Text>
+            {!editMode ? (
+              <View style={styles.togglesRow}>
+                <View style={styles.toggleItem}>
+                  <Text style={styles.toggleLabel}>Пройденные</Text>
+                  <Switch
+                    value={showPassedMarkers}
+                    onValueChange={setShowPassedMarkers}
+                    trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+                  />
+                </View>
+                <View style={styles.toggleItem}>
+                  <Text style={styles.toggleLabel}>Кластеры</Text>
+                  <Switch
+                    value={clusterEnabled}
+                    onValueChange={setClusterEnabled}
+                    trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+                  />
+                </View>
+              </View>
+            ) : null}
+          </View>
+
+          {editNote ? (
+            <View style={styles.noteBar}>
+              <Text style={styles.noteText}>{editNote}</Text>
+            </View>
+          ) : null}
+
+          {error && routeMarkers.length ? (
+            <View style={styles.noteBar}>
+              <Text style={styles.noteText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.footer}>
+            {statusLine ? (
+              <Text style={styles.footerStatus}>{statusLine}</Text>
+            ) : error ? (
+              <Text style={styles.footerStatus}>{error}</Text>
+            ) : null}
+            <Text style={styles.footerText}>
+              {refreshing || refreshPhase
+                ? refreshPhase ?? "Обновление: метки, зоны, фото…"
+                : photoSyncNote
+                  ? photoSyncNote
+                  : `${routes.length} маршр. · ${routeProgress.done}/${routeProgress.total} обход · ${mappableCount} GPS · ${offlineMeta?.zoneCount ?? zones.length} зон · ${photoMeta?.photoCount ?? 0} фото · ${sourceLabel} · ${cacheLabel}`}
+            </Text>
+            <Text style={styles.footerSub}>
+              ↻ — метки, полигоны и новые фото в кэш · {APP_BUILD}
+            </Text>
+          </View>
+        </>
+      ) : null}
 
       {editMode ? (
         <View style={styles.editBar}>
@@ -364,12 +446,6 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {editNote ? (
-        <View style={styles.noteBar}>
-          <Text style={styles.noteText}>{editNote}</Text>
-        </View>
-      ) : null}
-
       {loading && !routeMarkers.length ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.accent} />
@@ -383,12 +459,7 @@ export default function MapScreen() {
           </Pressable>
         </View>
       ) : (
-        <>
-          {error && routeMarkers.length ? (
-            <View style={styles.noteBar}>
-              <Text style={styles.noteText}>{error}</Text>
-            </View>
-          ) : null}
+        <View style={styles.mapWrap}>
           <BleLeafletMap
           markers={mapMarkers}
           zones={routeZones}
@@ -401,25 +472,14 @@ export default function MapScreen() {
           onPatrol={onPatrol}
           photoCacheTick={photoMeta?.lastSyncAt ?? null}
         />
-        </>
+        </View>
       )}
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          {refreshing || refreshPhase
-            ? refreshPhase ?? "Обновление: метки, зоны, фото…"
-            : photoSyncNote
-              ? photoSyncNote
-              : `Загружено: ${offlineMeta?.markerCount ?? routeMarkers.length} меток (${mappableCount} GPS), ${offlineMeta?.zoneCount ?? zones.length} зон, ${photoMeta?.photoCount ?? 0} фото · ${sourceLabel} · ${cacheLabel}`}
-        </Text>
-        <Text style={styles.footerSub}>
-          ↻ — метки, полигоны и новые фото в кэш · {APP_BUILD}
-        </Text>
-      </View>
 
       <RoutePickerModal
         visible={routeOpen}
         routes={routes}
+        markers={markers}
+        todayPatrol={todayPatrol}
         selectedId={route.routeId}
         onSelect={setRoute}
         onClose={() => setRouteOpen(false)}
@@ -450,16 +510,36 @@ const createStyles = (colors: AppColors) =>
     borderColor: colors.neon,
   },
   routeText: { color: colors.neon, fontWeight: "600", fontSize: 13 },
-  search: {
-    flex: 1,
-    backgroundColor: colors.surfaceAlt,
-    color: colors.text,
-    borderRadius: 10,
-    paddingHorizontal: 12,
+  searchInput: {
     paddingVertical: 8,
     fontSize: 15,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  panelToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: colors.surfaceAlt,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  panelToggleIcon: {
+    color: colors.neon,
+    fontSize: 11,
+    fontWeight: "700",
+    width: 14,
+  },
+  panelToggleText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    flex: 1,
+  },
+  panelAlertDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.warning,
   },
   iconBtn: {
     width: 36,
@@ -538,6 +618,7 @@ const createStyles = (colors: AppColors) =>
     borderBottomColor: colors.border,
   },
   noteText: { color: colors.text, fontSize: 12, textAlign: "center" },
+  mapWrap: { flex: 1 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -561,7 +642,13 @@ const createStyles = (colors: AppColors) =>
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    gap: 2,
+    gap: 4,
+  },
+  footerStatus: {
+    color: colors.warning,
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 15,
   },
   footerText: { color: colors.textMuted, fontSize: 11, textAlign: "center" },
   footerSub: { color: colors.textMuted, fontSize: 10, textAlign: "center", opacity: 0.85 },

@@ -53,7 +53,7 @@ if not exist "data\ble-map-cache.json" (
 
 echo.
 echo [2/4] git add data\ble-map-cache.json ...
-git add "data/ble-map-cache.json"
+git add "data/ble-map-cache.json" "data/ble-map-cache-meta.json"
 if errorlevel 1 goto :git_fail
 
 git diff --cached --quiet

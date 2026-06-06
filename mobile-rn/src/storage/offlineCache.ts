@@ -2,21 +2,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import {
   classifyBle,
-  fetchAllBlePaginated,
-  fetchBleMapLive,
   getLastBleFetchDetail,
   normalizeWorkerBlePoint,
   parseZonesFromMapPayload,
   type BleMapFetchChannel,
 } from "../api/bleMapApi";
-import { bleAutoLogin } from "../api/bleClient";
 import { formatBundleAge, loadBundledBleCache } from "../api/bleMapCacheBundle";
+import { fetchBleListOffline } from "../api/bleMapCacheRemote";
 import { loadBleZonesFull } from "../api/zonesLoader";
-import type { BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
+import { loadRawMarkers } from "./loadRawMarkers";
+import type { BleRoute, BleTagMarker, BleZone, RawBlePoint } from "../ble/types";
 import {
   BLE_DEFAULT_COMPANY_ID,
   BLE_OFFLINE_MARKERS_KEY,
   BLE_OFFLINE_META_KEY,
+  BLE_OFFLINE_ROUTES_KEY,
   BLE_ZONES_LS_KEY,
 } from "../config";
 import { normalizeBle } from "../ble/wwAdvert";
@@ -198,57 +198,23 @@ async function loadBootstrapRaw(
   return { raw: [], source: "bundle" };
 }
 
-/** Живой API: map/ble → paginated ble. Без github/снимков. */
-async function loadRawMarkers(companyId: number): Promise<{
-  raw: RawBlePoint[];
-  source: OfflineMeta["source"];
-  channel: BleMapFetchChannel;
-  snapshotAt?: string;
-  apiFailed?: boolean;
-  fetchDetail?: string;
-}> {
-  let fetchDetail = "";
+export async function loadOfflineRoutes(): Promise<BleRoute[]> {
+  const raw = await AsyncStorage.getItem(BLE_OFFLINE_ROUTES_KEY);
+  if (!raw) return [];
   try {
-    await bleAutoLogin();
-  } catch (e) {
-    console.warn("[offlineCache] auth before live refresh", e);
+    const parsed = JSON.parse(raw) as BleRoute[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
-
-  const live = await fetchBleMapLive(companyId);
-  fetchDetail = getLastBleFetchDetail();
-  if (live.channel === "map_ble" && live.raw.length) {
-    return {
-      raw: live.raw,
-      source: "api",
-      channel: live.channel,
-      apiFailed: false,
-      fetchDetail,
-    };
-  }
-
-  try {
-    const paginated = await fetchAllBlePaginated();
-    fetchDetail = getLastBleFetchDetail();
-    if (paginated.length) {
-      return {
-        raw: paginated,
-        source: "api",
-        channel: "ble_page",
-        apiFailed: false,
-        fetchDetail,
-      };
-    }
-  } catch (e) {
-    fetchDetail = getLastBleFetchDetail() || (e instanceof Error ? e.message : "error");
-    console.warn("[offlineCache] paginated ble failed", e);
-  }
-
-  const detail = fetchDetail || "нет ответа API";
-  throw new Error(`Не удалось обновить с сервера (${detail}). Проверьте интернет.`);
 }
 
-async function loadZones(companyId: number, local: BleZone[]): Promise<BleZone[]> {
-  return loadBleZonesFull(companyId, local);
+export async function saveOfflineRoutes(routes: BleRoute[]): Promise<void> {
+  await AsyncStorage.setItem(BLE_OFFLINE_ROUTES_KEY, JSON.stringify(routes));
+}
+
+async function loadZones(companyId: number, local: BleZone[]) {
+  return loadBleZonesFull(companyId, local, { tryApi: true, awaitPolygons: true });
 }
 
 export async function syncOfflinePack(
@@ -261,6 +227,10 @@ export async function syncOfflinePack(
   photoRaw: RawBlePoint[];
   apiRefreshFailed: boolean;
   fetchDetail?: string;
+  didRefresh: boolean;
+  statusLine?: string;
+  routes?: BleRoute[];
+  zonesDetail?: string;
 }> {
   const localMarkers = await loadOfflineMarkers();
   const localZones = await loadOfflineZones(companyId);
@@ -269,14 +239,28 @@ export async function syncOfflinePack(
   // Capacitor всегда пробует API; NetInfo не блокирует refresh.
   try {
     const { raw, source, channel, apiFailed, fetchDetail } = await loadRawMarkers(companyId);
-    const fromNetwork = raw.length ? markersFromRaw(raw, localMarkers) : [];
+    const fromNetwork = raw.length
+      ? markersFromRaw(raw, localMarkers)
+      : [];
     const markers = fromNetwork.length ? fromNetwork : localMarkers;
-    const zones = await loadZones(companyId, localZones);
+    const zoneResult = await loadZones(companyId, localZones);
+    const zones = zoneResult.zones.length ? zoneResult.zones : localZones;
     const photoRaw = resolvePhotoRaw(raw, markers, bundledFallback());
     const liveRefresh =
       (channel === "map_ble" || channel === "ble_page") &&
       fromNetwork.length > 0 &&
-      !apiFailed;
+      !apiFailed &&
+      source === "api";
+    const didRefresh = fromNetwork.length > 0;
+    const statusLine = buildStatusLine({
+      source,
+      apiFailed: !!apiFailed || !liveRefresh,
+      fetchDetail,
+      zonesDetail: zoneResult.detail,
+      markerCount: markers.length,
+      zoneCount: zones.length,
+      fromApiZones: zoneResult.fromApi,
+    });
 
     if (!fromNetwork.length && localMarkers.length > 0) {
       const meta = (await loadOfflineMeta()) ?? {
@@ -303,6 +287,9 @@ export async function syncOfflinePack(
         photoRaw,
         apiRefreshFailed: true,
         fetchDetail: fetchDetail || "API вернул метки без координат",
+        didRefresh: false,
+        statusLine,
+        zonesDetail: zoneResult.detail,
       };
     }
 
@@ -320,8 +307,53 @@ export async function syncOfflinePack(
       photoRaw,
       apiRefreshFailed: !!apiFailed || !liveRefresh,
       fetchDetail,
+      didRefresh,
+      statusLine,
+      zonesDetail: zoneResult.detail,
     };
   } catch (e) {
+    const errDetail =
+      getLastBleFetchDetail() || (e instanceof Error ? e.message : String(e));
+
+    try {
+      const offline = await fetchBleListOffline(companyId);
+      if (offline?.raw.length) {
+        const fromNetwork = markersFromRaw(offline.raw, localMarkers);
+        const zoneResult = await loadZones(companyId, localZones);
+        const zones = zoneResult.zones.length ? zoneResult.zones : localZones;
+        const photoRaw = resolvePhotoRaw(offline.raw, fromNetwork, bundledFallback());
+        const meta = await saveOfflinePack(
+          fromNetwork,
+          zones,
+          companyId,
+          "cache",
+        );
+        const statusLine = buildStatusLine({
+          source: "cache",
+          apiFailed: true,
+          fetchDetail: errDetail,
+          zonesDetail: zoneResult.detail,
+          markerCount: fromNetwork.length,
+          zoneCount: zones.length,
+          fromApiZones: zoneResult.fromApi,
+        });
+        return {
+          markers: fromNetwork,
+          zones,
+          meta,
+          raw: offline.raw,
+          photoRaw,
+          apiRefreshFailed: true,
+          fetchDetail: errDetail,
+          didRefresh: fromNetwork.length > 0,
+          statusLine,
+          zonesDetail: zoneResult.detail,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+
     if (localMarkers.length) {
       const meta = (await loadOfflineMeta()) ?? {
         companyId,
@@ -333,6 +365,15 @@ export async function syncOfflinePack(
         source: "local" as const,
       };
       const photoRaw = bundledFallback();
+      const statusLine = buildStatusLine({
+        source: meta.source ?? "local",
+        apiFailed: true,
+        fetchDetail: errDetail,
+        zonesDetail: localZones.length ? `кэш ${localZones.length} зон` : "зоны не загружены",
+        markerCount: localMarkers.length,
+        zoneCount: localZones.length,
+        fromApiZones: false,
+      });
       return {
         markers: localMarkers,
         zones: localZones,
@@ -340,14 +381,25 @@ export async function syncOfflinePack(
         raw: [],
         photoRaw,
         apiRefreshFailed: true,
-        fetchDetail: getLastBleFetchDetail() || (e instanceof Error ? e.message : undefined),
+        fetchDetail: errDetail,
+        didRefresh: false,
+        statusLine,
       };
     }
 
     const bootstrap = await loadBootstrapRaw(companyId);
     if (bootstrap.raw.length) {
-      const markers = markersFromRaw(bootstrap.raw);
+      const markers = markersFromRaw(bootstrap.raw, localMarkers);
       const meta = await saveOfflinePack(markers, localZones, companyId, "bundle");
+      const statusLine = buildStatusLine({
+        source: "bundle",
+        apiFailed: true,
+        fetchDetail: errDetail,
+        zonesDetail: localZones.length ? `кэш ${localZones.length} зон` : "зоны не загружены",
+        markerCount: markers.length,
+        zoneCount: localZones.length,
+        fromApiZones: false,
+      });
       return {
         markers,
         zones: localZones,
@@ -355,12 +407,45 @@ export async function syncOfflinePack(
         raw: bootstrap.raw,
         photoRaw: bootstrap.raw,
         apiRefreshFailed: true,
-        fetchDetail: getLastBleFetchDetail() || (e instanceof Error ? e.message : undefined),
+        fetchDetail: errDetail,
+        didRefresh: bootstrap.raw.length > 0,
+        statusLine,
       };
     }
 
     throw e;
   }
+}
+
+export function buildStatusLine(opts: {
+  source?: OfflineMeta["source"];
+  apiFailed?: boolean;
+  fetchDetail?: string;
+  zonesDetail?: string;
+  markerCount: number;
+  zoneCount: number;
+  routeCount?: number;
+  fromApiZones?: boolean;
+}): string {
+  const parts: string[] = [];
+  if (opts.source === "api" && !opts.apiFailed) {
+    parts.push("Живой API");
+  } else if (opts.source === "cache") {
+    parts.push("Снимок сайта (API недоступен)");
+  } else if (opts.source === "bundle") {
+    parts.push("Офлайн-снимок APK");
+  } else if (opts.source === "local") {
+    parts.push("Локальный кэш");
+  }
+  parts.push(`${opts.markerCount} меток`);
+  parts.push(`${opts.zoneCount} зон`);
+  if (opts.routeCount != null) parts.push(`${opts.routeCount} маршрутов`);
+  if (opts.zonesDetail) parts.push(opts.zonesDetail);
+  if (opts.fetchDetail?.trim()) parts.push(opts.fetchDetail.trim());
+  if (opts.apiFailed && opts.source === "cache") {
+    parts.push("обходы/маршруты — от даты снимка");
+  }
+  return parts.join(" · ");
 }
 
 export function snapshotHint(
@@ -394,7 +479,11 @@ export function snapshotHint(
       : `${base} Обновите ↻ на объекте.`;
   }
   if (source === "cache") {
-    return age ? `Кэш от ${age}.` : "Кэш меток.";
+    return apiRefreshFailed
+      ? `Живой API недоступен — загружен снимок сайта.${detailSuffix}`
+      : age
+        ? `Кэш от ${age}.`
+        : "Кэш меток.";
   }
   return age ? `Офлайн — локальный кэш от ${age}.` : "Офлайн — локальный кэш.";
 }
@@ -405,7 +494,7 @@ export function zonesFromRawPayload(raw: unknown): BleZone[] {
   return parseZonesFromMapPayload(raw as { zones?: [] });
 }
 
-/** Быстрый bootstrap для UI до сетевого refresh (как loadBleMap в ble-map.js). */
+/** Bootstrap как loadBleMap в ble-map.js: локальный кэш → github/supabase → bundled. */
 export async function loadImmediateBootstrap(
   companyId = BLE_DEFAULT_COMPANY_ID,
 ): Promise<{
@@ -413,17 +502,29 @@ export async function loadImmediateBootstrap(
   zones: BleZone[];
   source: OfflineMeta["source"];
 }> {
-  const localMarkers = await loadOfflineMarkers();
   const localZones = await loadOfflineZones(companyId);
+  const localMarkers = await loadOfflineMarkers();
   if (localMarkers.length) {
     return { markers: localMarkers, zones: localZones, source: "local" };
   }
-  // Только синхронные источники — без сети, чтобы UI показал метки мгновенно.
-  // Свежий снимок (github / Supabase / live) подтянет syncOfflinePack отдельно.
+
+  try {
+    const offline = await fetchBleListOffline(companyId);
+    if (offline?.raw.length) {
+      return {
+        markers: markersFromRaw(offline.raw, []),
+        zones: localZones,
+        source: "cache",
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+
   const bundled = loadBundledBleCache(companyId);
   if (bundled?.raw.length) {
     return {
-      markers: markersFromRaw(bundled.raw),
+      markers: markersFromRaw(bundled.raw, []),
       zones: localZones,
       source: "bundle",
     };

@@ -15,6 +15,12 @@ type ZoneMeta = {
   pts: [number, number][];
 };
 
+export type ZonesLoadResult = {
+  zones: BleZone[];
+  fromApi: boolean;
+  detail: string;
+};
+
 function metasFromMapData(mapData: { zones?: ZoneMeta[] }): ZoneMeta[] {
   if (!mapData?.zones?.length) return [];
   return mapData.zones
@@ -87,21 +93,63 @@ async function refineMissingPolygons(
 export async function loadBleZonesFull(
   companyId: number,
   local: BleZone[],
-): Promise<BleZone[]> {
+  opts: { tryApi?: boolean; awaitPolygons?: boolean } = {},
+): Promise<ZonesLoadResult> {
+  const tryApi = opts.tryApi !== false;
+  if (!tryApi) {
+    return {
+      zones: local,
+      fromApi: false,
+      detail: local.length ? `кэш ${local.length} зон` : "зоны: офлайн",
+    };
+  }
+
   let mapData: { zones?: ZoneMeta[] } = {};
   try {
     mapData = await fetchBleMapData(companyId);
-  } catch {
-    return local;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      zones: local,
+      fromApi: false,
+      detail: local.length
+        ? `map_data недоступен (${msg}) · кэш ${local.length} зон`
+        : `map_data недоступен: ${msg}`,
+    };
   }
 
   const fast = parseZonesFromMapPayload(mapData);
   const metas = metasFromMapData(mapData);
-  if (!metas.length) return fast.length ? fast : local;
+  if (!metas.length) {
+    if (fast.length) {
+      return {
+        zones: fast,
+        fromApi: true,
+        detail: `API ${fast.length} зон (без метаданных)`,
+      };
+    }
+    return {
+      zones: local,
+      fromApi: false,
+      detail: local.length ? `map_data пуст · кэш ${local.length} зон` : "map_data пуст",
+    };
+  }
 
-  const refined = await refineMissingPolygons(metas, fast.length ? fast : local);
-  if (!refined.length) return local;
+  const refined = await refineMissingPolygons(
+    metas,
+    fast.length ? fast : local,
+  );
+  if (!refined.length) {
+    return {
+      zones: local,
+      fromApi: false,
+      detail: local.length ? `полигоны не загрузились · кэш ${local.length}` : "полигоны не загрузились",
+    };
+  }
 
-  // Если API вернул зоны — всегда сохраняем свежие координаты, не stale local.
-  return refined;
+  return {
+    zones: refined,
+    fromApi: true,
+    detail: `API ${refined.length} зон`,
+  };
 }

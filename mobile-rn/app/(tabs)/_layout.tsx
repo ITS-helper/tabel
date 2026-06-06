@@ -1,10 +1,16 @@
 import { Tabs } from "expo-router";
+import { View } from "react-native";
 import { CyberTabBar } from "../../src/components/CyberTabBar";
+import { NetworkStatusProvider } from "../../src/context/NetworkStatusContext";
+import { NetworkTopLine } from "../../src/components/NetworkStatusBar";
 import { TabMapIcon, TabPatrolIcon, TabSearchIcon } from "../../src/components/TabIcons";
 
 export default function TabsLayout() {
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <NetworkStatusProvider>
+        <NetworkTopLine />
+        <Tabs
       tabBar={(props) => <CyberTabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -33,5 +39,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+      </NetworkStatusProvider>
+    </View>
   );
 }

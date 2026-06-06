@@ -138,7 +138,9 @@ supabase functions deploy google-sheet-fetch --project-ref <ваш-project-ref>
 
 **Офлайн-пакет с фото для телефона** — подробная инструкция: **[`docs/ble-field-pack.md`](docs/ble-field-pack.md)** (сборка на ПК, публикация zip, meta, телефон).
 
-**Обновить кэш меток** (нужен VPN на машине администратора): двойной щелчок [`ble-cache-push.bat`](ble-cache-push.bat) или `npm run ble-cache`. Чтобы дублировать кэш в Supabase (таблица `ble_map_cache`, сейчас может быть пустой):
+**Авто-обновление кэша (без открытой вкладки):** GitHub Actions [`.github/workflows/ble-map-cache-cron.yml`](.github/workflows/ble-map-cache-cron.yml) каждые **30 мин** скачивает метки с API, пишет `data/ble-map-cache.json` и пушит в `main` (если файл изменился) → GitHub Pages подхватывает снимок. В репозитории желателен секрет `SUPABASE_SERVICE_ROLE_KEY` (дублирование в `ble_map_cache`). Ручной запуск: Actions → *BLE map cache auto-refresh* → *Run workflow*.
+
+**Обновить кэш вручную** (нужен VPN на машине администратора): двойной щелчок [`ble-cache-push.bat`](ble-cache-push.bat) или `npm run ble-cache`. Чтобы дублировать кэш в Supabase (таблица `ble_map_cache`, сейчас может быть пустой):
 
 ```bat
 set SUPABASE_SERVICE_ROLE_KEY=ваш_service_role

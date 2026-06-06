@@ -1,0 +1,279 @@
+/* Панель поиска BLE-меток и часов — native APK */
+.ble-finder-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 12050;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.ble-finder-panel[hidden] {
+  display: none !important;
+}
+
+.ble-finder-panel__sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ble-finder-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: max(14px, env(safe-area-inset-top, 0px)) 16px 10px;
+  border-bottom: 1px solid #e8edf2;
+}
+
+.ble-finder-panel__title {
+  margin: 0;
+  font-family: Oswald, "Segoe UI", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1565c0;
+}
+
+.ble-finder-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+}
+
+.ble-finder-tabs {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ble-finder-tab {
+  flex: 1 1 50%;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 101, 192, 0.22);
+  background: #f3f7fb;
+  color: #37474f;
+  font-family: Oswald, sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+
+.ble-finder-tab:active {
+  transform: scale(0.97);
+}
+
+.ble-finder-tab.is-active {
+  background: linear-gradient(145deg, #e3f2fd, #bbdefb);
+  border-color: #2196f3;
+  color: #0d47a1;
+}
+
+.ble-finder-targets {
+  flex: 0 0 auto;
+  min-height: 120px;
+  max-height: 34vh;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid #e3eaf2;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: none;
+  color: #263238;
+}
+
+.ble-finder-targets:focus {
+  outline: none;
+  border-color: rgba(33, 150, 243, 0.55);
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.12);
+}
+
+.ble-finder-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ble-finder-actions__primary,
+.ble-finder-actions__secondary {
+  flex: 1 1 auto;
+  min-height: 42px;
+  border-radius: 999px;
+  font-family: Oswald, sans-serif;
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.ble-finder-actions__primary {
+  border: 1px solid #00897b;
+  background: linear-gradient(135deg, #00897b, #26a69a);
+  color: #fff;
+}
+
+.ble-finder-actions__primary[data-state="stop"] {
+  border-color: #e65100;
+  background: linear-gradient(135deg, #ef6c00, #ff9800);
+}
+
+.ble-finder-actions__secondary {
+  border: 1px solid rgba(21, 101, 192, 0.24);
+  background: #fff;
+  color: #455a64;
+}
+
+.ble-finder-actions__primary:active,
+.ble-finder-actions__secondary:active {
+  transform: scale(0.96);
+}
+
+.ble-finder-status {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #546e7a;
+}
+
+.ble-finder-status--busy {
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.ble-finder-status--ok {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.ble-finder-status--error {
+  color: #c62828;
+}
+
+.ble-finder-status--info {
+  color: #546e7a;
+}
+
+.ble-finder-list-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #e8edf2;
+  border-radius: 12px;
+  background: #fafbfd;
+}
+
+.ble-finder-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+
+.ble-finder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  background: #fff;
+  border: 1px solid #e8edf2;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ble-finder-item:last-child {
+  margin-bottom: 0;
+}
+
+.ble-finder-item__main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ble-finder-item__label {
+  display: block;
+  font-family: Oswald, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #263238;
+}
+
+.ble-finder-item__meta {
+  display: block;
+  font-size: 12px;
+  color: #78909c;
+  margin-top: 2px;
+}
+
+.ble-finder-item__badge {
+  flex: 0 0 auto;
+  min-width: 72px;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-family: Oswald, sans-serif;
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: #eceff1;
+  color: #607d8b;
+}
+
+.ble-finder-item--found {
+  border-color: #66bb6a;
+  background: linear-gradient(145deg, #e8f5e9, #f1f8e9);
+  animation: ble-finder-found-flash 0.65s ease;
+}
+
+.ble-finder-item--found .ble-finder-item__badge {
+  background: #43a047;
+  color: #fff;
+}
+
+.ble-finder-item--near {
+  border-color: #ffb74d;
+  background: #fff8e1;
+}
+
+.ble-finder-item--near .ble-finder-item__badge {
+  background: #ffa726;
+  color: #fff;
+}
+
+@keyframes ble-finder-found-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.55);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+    transform: scale(1);
+  }
+}
+
+body.ble-finder-open {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ble-finder-item--found {
+    animation: none;
+  }
+}

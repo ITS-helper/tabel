@@ -8,19 +8,29 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchBleRoutes, getLastBleFetchDetail } from "../api/bleMapApi";
+import {
+  fetchBleRoutes,
+  getLastBleFetchDetail,
+  deriveRoutesFromRaw,
+  deriveRoutesFromMarkers,
+  mergeBleRoutes,
+} from "../api/bleMapApi";
 import type { BleRoute, BleTagMarker, BleZone, RouteRef } from "../ble/types";
-import { normalizeBle } from "../ble/wwAdvert";
+import { normalizeBle, normalizeMac } from "../ble/wwAdvert";
+import { routeProgressFor, tagMacKeys } from "../field/fieldHelpers";
 import { BleService } from "../ble/BleService";
 import { BLE_DEFAULT_COMPANY_ID } from "../config";
 import {
   loadImmediateBootstrap,
   loadOfflineMarkers,
   loadOfflineMeta,
+  loadOfflineRoutes,
   loadOfflineZones,
   saveOfflineMarkersOnly,
+  saveOfflineRoutes,
   syncOfflinePack,
   snapshotHint,
+  buildStatusLine,
   type OfflineMeta,
 } from "../storage/offlineCache";
 import { normalizeBleMarkers } from "../storage/markerNormalize";
@@ -30,6 +40,7 @@ import {
 } from "../storage/markerEdits";
 import {
   getDailyDoneSet,
+  getTodayPatrolMap,
   loadStore,
   pendingCount,
 } from "../storage/checkins";
@@ -58,6 +69,7 @@ type AppDataContextValue = {
   setShowPassedMarkers: (v: boolean) => void;
   loading: boolean;
   error: string | null;
+  statusLine: string | null;
   offlineMeta: OfflineMeta | null;
   refresh: () => Promise<boolean>;
   syncOffline: () => Promise<boolean>;
@@ -67,6 +79,7 @@ type AppDataContextValue = {
   pendingUploads: number;
   refreshPending: () => Promise<void>;
   dailyDone: Set<string>;
+  todayPatrol: Record<string, string[]>;
   focusBle: string | null;
   setFocusBle: (ble: string | null) => void;
   photoMeta: PhotoCacheMeta | null;
@@ -90,10 +103,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [showPassedMarkers, setShowPassedMarkersState] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusLine, setStatusLine] = useState<string | null>(null);
   const [offlineMeta, setOfflineMeta] = useState<OfflineMeta | null>(null);
   const [pendingUploads, setPendingUploads] = useState(0);
   const [focusBle, setFocusBle] = useState<string | null>(null);
   const [dailyDone, setDailyDone] = useState<Set<string>>(new Set());
+  const [todayPatrol, setTodayPatrol] = useState<Record<string, string[]>>({});
   const [photoMeta, setPhotoMeta] = useState<PhotoCacheMeta | null>(null);
   const [photoSyncNote, setPhotoSyncNote] = useState<string | null>(null);
   const [pendingMarkerEdits, setPendingMarkerEdits] = useState(0);
@@ -109,9 +124,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return;
     }
     setPhotoSyncNote("Фото: 0…");
+    let lastUi = 0;
     try {
       const result = await syncFieldPhotosFromRaw(raw, (done, total) => {
-        setPhotoSyncNote(`Фото: ${done}/${total}`);
+        const now = Date.now();
+        if (done === total || done % 15 === 0 || now - lastUi > 900) {
+          lastUi = now;
+          setPhotoSyncNote(`Фото: ${done}/${total}`);
+        }
       });
       setPhotoMeta(await loadPhotoCacheMeta());
       if (result.ok > 0) {
@@ -131,6 +151,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const refreshPending = useCallback(async () => {
     setPendingUploads(await pendingCount());
     const store = await loadStore();
+    setTodayPatrol(getTodayPatrolMap(store));
     setDailyDone(getDailyDoneSet(store, route.routeId));
   }, [route.routeId]);
 
@@ -144,10 +165,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     packBusyRef.current = true;
     setLoading(true);
     setError(null);
+    setStatusLine(null);
     let apiOk = false;
     let photoRaw: import("../ble/types").RawBlePoint[] = [];
 
     const bootstrap = await loadImmediateBootstrap(BLE_DEFAULT_COMPANY_ID);
+    const cachedRoutes = await loadOfflineRoutes();
+    if (cachedRoutes.length) setRoutes(cachedRoutes);
     const localMarkers = await applyQueuedEditsToMarkers(
       bootstrap.markers.length
         ? normalizeBleMarkers(bootstrap.markers)
@@ -162,6 +186,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setZones(localZones);
       setOfflineMeta(await loadOfflineMeta());
       BleService.setKnownTags(localMarkers);
+      if (!cachedRoutes.length) {
+        setRoutes(deriveRoutesFromMarkers(localMarkers));
+      }
     }
 
     try {
@@ -171,11 +198,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setZones(pack.zones);
       setOfflineMeta(pack.meta);
       BleService.setKnownTags(withEdits);
+      const rawForRoutes = pack.raw.length ? pack.raw : pack.photoRaw;
+      let routeList: BleRoute[] = cachedRoutes;
       try {
-        const r = await fetchBleRoutes(withEdits);
+        const r = await fetchBleRoutes(withEdits, rawForRoutes);
+        routeList = r;
         setRoutes(r);
+        if (r.length) await saveOfflineRoutes(r);
       } catch {
-        setRoutes([]);
+        routeList = mergeBleRoutes(
+          deriveRoutesFromRaw(rawForRoutes),
+          deriveRoutesFromMarkers(withEdits),
+          cachedRoutes,
+        );
+        setRoutes(routeList);
       }
       photoRaw = pack.photoRaw.length ? pack.photoRaw : pack.raw;
       const hint = snapshotHint(
@@ -185,7 +221,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         pack.fetchDetail,
       );
       setError(hint);
-      apiOk = !pack.apiRefreshFailed;
+      setStatusLine(
+        buildStatusLine({
+          source: pack.meta.source,
+          apiFailed: pack.apiRefreshFailed,
+          fetchDetail: pack.fetchDetail,
+          zonesDetail: pack.zonesDetail,
+          markerCount: withEdits.length,
+          zoneCount: pack.zones.length,
+          routeCount: routeList.length,
+          fromApiZones: pack.zonesDetail?.startsWith("API"),
+        }),
+      );
+      apiOk = withEdits.length > 0;
     } catch (e) {
       apiOk = false;
       if (localMarkers.length) {
@@ -199,9 +247,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ) ??
             (e instanceof Error ? e.message : "Не удалось обновить с сервера"),
         );
+        setStatusLine(
+          getLastBleFetchDetail() ||
+            (e instanceof Error ? e.message : "Не удалось обновить с сервера"),
+        );
         BleService.setKnownTags(localMarkers);
       } else {
         setError(e instanceof Error ? e.message : "Ошибка загрузки");
+        setStatusLine(e instanceof Error ? e.message : "Ошибка загрузки");
         const meta = await loadOfflineMeta();
         setOfflineMeta(meta);
       }
@@ -241,9 +294,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [markers]);
 
   const findTag = useCallback(
-    (ble: string) => {
+    (ble: string, mac?: string | null) => {
       const key = normalizeBle(ble);
-      return markers.find((m) => normalizeBle(m.ble) === key);
+      const byBle = markers.find((m) => normalizeBle(m.ble) === key);
+      if (byBle) return byBle;
+      const macKey = normalizeMac(mac);
+      if (!macKey) return undefined;
+      return markers.find((t) => tagMacKeys(t).includes(macKey));
     },
     [markers],
   );
@@ -264,6 +321,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setShowPassedMarkersState(showPassed);
       setRouteState(routePref);
       setPhotoMeta(await loadPhotoCacheMeta());
+      const store = await loadStore();
+      setTodayPatrol(getTodayPatrolMap(store));
+      setDailyDone(getDailyDoneSet(store, routePref.routeId));
       await applyPack();
     })();
   }, [applyPack]);
@@ -273,6 +333,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setRouteState(ref);
     await saveRouteFilter(routeId, routeTitle);
     const store = await loadStore();
+    setTodayPatrol(getTodayPatrolMap(store));
     setDailyDone(getDailyDoneSet(store, routeId));
   }, []);
 
@@ -292,14 +353,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return markers.filter((m) => Number(m.routeId) === rid);
   }, [markers, route.routeId]);
 
-  const routeProgress = useMemo(() => {
-    const total = routeMarkers.length;
-    let done = 0;
-    for (const m of routeMarkers) {
-      if (dailyDone.has(normalizeBle(m.ble)) || m.isInspected) done++;
-    }
-    return { done, total };
-  }, [routeMarkers, dailyDone]);
+  const routeProgress = useMemo(
+    () => routeProgressFor(routeMarkers, todayPatrol, route.routeId),
+    [routeMarkers, todayPatrol, route.routeId],
+  );
 
   const value: AppDataContextValue = {
     markers,
@@ -313,6 +370,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setShowPassedMarkers,
     loading,
     error,
+    statusLine,
     offlineMeta,
     refresh: applyPack,
     syncOffline: applyPack,
@@ -322,6 +380,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     pendingUploads,
     refreshPending,
     dailyDone,
+    todayPatrol,
     focusBle,
     setFocusBle,
     photoMeta,

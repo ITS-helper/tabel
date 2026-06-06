@@ -1,4 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clampInspectionMovabilityType } from "../api/bleMapApi";
+import {
+  inspectionBleTypeFromTag,
+  inspectionFrequencyFromTag,
+  inspectionPowerFromTag,
+} from "../ble/zoneType";
 import { CHECKINS_STORAGE_KEY, DAILY_KEEP_DAYS } from "../config";
 import type { CheckinStore, FieldCheckin } from "../ble/types";
 import { normalizeBle } from "../ble/wwAdvert";
@@ -68,8 +74,16 @@ export function getDailyDoneSet(
   return new Set(list.map(normalizeBle));
 }
 
+/** Обходы за сегодня: routeId → список BLE (routeId "" → ключ «all»). */
+export function getTodayPatrolMap(
+  store: CheckinStore,
+): Record<string, string[]> {
+  const day = localDateKey();
+  return store.dailyPatrol[day] ?? {};
+}
+
 export async function saveCheckinRecord(
-  tag: { ble: string; id?: number; lat?: number; lng?: number; movabilityType?: number; charge?: number | null; statusCode?: number; power?: number; frequency?: number; bleTypeNum?: number | null; firmwareVersion?: string; routeId?: number | null; routeTitle?: string },
+  tag: { ble: string; id?: number; lat?: number; lng?: number; movabilityType?: number; charge?: number | null; statusCode?: number; power?: number; frequency?: number; bleTypeNum?: number | null; bleTypeLabel?: string; firmwareVersion?: string; routeId?: number | null; routeTitle?: string },
   dev: { deviceId: string; rssi?: number | null },
   live: { chargeValue?: number | null; power?: number | null; frequency?: number | null; bleType?: number | null; rssi?: number | null; fromGatt?: boolean },
   route: { routeId: string; routeTitle: string },
@@ -79,9 +93,9 @@ export async function saveCheckinRecord(
   const routeTitle = route.routeId ? route.routeTitle : tag.routeTitle || "—";
   const keyBle = normalizeBle(tag.ble);
   const chargeValue = live.chargeValue ?? tag.charge ?? 100;
-  const power = live.power ?? tag.power ?? 6;
-  const frequency = live.frequency ?? tag.frequency ?? 3;
-  const bleType = live.bleType ?? tag.bleTypeNum ?? 10;
+  const power = inspectionPowerFromTag(tag);
+  const frequency = inspectionFrequencyFromTag(tag);
+  const bleType = inspectionBleTypeFromTag(tag);
 
   store.checkins = store.checkins.filter(
     (c) =>
@@ -104,12 +118,12 @@ export async function saveCheckinRecord(
     rssi: live.rssi ?? dev.rssi ?? null,
     checkedAt: new Date().toISOString(),
     uploaded: false,
-    movabilityType: tag.movabilityType ?? 1,
+    movabilityType: clampInspectionMovabilityType(tag.movabilityType ?? 1),
     chargeValue: chargeValue ?? 100,
     statusCode: tag.statusCode ?? 4,
-    power: power ?? 6,
+    power,
     frequency: frequency ?? 3,
-    bleType: bleType ?? 10,
+    bleType,
     firmwareVersion: tag.firmwareVersion || "bt1",
     gattLive: !!live.fromGatt,
   };

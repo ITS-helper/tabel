@@ -1,8 +1,8 @@
 /**
- * Скачивает список BLE с Worker и сохраняет кэш для карты без VPN.
+ * Скачивает список BLE с API и сохраняет кэш для карты без VPN.
  * Запуск: node scripts/push-ble-cache.mjs
- * Windows: двойной клик по push-ble-cache.bat в корне или scripts\push-ble-cache.bat
- * Опционально в Supabase (нужен SUPABASE_SERVICE_ROLE_KEY в env):
+ * Транспорты (по очереди): Supabase ble-map-proxy → backend.vsm → Worker.
+ * Опционально в Supabase DB (SUPABASE_SERVICE_ROLE_KEY):
  *   set SUPABASE_SERVICE_ROLE_KEY=... && node scripts/push-ble-cache.mjs
  */
 import fs from "fs";
@@ -11,16 +11,53 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
-const WORKER = "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
 const USER = process.env.BLE_AUTO_USER || "impl_dept";
 const PASS = process.env.BLE_AUTO_PASS || "impl_dept_vsm_2024";
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://owcuvcshwtivqueftiuk.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-async function workerFetch(path, init = {}) {
-  const res = await fetch(`${WORKER}${path}`, init);
-  if (!res.ok) throw new Error(`${path} HTTP ${res.status}`);
+const API_BASES = [
+  {
+    id: "supabase",
+    base: `${SUPABASE_URL}/functions/v1/ble-map-proxy`,
+  },
+  {
+    id: "backend",
+    base: "https://backend.vsm.workwatch.pro",
+  },
+  {
+    id: "worker",
+    base: "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy",
+  },
+];
+
+async function apiFetch(base, apiPath, init = {}) {
+  const res = await fetch(`${base}${apiPath}`, init);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`${apiPath} HTTP ${res.status}${detail ? `: ${detail.slice(0, 120)}` : ""}`);
+  }
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("json")) {
+    const text = await res.text();
+    throw new Error(`${apiPath} not_json: ${text.slice(0, 80)}`);
+  }
   return res.json();
+}
+
+async function fetchWithFailover(apiPath, init = {}) {
+  let lastErr = null;
+  for (const { id, base } of API_BASES) {
+    try {
+      const data = await apiFetch(base, apiPath, init);
+      console.log(`[ble-cache] OK via ${id}: ${apiPath}`);
+      return data;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[ble-cache] ${id} fail:`, e.message || e);
+    }
+  }
+  throw lastErr || new Error("all_transports_failed");
 }
 
 async function main() {
@@ -28,7 +65,7 @@ async function main() {
     username: USER,
     password: PASS,
   });
-  const tok = await workerFetch("/api/v1/token", {
+  const tok = await fetchWithFailover("/api/v1/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: tokenBody,
@@ -37,9 +74,9 @@ async function main() {
   if (!token) throw new Error("no_token");
 
   const auth = { Authorization: `Bearer ${token}` };
-  const me = await workerFetch("/api/v1/user/me/", { headers: auth });
+  const me = await fetchWithFailover("/api/v1/user/me/", { headers: auth });
   const companyId = me.companyId ?? me.company_id ?? 1;
-  const payload = await workerFetch(`/api/v1/map/ble/${companyId}`, { headers: auth });
+  const payload = await fetchWithFailover(`/api/v1/map/ble/${companyId}`, { headers: auth });
   if (!Array.isArray(payload)) throw new Error("payload_not_array");
 
   const record = {
@@ -61,7 +98,7 @@ async function main() {
       company_id: companyId,
       updated_at: record.updated_at,
       count: payload.length,
-    })
+    }),
   );
   console.log(`Wrote ${metaPath}`);
 

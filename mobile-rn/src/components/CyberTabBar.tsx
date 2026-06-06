@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { TabMapIcon, TabPatrolIcon, TabSearchIcon } from "./TabIcons";
 import { ThemeToggleButton } from "./ThemeToggleButton";
+import { NetworkTabIndicator } from "./NetworkStatusBar";
 
 const TAB_ICONS = [TabMapIcon, TabPatrolIcon, TabSearchIcon] as const;
 
@@ -107,6 +108,7 @@ export function CyberTabBar({ state, navigation }: CyberTabBarProps) {
             </Pressable>
           );
         })}
+        <NetworkTabIndicator />
         <ThemeToggleButton />
       </View>
     </View>

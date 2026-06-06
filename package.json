@@ -19,6 +19,7 @@
     "mobile:sync": "node scripts/sync-mobile-www.mjs",
     "mobile:build": "npm run mobile:tiles && npm run mobile:sync && npx cap sync android",
     "mobile:apk": "npm run mobile:build && node scripts/build-android-apk.mjs",
+    "mobile:apk:gatt": "npm run mobile:build && node scripts/build-android-apk.mjs --label GATT",
     "mobile:open": "npm run mobile:build && npx cap open android",
     "mobile:run": "npm run mobile:build && npx cap run android",
     "cap:sync": "npm run mobile:build"

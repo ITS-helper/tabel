@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { AppDataProvider } from "../src/context/AppDataContext";
+import { FinderProvider } from "../src/context/FinderContext";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 
 function RootStack() {
@@ -29,7 +30,9 @@ export default function RootLayout() {
       <ThemeProvider>
         <ErrorBoundary>
           <AppDataProvider>
-            <RootStack />
+            <FinderProvider>
+              <RootStack />
+            </FinderProvider>
           </AppDataProvider>
         </ErrorBoundary>
       </ThemeProvider>

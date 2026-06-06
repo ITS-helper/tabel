@@ -3,15 +3,13 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { toBlePhotoProxyUrl } from "../api/photoUtils";
 import type { BleTagMarker, BleZone } from "../ble/types";
-import {
-  BLE_DEFAULT_CENTER_BLE,
-  ZONE_SHORT,
-} from "../config";
+import { markerZoneTypeLabel } from "../ble/zoneType";
+import { BLE_DEFAULT_CENTER_BLE } from "../config";
 import { useTheme } from "../context/ThemeContext";
 import { buildLeafletHtml } from "../map/leafletHtml";
 import { resolveSearchFocus } from "../map/mapHelpers";
 import { coordsFromRaw } from "../storage/markerNormalize";
-import { getLocalPhotoUri } from "../storage/fieldPhotoCache";
+import { getLocalPhotoDataUri } from "../storage/fieldPhotoCache";
 import { normalizeBle } from "../ble/wwAdvert";
 import type { AppColors } from "../theme/palettes";
 
@@ -25,6 +23,8 @@ export type MapMarkerPayload = {
   routeTitle?: string;
   locationDesc?: string;
   bleTypeLabel?: string;
+  recordDt?: string;
+  isInspected?: boolean;
   photoTag?: string;
   photoPlace?: string;
 };
@@ -53,9 +53,7 @@ function pushMapUpdate(webRef: RefObject<WebView | null>, payload: unknown) {
 function toMapMarker(m: BleTagMarker): MapMarkerPayload | null {
   const { lat, lng } = coordsFromRaw(m);
   if (lat == null || lng == null) return null;
-  const bleTypeLabel =
-    m.bleTypeLabel ||
-    (m.bleTypeNum != null ? ZONE_SHORT[m.bleTypeNum] : undefined);
+  const bleTypeLabel = markerZoneTypeLabel(m) || undefined;
   return {
     id: m.id,
     ble: m.ble,
@@ -66,6 +64,8 @@ function toMapMarker(m: BleTagMarker): MapMarkerPayload | null {
     routeTitle: m.routeTitle,
     locationDesc: m.locationDesc,
     bleTypeLabel,
+    recordDt: m.recordDt,
+    isInspected: m.isInspected,
     photoTag: m.photoTag,
     photoPlace: m.photoPlace,
   };
@@ -88,7 +88,50 @@ export function BleLeafletMap({
   const webRef = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
   const [photoSrc, setPhotoSrc] = useState<Record<string, string>>({});
+  const photoSrcRef = useRef<Record<string, string>>({});
+  const photoPendingRef = useRef<Set<string>>(new Set());
+  const photoInjectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const html = useMemo(() => buildLeafletHtml(), []);
+
+  useEffect(() => {
+    photoSrcRef.current = photoSrc;
+  }, [photoSrc]);
+
+  const resolvePhotoUrl = useCallback(async (url: string, force = false) => {
+    if (!url) return;
+    if (photoPendingRef.current.has(url)) return;
+    if (!force && photoSrcRef.current[url]) return;
+
+    photoPendingRef.current.add(url);
+    try {
+      if (!force) {
+        const dataUri = await getLocalPhotoDataUri(url);
+        if (dataUri && dataUri.length <= 400_000) {
+          setPhotoSrc((prev) =>
+            prev[url] === dataUri ? prev : { ...prev, [url]: dataUri },
+          );
+          return;
+        }
+        setPhotoSrc((prev) =>
+          prev[url] === url ? prev : { ...prev, [url]: url },
+        );
+        return;
+      }
+      const src = toBlePhotoProxyUrl(url) || url;
+      setPhotoSrc((prev) =>
+        prev[url] === src ? prev : { ...prev, [url]: src },
+      );
+    } finally {
+      photoPendingRef.current.delete(url);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (photoCacheTick == null) return;
+    setPhotoSrc({});
+    photoSrcRef.current = {};
+    photoPendingRef.current.clear();
+  }, [photoCacheTick]);
 
   const focusTag = useMemo(
     () => resolveSearchFocus(query, markers, findTag),
@@ -120,28 +163,6 @@ export function BleLeafletMap({
 
     return list;
   }, [markers, query, focusTag]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const src: Record<string, string> = {};
-      for (const m of displayMarkers) {
-        for (const url of [m.photoTag, m.photoPlace].filter(Boolean) as string[]) {
-          if (src[url]) continue;
-          const local = await getLocalPhotoUri(url);
-          if (local) {
-            src[url] = local.startsWith("file://") ? local : `file://${local}`;
-          } else {
-            src[url] = toBlePhotoProxyUrl(url) || url;
-          }
-        }
-      }
-      if (!cancelled) setPhotoSrc(src);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [displayMarkers, photoCacheTick]);
 
   const mapPayload = useMemo(
     () => ({
@@ -176,11 +197,17 @@ export function BleLeafletMap({
   }, [ready, mapPayload]);
 
   useEffect(() => {
-    if (!ready) return;
-    const json = JSON.stringify(photoSrc);
-    webRef.current?.injectJavaScript(
-      `(function(){ if(window.__updatePhotoSrc) window.__updatePhotoSrc(${json}); })(); true;`,
-    );
+    if (!ready || !Object.keys(photoSrc).length) return;
+    if (photoInjectTimerRef.current) clearTimeout(photoInjectTimerRef.current);
+    photoInjectTimerRef.current = setTimeout(() => {
+      const json = JSON.stringify(photoSrc);
+      webRef.current?.injectJavaScript(
+        `(function(){ if(window.__updatePhotoSrc) window.__updatePhotoSrc(${json}); })(); true;`,
+      );
+    }, 80);
+    return () => {
+      if (photoInjectTimerRef.current) clearTimeout(photoInjectTimerRef.current);
+    };
   }, [ready, photoSrc]);
 
   const onMessage = useCallback(
@@ -192,6 +219,8 @@ export function BleLeafletMap({
           id?: number;
           lat?: number;
           lng?: number;
+          url?: string;
+          force?: boolean;
         };
         if (data.type === "ready") {
           setReady(true);
@@ -207,12 +236,16 @@ export function BleLeafletMap({
             markers.find((m) => normalizeBle(m.ble) === normalizeBle(data.ble)) ||
             findTag(data.ble);
           if (tag) onPatrol?.(tag);
+          return;
+        }
+        if (data.type === "photoResolve" && data.url) {
+          void resolvePhotoUrl(String(data.url), !!data.force);
         }
       } catch {
         /* ignore */
       }
     },
-    [markers, findTag, onPatrol, onMarkerMoved, mapPayload],
+    [markers, findTag, onPatrol, onMarkerMoved, mapPayload, resolvePhotoUrl],
   );
 
   const onLoadEnd = useCallback(() => {

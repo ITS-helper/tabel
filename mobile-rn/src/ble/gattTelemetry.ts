@@ -1,4 +1,5 @@
 import type { GattLiveTelemetry } from "./types";
+import { isValidZoneTypeNum } from "./zoneType";
 import { GATT_WW_READ_SUFFIXES } from "../config";
 
 function base64ToBytes(value: string): number[] {
@@ -39,14 +40,8 @@ function applyByteCandidates(
   if (out.frequency == null && b0 <= 20 && suffix === "fff8") {
     out.frequency = b0;
   }
-  if (
-    out.bleType == null &&
-    b0 >= 1 &&
-    b0 <= 20 &&
-    suffix !== "fff6" &&
-    suffix !== "fff8" &&
-    suffix !== "2a19"
-  ) {
+  /** Тип зоны — только fff3 (на v4 fff4/fff5 дают мусор: 10, 17…). */
+  if (out.bleType == null && suffix === "fff3" && isValidZoneTypeNum(b0)) {
     out.bleType = b0;
   }
 }

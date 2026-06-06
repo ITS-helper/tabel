@@ -1014,8 +1014,153 @@ body.ble-map--genplan-calib:not(.ble-map--genplan-calib-expanded) #mapGenplanMas
   cursor: wait;
 }
 
-body.ble-map-native .map-route-export-btn {
+body.ble-map-native .map-route-export-btn,
+body.ble-map-native .map-field-pack-btn,
+body.ble-map-native .map-polygon-export-btn {
   display: none !important;
+}
+
+body.ble-map-native #mapToolsFieldDock,
+body.ble-map-native #mapDrawToZoneBtn,
+body.ble-map-native #mapDrawExtras,
+body.ble-map-native #mapRouteFieldDock,
+body.ble-map-native #mapLayerFieldActions,
+body.ble-map-native #mapLayerFieldDock,
+body.ble-map-native .map-fullscreen-layer {
+  display: none !important;
+}
+
+body.ble-map-native .map-native-float-controls {
+  position: absolute;
+  left: 8px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 760;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+body.ble-map-native .map-native-float-controls > * {
+  pointer-events: auto;
+}
+
+body.ble-map-native .map-native-float-controls .map-cluster-toggle {
+  position: static;
+  left: auto;
+  bottom: auto;
+}
+
+body.ble-map-native .map-route-native-select {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 9.5em;
+  max-width: calc(100vw - 24px);
+  field-sizing: content;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 28px 8px 12px;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.16s cubic-bezier(0.34, 1.2, 0.64, 1),
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+body.ble-map-native .map-route-native-select:active {
+  transform: scale(0.97);
+}
+
+body.ble-map-native .map-route-native-select:focus {
+  outline: none;
+  border-color: rgba(33, 150, 243, 0.45);
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.16);
+}
+
+.map-route-native-measurer {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  white-space: nowrap;
+  font-family: Oswald, sans-serif;
+  font-size: 0.68em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 0 12px;
+  pointer-events: none;
+}
+
+body.ble-map-native .map-native-route-field {
+  display: block;
+  margin: 0;
+}
+
+/* Native APK: одна горизонтальная полоса кнопок */
+body.ble-map-native:not(.ble-map--edit) .map-toolbar {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ble-map-native:not(.ble-map--edit) .map-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+body.ble-map-native:not(.ble-map--edit) .map-toolbar-row--fields,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar-row--actions {
+  display: contents;
+}
+
+body.ble-map-native:not(.ble-map--edit) .map-toolbar .map-ww-logo-btn,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar .map-filter-btn,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar .map-retry-btn,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar #mapBleFieldBtn,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar #mapBleFinderBtn,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar .map-edit-mode-btn,
+body.ble-map-native:not(.ble-map--edit) .map-toolbar .map-toolbar__sep {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+}
+
+body.ble-map-native .map-route-native-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%230d47a1' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+}
+
+body.ble-map-native:not(.ble-map--edit) #mapSearchBlock.map-search-bar--toolbar {
+  flex: 0 0 112px;
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+}
+
+body.ble-map-native:not(.ble-map--edit) #mapSearchBlock.map-search-bar--toolbar input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+body.ble-map-native:not(.ble-map--edit) #mapSearchBlock.map-search-bar--toolbar input::placeholder {
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+body.ble-map-native .ble-field-nearby__actions {
+  justify-content: flex-end;
 }
 
 body:not(.ble-map-native) .map-route-export-btn,
@@ -1033,6 +1178,108 @@ body.ble-map-native .ble-map-page-back {
 
 body.ble-map-native #bleMapBackLogo {
   pointer-events: none;
+}
+
+/* Native: анимации кнопок и кластеров */
+body.ble-map-native .map-cluster-toggle,
+body.ble-map-native .map-filter-btn,
+body.ble-map-native .map-retry-btn,
+body.ble-map-native #mapBleFieldBtn {
+  transition:
+    transform 0.16s cubic-bezier(0.34, 1.2, 0.64, 1),
+    box-shadow 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+body.ble-map-native .map-cluster-toggle:active,
+body.ble-map-native .map-filter-btn:active,
+body.ble-map-native .map-retry-btn:active,
+body.ble-map-native #mapBleFieldBtn:active {
+  transform: scale(0.94);
+}
+
+body.ble-map-native .map-filter-btn.active {
+  animation: map-native-btn-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes map-native-btn-glow {
+  0%,
+  100% {
+    box-shadow: 0 2px 8px rgba(21, 101, 192, 0.22);
+  }
+  50% {
+    box-shadow: 0 4px 14px rgba(33, 150, 243, 0.38);
+  }
+}
+
+body.ble-map-native .marker-cluster div {
+  animation: map-native-cluster-pulse 2.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+body.ble-map-native .marker-cluster-small {
+  animation: map-native-cluster-ring 2.6s ease-in-out infinite;
+}
+
+@keyframes map-native-cluster-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+@keyframes map-native-cluster-ring {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+body.ble-map-native:not(.ble-map--edit) .map-float-dock .map-toolbar {
+  animation: map-native-toolbar-in 0.32s ease-out both;
+}
+
+body.ble-map-native .map-native-float-controls {
+  animation: map-native-float-in 0.38s ease-out 0.08s both;
+}
+
+@keyframes map-native-toolbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes map-native-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+body.ble-map-native .map-float-dock .map-toolbar,
+body.ble-map-native #bleMap.leaflet-container {
+  -webkit-overflow-scrolling: touch;
+}
+
+body.ble-map-native #bleMap.leaflet-container .leaflet-tile {
+  transition: opacity 0.18s ease;
 }
 
 .map-route-export-btn:disabled {
@@ -2937,6 +3184,22 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     flex-shrink: 0;
   }
 
+  body.ble-map-native:not(.ble-map--edit) .map-toolbar-row--fields,
+  body.ble-map-native:not(.ble-map--edit) .map-toolbar-row--actions {
+    display: contents;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    overflow: visible;
+  }
+
+  body.ble-map-native:not(.ble-map--edit) #mapSearchBlock.map-search-bar--toolbar {
+    flex: 0 0 112px !important;
+    width: 112px !important;
+    min-width: 112px !important;
+    max-width: 112px !important;
+  }
+
   body .map-ww-logo-btn {
     display: none;
   }
@@ -3193,6 +3456,22 @@ body:not(.ble-map-embedded) .map-float-dock > * {
     box-shadow:
       0 2px 6px rgba(0, 0, 0, 0.3),
       0 0 0 4px rgba(33, 150, 243, 0.45);
+  }
+
+  body.ble-map-native .map-filter-btn.active,
+  body.ble-map-native .marker-cluster div,
+  body.ble-map-native .marker-cluster-small,
+  body.ble-map-native:not(.ble-map--edit) .map-float-dock .map-toolbar,
+  body.ble-map-native .map-native-float-controls {
+    animation: none !important;
+  }
+
+  body.ble-map-native .map-cluster-toggle,
+  body.ble-map-native .map-filter-btn,
+  body.ble-map-native .map-retry-btn,
+  body.ble-map-native #mapBleFieldBtn,
+  body.ble-map-native .map-route-native-select {
+    transition: none !important;
   }
 }
 

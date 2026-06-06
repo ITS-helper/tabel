@@ -19,8 +19,9 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="ble-map.css?v=20260530s" />
-  <link rel="stylesheet" href="ble-field.css?v=20260530s" />
+  <link rel="stylesheet" href="ble-map.css?v=20260531j" />
+  <link rel="stylesheet" href="ble-field.css?v=20260531j" />
+  <link rel="stylesheet" href="ble-finder.css?v=20260531k" />
 </head>
 <body>
   <div class="ble-map-access-gate" id="bleMapAccessGate" aria-hidden="true">
@@ -59,17 +60,29 @@
         <div id="bleMap">
           <div class="map-placeholder" id="mapPlaceholder">Загрузка карты…</div>
         </div>
-        <button
-          type="button"
-          class="map-cluster-toggle"
-          id="mapClusterToggleBtn"
-          title="Отключить кластеры меток"
-          aria-label="Переключить кластеры меток"
-          aria-pressed="true"
-          hidden
-        >
-          Кластеры: вкл
-        </button>
+        <div class="map-native-float-controls" id="mapNativeFloatControls" hidden>
+          <label class="map-native-route-field" id="mapRouteFieldNative" hidden>
+            <select
+              class="map-cluster-toggle map-route-native-select"
+              id="mapRouteSelectNative"
+              data-ble-route-select
+              aria-label="Маршрут"
+            >
+              <option value="">Все маршруты</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="map-cluster-toggle"
+            id="mapClusterToggleBtn"
+            title="Отключить кластеры меток"
+            aria-label="Переключить кластеры меток"
+            aria-pressed="true"
+            hidden
+          >
+            Кластеры: вкл
+          </button>
+        </div>
         <div class="map-float-dock" id="mapFloatDock" hidden>
           <div class="map-toolbar" id="mapToolbar">
             <div class="map-toolbar-row map-toolbar-row--fields">
@@ -86,6 +99,26 @@
               <input type="text" id="mapBleSearch" placeholder="№ метки" inputmode="numeric" autocomplete="off" enterkeyhint="search" aria-label="№ метки" />
               <button type="button" class="map-search-clear" id="mapSearchClear" title="Очистить" aria-label="Очистить">✕</button>
             </div>
+            <button
+              type="button"
+              class="map-retry-btn"
+              id="mapBleFieldBtn"
+              hidden
+              title="Обход маршрута: BLE-скан, сохранение на телефоне, отправка из офиса"
+            >
+              <span class="map-toolbar-text map-toolbar-text--long">Обход</span>
+              <span class="map-toolbar-text map-toolbar-text--short">BLE</span>
+            </button>
+            <button
+              type="button"
+              class="map-retry-btn map-retry-btn--finder"
+              id="mapBleFinderBtn"
+              hidden
+              title="Поиск меток и часов по Bluetooth"
+            >
+              <span class="map-toolbar-text map-toolbar-text--long">Поиск</span>
+              <span class="map-toolbar-text map-toolbar-text--short">⌕</span>
+            </button>
             <label class="map-route-field map-route-field--toolbar" id="mapRouteFieldDock" hidden>
               <span class="map-route-field__label">Маршрут</span>
               <select class="map-route-select" id="mapRouteSelectDock" data-ble-route-select aria-label="Маршрут">
@@ -120,16 +153,6 @@
             >
               <span class="map-toolbar-text map-toolbar-text--long">Обновить</span>
               <span class="map-toolbar-text map-toolbar-text--short">↺</span>
-            </button>
-            <button
-              type="button"
-              class="map-retry-btn"
-              id="mapBleFieldBtn"
-              hidden
-              title="Обход маршрута: BLE-скан, сохранение на телефоне, отправка из офиса"
-            >
-              <span class="map-toolbar-text map-toolbar-text--long">Обход</span>
-              <span class="map-toolbar-text map-toolbar-text--short">BLE</span>
             </button>
             <span class="map-toolbar__sep map-toolbar__sep--before-edit" aria-hidden="true"></span>
             <button type="button" class="map-edit-mode-btn" id="mapEditModeBtn" title="Редактировать метки и зоны">
@@ -362,11 +385,12 @@
   <div class="ble-field-panel" id="bleFieldPanel" hidden aria-hidden="true">
     <div class="ble-field-panel__sheet" role="dialog" aria-labelledby="bleFieldPanelTitle">
       <header class="ble-field-panel__head">
-        <h2 class="ble-field-panel__title" id="bleFieldPanelTitle">Обход маршрута</h2>
+        <h2 class="ble-field-panel__title">
+          <span id="bleFieldPanelTitle">Обход маршрута</span><span class="ble-field-panel__title-sep" id="bleFieldPanelRouteSep" hidden> · </span><span class="ble-field-panel__title-route" id="bleFieldPanelRoute"></span>
+        </h2>
         <button type="button" id="bleFieldCloseBtn" class="map-msg__close" aria-label="Закрыть">✕</button>
       </header>
       <div class="ble-field-panel__body">
-        <div id="bleFieldRouteLine" class="ble-field-route"></div>
         <div id="bleFieldProgress" class="ble-field-progress" hidden></div>
         <div id="bleFieldStatus" class="ble-field-status"></div>
         <form class="ble-field-search" id="bleFieldSearchForm">
@@ -389,7 +413,10 @@
               <span class="ble-field-focus__num" id="bleFieldFocusTitle">Метка #—</span>
               <span class="ble-field-focus__conn" id="bleFieldFocusConn">Сканирование… поднесите телефон к метке</span>
             </div>
-            <button type="button" id="bleFieldFocusSaveBtn" class="ble-field-focus__save" disabled>Сохранить обход</button>
+            <div class="ble-field-focus__actions">
+              <button type="button" id="bleFieldFocusConnectBtn" class="ble-field-focus__connect" hidden>Подключить</button>
+              <button type="button" id="bleFieldFocusSaveBtn" class="ble-field-focus__save" disabled>Отправить обход</button>
+            </div>
           </div>
         </section>
         <section class="ble-field-section ble-field-section--nearby">
@@ -399,9 +426,15 @@
           </div>
           <ul id="bleFieldNearbyList"></ul>
         </section>
-        <section class="ble-field-section ble-field-section--pending">
-          <h3 class="ble-field-section__title">Сохранено · <span id="bleFieldPendingCount">0</span></h3>
-          <ul id="bleFieldPendingList"></ul>
+        <section class="ble-field-section ble-field-section--pending" id="bleFieldPendingSection">
+          <button type="button" class="ble-field-pending-head" id="bleFieldPendingToggle" aria-expanded="false" aria-controls="bleFieldPendingBody">
+            <span class="ble-field-pending-head__label">Сохранено · <span id="bleFieldPendingCount">0</span></span>
+            <span class="ble-field-pending-head__hint" id="bleFieldPendingHint"></span>
+            <span class="ble-field-pending-head__chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="ble-field-pending__body" id="bleFieldPendingBody">
+            <ul id="bleFieldPendingList"></ul>
+          </div>
           <button type="button" id="bleFieldUploadBtn" disabled>Отправить на сервер</button>
         </section>
       </div>
@@ -417,13 +450,54 @@
     </div>
   </div>
 
+  <div class="ble-finder-panel" id="bleFinderPanel" hidden aria-hidden="true">
+    <div class="ble-finder-panel__sheet" role="dialog" aria-labelledby="bleFinderPanelTitle">
+      <header class="ble-finder-panel__head">
+        <h2 class="ble-finder-panel__title" id="bleFinderPanelTitle">Поиск BLE</h2>
+        <button type="button" id="bleFinderCloseBtn" class="map-msg__close" aria-label="Закрыть">✕</button>
+      </header>
+      <div class="ble-finder-panel__body">
+        <div class="ble-finder-tabs" role="tablist" aria-label="Тип устройства">
+          <button type="button" class="ble-finder-tab is-active" data-mode="tag" role="tab" aria-selected="true">
+            Метки
+          </button>
+          <button type="button" class="ble-finder-tab" data-mode="watch" role="tab" aria-selected="false">
+            Часы
+          </button>
+        </div>
+        <textarea
+          id="bleFinderTargets"
+          class="ble-finder-targets"
+          rows="5"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Номера меток — по одному в строке&#10;12345&#10;67890"
+          aria-label="Список для поиска"
+        ></textarea>
+        <div class="ble-finder-actions">
+          <button type="button" class="ble-finder-actions__primary" id="bleFinderScanBtn" data-state="scan">
+            Сканировать
+          </button>
+          <button type="button" class="ble-finder-actions__secondary" id="bleFinderResetBtn">
+            Сбросить
+          </button>
+        </div>
+        <p id="bleFinderStatus" class="ble-finder-status">Введите номера и нажмите «Сканировать»</p>
+        <div class="ble-finder-list-wrap">
+          <ul id="bleFinderList" class="ble-finder-list"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-imageoverlay-rotated@0.2.0/ImageOverlay.Rotated.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js" crossorigin="anonymous"></script>
-  <script src="ble-genplan-mask.js?v=20260530s"></script>
-  <script src="ble-map.js?v=20260530s"></script>
-  <script src="ble-field.js?v=20260530s"></script>
+  <script src="ble-genplan-mask.js?v=20260531j"></script>
+  <script src="ble-map.js?v=20260531j"></script>
+  <script src="ble-field.js?v=20260531j"></script>
+  <script src="ble-finder.js?v=20260531l"></script>
   <script src="ble-map-fullscreen-patch.js?v=20260520a"></script>
 </body>
 </html>

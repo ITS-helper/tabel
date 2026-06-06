@@ -10,10 +10,10 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   Vibration,
   View,
 } from "react-native";
+import { SearchField } from "../../src/components/SearchField";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { uploadCheckins } from "../../src/api/checkinsUpload";
 import { toBlePhotoProxyUrl } from "../../src/api/photoUtils";
@@ -47,6 +47,7 @@ export default function FieldScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
     route,
+    markers,
     routeMarkers,
     routeProgress,
     findTag,
@@ -110,7 +111,7 @@ export default function FieldScreen() {
       setStatus(`Метка #${ble}. Идёт сканирование…`);
       try {
         if (!BleService.isScanning()) {
-          await BleService.beginScanOnly(true);
+          await BleService.beginFieldScan(true);
           setScanActive(true);
           setScanPaused(false);
         }
@@ -135,10 +136,31 @@ export default function FieldScreen() {
     }
     return () => {
       BleService.onScanUpdate(null);
-      void BleService.stopScan(true);
+      void (async () => {
+        await BleService.stopScan(true);
+        BleService.setFieldPatrolActive(false);
+      })();
       sub();
     };
   }, [refreshDaily, route.routeId, route.routeTitle, focusBle]);
+
+  useEffect(() => {
+    const patrolActive =
+      scanActive ||
+      scanPaused ||
+      tagPatrolMode ||
+      gattBusy ||
+      connecting ||
+      !!busyBle;
+    BleService.setFieldPatrolActive(patrolActive);
+  }, [
+    scanActive,
+    scanPaused,
+    tagPatrolMode,
+    gattBusy,
+    connecting,
+    busyBle,
+  ]);
 
   useEffect(() => {
     if (!focusBle) {
@@ -186,7 +208,7 @@ export default function FieldScreen() {
         return;
       }
       if (scanPaused) {
-        await BleService.beginScanOnly(false);
+        await BleService.beginFieldScan(false);
         setScanActive(true);
         setScanPaused(false);
         setStatus(
@@ -198,7 +220,7 @@ export default function FieldScreen() {
         );
         return;
       }
-      await BleService.beginScanOnly(true);
+      await BleService.beginFieldScan(true);
       setScanActive(true);
       setScanPaused(false);
       setStatus("Сканирование…");
@@ -337,10 +359,15 @@ export default function FieldScreen() {
     setUploadProgress(`0 / ${list.length}`);
     setStatus(`Отправка ${list.length} обходов…`);
     try {
-      const result = await uploadCheckins(list, (ble) => findTag(ble), (p) => {
-        setUploadProgress(`${p.done} / ${p.total}`);
-        setStatus(`Отправка ${p.done} / ${p.total} · #${p.currentBle}…`);
-      });
+      const result = await uploadCheckins(
+        list,
+        (ble) => findTag(ble),
+        (p) => {
+          setUploadProgress(`${p.done} / ${p.total}`);
+          setStatus(`Отправка ${p.done} / ${p.total} · #${p.currentBle}…`);
+        },
+        markers,
+      );
       await refreshDaily();
       if (result.fail && result.ok) {
         setStatus(
@@ -454,7 +481,7 @@ export default function FieldScreen() {
       {status ? <Text style={styles.status}>{status}</Text> : null}
 
       <View style={styles.searchRow}>
-        <TextInput
+        <SearchField
           style={styles.searchInput}
           placeholder="№ метки для обхода"
           placeholderTextColor={colors.textMuted}

@@ -20,7 +20,11 @@ npm run mobile:apk
 
 Скрипт `mobile:build` сначала докачивает спутниковые тайлы (`npm run mobile:tiles`, пропускает уже скачанные), затем собирает `mobile/www` и APK.
 
-Готовый файл: **`dist/workwatch-ble-map-debug.apk`**
+Готовый файл: **`dist/workwatch-ble-map-v{versionName}-vc{code}-web{BLE_MAP_BUILD}[-label].apk`**
+
+Предыдущие сборки из `dist/` переносятся в **`dist/apk-archive/`**. См. `.cursor/rules/workwatch-apk-build.mdc`.
+
+С меткой GATT: `npm run mobile:apk:gatt` или `node scripts/build-android-apk.mjs --label GATT` (после `mobile:build`).
 
 Требуется **JDK 21** (Capacitor 7) и **Android SDK** (`platforms;android-35`, `build-tools;35.0.0`).
 
