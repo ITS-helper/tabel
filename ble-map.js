@@ -30,7 +30,8 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260607a";
+  const BLE_MAP_BUILD = "20260607b";
+  const BLE_PATROL_BOOT_ICON = "assets/patrol-boot-icon.png";
   /** Авто-↻: та же логика, что кнопка «Обновить» (mapRetryBtn). */
   const BLE_MAP_AUTO_REFRESH_MS = 30 * 60 * 1000;
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
@@ -6717,10 +6718,13 @@ if(cards.length)selectIdx(0);
     const routeLine = pt.routeTitle
       ? `<div style="color:#1565C0;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.routeTitle)}</div>`
       : "";
+    const patrolIcon = !isBleNativeApp()
+      ? `<button type="button" class="ble-popup-patrol-icon-btn" data-ble-map-patrol="${esc(String(pt.ble))}" aria-label="Отметить обход" title="Отметить обход"><img src="${BLE_PATROL_BOOT_ICON}" alt="" width="22" height="22" decoding="async" /></button>`
+      : "";
     const patrolBtn = isBleNativeApp()
-      ? `<button type="button" class="ble-popup-patrol-btn" data-ble-patrol="${esc(String(pt.ble))}">Обход (BLE)</button>`
-      : `<button type="button" class="ble-popup-fake-patrol-btn" data-ble-fake-patrol="${esc(String(pt.ble))}">Фиктивный обход</button>`;
-    return `<div class="ble-popup-body" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;"><div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${pt.recordDt ? `<div style="color:#78909C;font-size:11px;margin-bottom:4px;">Обход: ${esc(String(pt.recordDt))}</div>` : ""}<div class="ble-popup-photos-slot"></div><div class="ble-popup-patrol-actions">${patrolBtn}</div></div>`;
+      ? `<div class="ble-popup-patrol-actions"><button type="button" class="ble-popup-patrol-btn" data-ble-patrol="${esc(String(pt.ble))}">Обход (BLE)</button></div>`
+      : "";
+    return `<div class="ble-popup-body${patrolIcon ? " ble-popup-body--patrol-icon" : ""}"><div class="ble-popup-body__inner" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;">${patrolIcon}<div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${pt.recordDt ? `<div style="color:#78909C;font-size:11px;margin-bottom:4px;">Обход: ${esc(String(pt.recordDt))}</div>` : ""}<div class="ble-popup-photos-slot"></div>${patrolBtn}</div></div>`;
   }
 
   function renderPhotosInto(container, pt) {
@@ -6886,15 +6890,15 @@ if(cards.length)selectIdx(0);
           { once: true },
         );
       }
-      const fakePatrolBtn = popupEl?.querySelector("[data-ble-fake-patrol]");
-      if (fakePatrolBtn) {
-        fakePatrolBtn.addEventListener(
+      const patrolIconBtn = popupEl?.querySelector("[data-ble-map-patrol]");
+      if (patrolIconBtn) {
+        patrolIconBtn.addEventListener(
           "click",
           (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const tag = findBlePointByNumber(fakePatrolBtn.dataset.bleFakePatrol) || current;
-            void onFictitiousPatrolClick(tag, fakePatrolBtn);
+            const tag = findBlePointByNumber(patrolIconBtn.dataset.bleMapPatrol) || current;
+            void onMapPatrolIconClick(tag, patrolIconBtn);
           },
           { once: true },
         );
@@ -7632,8 +7636,8 @@ if(cards.length)selectIdx(0);
     return 1;
   }
 
-  /** Обход без BLE: поля как в базе, recordDt — сейчас. */
-  function buildFictitiousInspectionBody(tag) {
+  /** Обход с карты без BLE: поля как в базе, recordDt — сейчас. */
+  function buildMapPatrolInspectionBody(tag) {
     const raw = findRawBlePoint(bleListSnapshot?.raw, tag);
     const recordDt = new Date().toISOString();
     const bleNum = Number(tag?.ble || 0);
@@ -7660,7 +7664,7 @@ if(cards.length)selectIdx(0);
     };
   }
 
-  function patchMarkerAfterFictitiousPatrol(tag, recordDtIso) {
+  function patchMarkerAfterMapPatrol(tag, recordDtIso) {
     const d = new Date(recordDtIso);
     const dayStr = Number.isNaN(d.getTime()) ? recordDtIso.slice(0, 10) : d.toISOString().slice(0, 10);
     bleMapData = bleMapData.map((pt) => {
@@ -7680,51 +7684,51 @@ if(cards.length)selectIdx(0);
     window.syncFsStats?.();
   }
 
-  async function postFictitiousInspection(tag) {
+  async function postMapPatrolInspection(tag) {
     if (!tag?.id) throw new Error("Нет id метки — обновите карту (↻)");
     if (!(await ensureBleTokenForField())) {
       throw new Error("Нет доступа к API — проверьте интернет / VPN");
     }
-    const body = buildFictitiousInspectionBody(tag);
+    const body = buildMapPatrolInspectionBody(tag);
     const paths = ["/api/v2/ble_inspection", "/api/v1/ble_inspection"];
     let lastErr = null;
     for (const path of paths) {
       try {
         await bleApiMutate("POST", path, body);
-        patchMarkerAfterFictitiousPatrol(tag, body.recordDt);
+        patchMarkerAfterMapPatrol(tag, body.recordDt);
         return body;
       } catch (e) {
         lastErr = e;
-        console.warn("[ble-map] fictitious patrol", path, e?.message || e);
+        console.warn("[ble-map] map patrol", path, e?.message || e);
       }
     }
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? "upload_failed"));
   }
 
-  async function onFictitiousPatrolClick(tag, btn) {
+  async function onMapPatrolIconClick(tag, btn) {
     if (!tag) return;
     const prev = tag.recordDt && tag.recordDt !== "Не обходилась" ? tag.recordDt : "—";
     if (
       !confirm(
-        `Фиктивный обход метки #${tag.ble}?\n\nДанные как в базе (заряд, тип, координаты), дата — сейчас.\nПоследний обход в карте: ${prev}`,
+        `Отметить обход метки #${tag.ble}?\n\nДанные как в базе (заряд, тип, координаты), дата — сейчас.\nПоследний обход в карте: ${prev}`,
       )
     ) {
       return;
     }
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "Отправка…";
+      btn.classList.add("is-busy");
     }
     try {
-      await postFictitiousInspection(tag);
-      showMapMsg(`Фиктивный обход #${tag.ble} отправлен`, "success");
+      await postMapPatrolInspection(tag);
+      showMapMsg(`Обход #${tag.ble} отправлен`, "success");
       setTimeout(hideMapMsg, 3500);
     } catch (e) {
       showMapMsg(`Обход #${tag.ble}: ${formatBleError(e)}`, "error");
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = "Фиктивный обход";
+        btn.classList.remove("is-busy");
       }
     }
   }

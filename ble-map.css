@@ -1905,8 +1905,51 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   gap: 6px;
 }
 
-.ble-popup-patrol-btn,
-.ble-popup-fake-patrol-btn {
+.ble-popup-body--patrol-icon .ble-popup-body__inner {
+  position: relative;
+  padding-left: 30px;
+}
+
+.ble-popup-patrol-icon-btn {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.ble-popup-patrol-icon-btn img {
+  width: 22px;
+  height: 22px;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.ble-popup-patrol-icon-btn:hover:not(:disabled) {
+  filter: brightness(0.94);
+  box-shadow: 0 1px 6px rgba(0, 137, 123, 0.25);
+}
+
+.ble-popup-patrol-icon-btn:disabled,
+.ble-popup-patrol-icon-btn.is-busy {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.ble-popup-patrol-btn {
   width: 100%;
   padding: 8px 10px;
   border-radius: 8px;
@@ -1918,20 +1961,12 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   cursor: pointer;
 }
 
-.ble-popup-fake-patrol-btn {
-  border-color: #78909c;
-  background: #eceff1;
-  color: #455a64;
-}
-
-.ble-popup-patrol-btn:disabled,
-.ble-popup-fake-patrol-btn:disabled {
+.ble-popup-patrol-btn:disabled {
   opacity: 0.65;
   cursor: wait;
 }
 
-.ble-popup-patrol-btn:hover:not(:disabled),
-.ble-popup-fake-patrol-btn:hover:not(:disabled) {
+.ble-popup-patrol-btn:hover:not(:disabled) {
   filter: brightness(0.96);
 }
 
