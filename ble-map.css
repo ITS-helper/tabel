@@ -1905,16 +1905,26 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   gap: 6px;
 }
 
-.ble-popup-body--patrol-icon .ble-popup-body__inner {
-  position: relative;
-  padding-left: 20px;
+.ble-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+  padding-right: 18px;
+}
+
+.ble-popup-head__title {
+  flex: 1;
+  min-width: 0;
+  font-family: Oswald, sans-serif;
+  font-size: 1em;
+  font-weight: 700;
+  color: #37474f;
 }
 
 .ble-popup-patrol-icon-btn {
-  position: absolute;
-  top: 1px;
-  left: 0;
-  z-index: 2;
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
   padding: 0;

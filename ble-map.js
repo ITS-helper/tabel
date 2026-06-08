@@ -30,7 +30,7 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260608a";
+  const BLE_MAP_BUILD = "20260608b";
   const BLE_PATROL_BOOT_ICON = "assets/patrol-boot-icon.png";
   const MAP_PATROL_CLICKS_REQUIRED = 10;
   let mapPatrolClickStreak = { ble: null, count: 0 };
@@ -6723,10 +6723,13 @@ if(cards.length)selectIdx(0);
     const patrolIcon = !isBleNativeApp()
       ? `<button type="button" class="ble-popup-patrol-icon-btn" data-ble-map-patrol="${esc(String(pt.ble))}" tabindex="-1" aria-hidden="true"><img src="${BLE_PATROL_BOOT_ICON}" alt="" width="16" height="16" decoding="async" /></button>`
       : "";
+    const titleRow = patrolIcon
+      ? `<div class="ble-popup-head"><div class="ble-popup-head__title">Метка #${esc(pt.ble)}</div>${patrolIcon}</div>`
+      : `<div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>`;
     const patrolBtn = isBleNativeApp()
       ? `<div class="ble-popup-patrol-actions"><button type="button" class="ble-popup-patrol-btn" data-ble-patrol="${esc(String(pt.ble))}">Обход (BLE)</button></div>`
       : "";
-    return `<div class="ble-popup-body${patrolIcon ? " ble-popup-body--patrol-icon" : ""}"><div class="ble-popup-body__inner" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;">${patrolIcon}<div style="font-family:Oswald,sans-serif;font-size:1em;font-weight:700;color:#37474F;margin-bottom:2px;">Метка #${esc(pt.ble)}</div>${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${pt.recordDt ? `<div style="color:#78909C;font-size:11px;margin-bottom:4px;">Обход: ${esc(String(pt.recordDt))}</div>` : ""}<div class="ble-popup-photos-slot"></div>${patrolBtn}</div></div>`;
+    return `<div class="ble-popup-body"><div class="ble-popup-body__inner" style="font-size:13px;line-height:1.5;min-width:160px;max-width:260px;">${titleRow}${routeLine}${pt.bleType ? `<div style="color:#00897b;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.bleType.replace(/^\d+ - /, ""))}</div>` : ""}${pt.locationDesc ? `<div style="color:#546E7A;font-size:12px;margin-bottom:2px;">${esc(pt.locationDesc)}</div>` : ""}${pt.recordDt ? `<div style="color:#78909C;font-size:11px;margin-bottom:4px;">Обход: ${esc(String(pt.recordDt))}</div>` : ""}<div class="ble-popup-photos-slot"></div>${patrolBtn}</div></div>`;
   }
 
   function renderPhotosInto(container, pt) {
