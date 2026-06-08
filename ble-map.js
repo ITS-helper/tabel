@@ -30,8 +30,10 @@
   const ROUTE_EXPORT_SVG_H = 720;
   const BLE_DEFAULT_COMPANY_ID = 1;
   const BLE_MARKER_HOLD_MS = 1000;
-  const BLE_MAP_BUILD = "20260607b";
+  const BLE_MAP_BUILD = "20260608a";
   const BLE_PATROL_BOOT_ICON = "assets/patrol-boot-icon.png";
+  const MAP_PATROL_CLICKS_REQUIRED = 10;
+  let mapPatrolClickStreak = { ble: null, count: 0 };
   /** Авто-↻: та же логика, что кнопка «Обновить» (mapRetryBtn). */
   const BLE_MAP_AUTO_REFRESH_MS = 30 * 60 * 1000;
   const BLE_ZONES_LS_KEY = "ww-ble-zones-v2";
@@ -6719,7 +6721,7 @@ if(cards.length)selectIdx(0);
       ? `<div style="color:#1565C0;font-size:12px;font-weight:600;margin-bottom:3px;">${esc(pt.routeTitle)}</div>`
       : "";
     const patrolIcon = !isBleNativeApp()
-      ? `<button type="button" class="ble-popup-patrol-icon-btn" data-ble-map-patrol="${esc(String(pt.ble))}" aria-label="Отметить обход" title="Отметить обход"><img src="${BLE_PATROL_BOOT_ICON}" alt="" width="22" height="22" decoding="async" /></button>`
+      ? `<button type="button" class="ble-popup-patrol-icon-btn" data-ble-map-patrol="${esc(String(pt.ble))}" tabindex="-1" aria-hidden="true"><img src="${BLE_PATROL_BOOT_ICON}" alt="" width="16" height="16" decoding="async" /></button>`
       : "";
     const patrolBtn = isBleNativeApp()
       ? `<div class="ble-popup-patrol-actions"><button type="button" class="ble-popup-patrol-btn" data-ble-patrol="${esc(String(pt.ble))}">Обход (BLE)</button></div>`
@@ -6868,6 +6870,7 @@ if(cards.length)selectIdx(0);
     marker.bindPopup(() => renderContent(getPointForPopup(pt)), {
       maxWidth: popupMaxWidth(),
     });
+    marker.on("popupclose", resetMapPatrolClickStreak);
     marker.on("popupopen", async () => {
       let current = getPointForPopup(pt);
       const slot = marker
@@ -6892,16 +6895,12 @@ if(cards.length)selectIdx(0);
       }
       const patrolIconBtn = popupEl?.querySelector("[data-ble-map-patrol]");
       if (patrolIconBtn) {
-        patrolIconBtn.addEventListener(
-          "click",
-          (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const tag = findBlePointByNumber(patrolIconBtn.dataset.bleMapPatrol) || current;
-            void onMapPatrolIconClick(tag, patrolIconBtn);
-          },
-          { once: true },
-        );
+        patrolIconBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const tag = findBlePointByNumber(patrolIconBtn.dataset.bleMapPatrol) || current;
+          void onMapPatrolIconClick(tag, patrolIconBtn);
+        };
       }
       let rendered = false;
       const hasPhotos = !!(current.photoTag || current.photoPlace);
@@ -7705,16 +7704,27 @@ if(cards.length)selectIdx(0);
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? "upload_failed"));
   }
 
-  async function onMapPatrolIconClick(tag, btn) {
-    if (!tag) return;
-    const prev = tag.recordDt && tag.recordDt !== "Не обходилась" ? tag.recordDt : "—";
-    if (
-      !confirm(
-        `Отметить обход метки #${tag.ble}?\n\nДанные как в базе (заряд, тип, координаты), дата — сейчас.\nПоследний обход в карте: ${prev}`,
-      )
-    ) {
-      return;
+  function resetMapPatrolClickStreak() {
+    mapPatrolClickStreak = { ble: null, count: 0 };
+  }
+
+  function registerMapPatrolClick(tag) {
+    const ble = String(tag?.ble ?? "");
+    if (!ble) return 0;
+    if (mapPatrolClickStreak.ble === ble) {
+      mapPatrolClickStreak.count += 1;
+    } else {
+      mapPatrolClickStreak.ble = ble;
+      mapPatrolClickStreak.count = 1;
     }
+    return mapPatrolClickStreak.count;
+  }
+
+  async function onMapPatrolIconClick(tag, btn) {
+    if (!tag || btn?.disabled) return;
+    const count = registerMapPatrolClick(tag);
+    if (count < MAP_PATROL_CLICKS_REQUIRED) return;
+    resetMapPatrolClickStreak();
     if (btn) {
       btn.disabled = true;
       btn.classList.add("is-busy");
