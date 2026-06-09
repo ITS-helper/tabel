@@ -2187,6 +2187,33 @@ function getZoneRosterNamesForMonth(monthKey, sectionId) {
     .filter(Boolean);
 }
 
+/** Состав из сохранённой расстановки (пул + зоны) — запасной источник для кураторов */
+function getZonePlacementRosterNames(monthKey, sectionId) {
+  if (sectionId !== "ust" && sectionId !== "pilot") return [];
+  const month = state.zonePlacementByMonth[monthKey];
+  const sec = month?.[sectionId];
+  if (!sec || typeof sec !== "object") return [];
+  const shift = sec.shift === "evening" ? "evening" : "morning";
+  const pl = sec[shift];
+  if (!pl || typeof pl !== "object") return [];
+  const names = new Set();
+  for (const z of ["pool", "spg1", "spg2", "spg21", "spg3", "spg31", "spg4", "dayoff"]) {
+    for (const n of pl[z] || []) {
+      if (n) names.add(n);
+    }
+  }
+  return [...names];
+}
+
+/** Состав для блока кураторов: табель + расстановка (объединение) */
+function getCuratorRosterNames(monthKey, sectionId) {
+  const fromSchedule = getZoneRosterNamesForMonth(monthKey, sectionId);
+  const fromPlacement = getZonePlacementRosterNames(monthKey, sectionId);
+  if (!fromPlacement.length) return fromSchedule;
+  if (!fromSchedule.length) return fromPlacement;
+  return [...new Set([...fromSchedule, ...fromPlacement])];
+}
+
 /** Сегодня в графике отметка ВХ — в расстановке автоматически «Выходной» */
 function getZoneTodayDayOffNames(monthKey, sectionId) {
   const dataYear = parseMonthKey(monthKey).year;
@@ -2789,6 +2816,9 @@ function bindCollapsiblePanels() {
       state.uiBlocks.curators = !state.uiBlocks.curators;
       persistUiBlocks();
       syncCollapsiblePanels();
+      if (state.uiBlocks.curators && typeof window.WorkWatchCuratorPairing !== "undefined") {
+        window.WorkWatchCuratorPairing.refresh();
+      }
     });
   }
 }
@@ -2816,7 +2846,7 @@ function initCuratorPairingModule() {
     getMonthKey: () => state.monthKey,
     getSectionId: () => state.sectionId,
     getSectionTitle: () => sectionTabTitle(state.sectionId),
-    getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey, state.sectionId),
+    getRosterNames: () => getCuratorRosterNames(state.monthKey, state.sectionId),
     canEdit: canEditCuratorPairing,
     getLockHint: getCuratorPairingLockHint,
     persistLocal: persistCuratorPairingLocal,
@@ -3820,6 +3850,12 @@ function render() {
     document.getElementById("employeeCount").textContent = "0 сотр.";
     renderHiddenColumnsBar();
     syncLegendChrome();
+    if (typeof window.WorkWatchCuratorPairing !== "undefined") {
+      window.WorkWatchCuratorPairing.refresh();
+    }
+    if (typeof window.WorkWatchZonePlacement !== "undefined") {
+      window.WorkWatchZonePlacement.refresh();
+    }
     return;
   }
 
@@ -3835,6 +3871,12 @@ function render() {
     document.getElementById("employeeCount").textContent = `0 из ${totalInSectionWithMarks} сотр.`;
     renderHiddenColumnsBar();
     syncLegendChrome();
+    if (typeof window.WorkWatchCuratorPairing !== "undefined") {
+      window.WorkWatchCuratorPairing.refresh();
+    }
+    if (typeof window.WorkWatchZonePlacement !== "undefined") {
+      window.WorkWatchZonePlacement.refresh();
+    }
     return;
   }
 

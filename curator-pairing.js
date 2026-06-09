@@ -53,6 +53,42 @@
     return { curators: [] };
   }
 
+  function normalizeCuratorEntry(item) {
+    if (typeof item === "string") {
+      const name = item.trim();
+      return name ? { name, trainees: [] } : null;
+    }
+    if (!item || typeof item !== "object") return null;
+    const name = String(item.name || "").trim();
+    const trainees = Array.isArray(item.trainees)
+      ? item.trainees.map((t) => String(t || "").trim()).filter(Boolean)
+      : [];
+    if (!name) return trainees.length ? { name: "", trainees } : null;
+    return { name, trainees };
+  }
+
+  function normalizeCuratorList(raw) {
+    if (!raw) return [];
+    const list = Array.isArray(raw) ? raw : typeof raw === "object" ? Object.values(raw) : [];
+    return list.map(normalizeCuratorEntry).filter(Boolean);
+  }
+
+  function normalizeCuratorMonthEntry(month) {
+    if (!month || typeof month !== "object") return;
+    const hasLegacy = month.curators != null || month.pool != null;
+    if (!hasLegacy || month.ust != null || month.pilot != null) return;
+    month.ust = { curators: normalizeCuratorList(month.curators) };
+    delete month.curators;
+    delete month.pool;
+  }
+
+  function normalizeCuratorBucket(bucket) {
+    if (!bucket || typeof bucket !== "object") return emptyBucket();
+    const curators = normalizeCuratorList(bucket.curators);
+    bucket.curators = curators;
+    return bucket;
+  }
+
   function getMonthBucket(createIfMissing) {
     const mk = api.getMonthKey();
     if (!api.state.curatorPairingByMonth[mk]) {
@@ -60,24 +96,33 @@
       api.state.curatorPairingByMonth[mk] = {};
     }
     const month = api.state.curatorPairingByMonth[mk];
+    normalizeCuratorMonthEntry(month);
     const sid = getSectionKey();
     if (!sid) return null;
     if (!month[sid]) {
       if (createIfMissing === false) return null;
       month[sid] = emptyBucket();
     }
-    return month[sid];
+    return normalizeCuratorBucket(month[sid]);
   }
 
   function mergeWithRoster(saved, roster) {
     const rosterSet = new Set(roster);
     const curators = [];
     const used = new Set();
+    const rawList = normalizeCuratorList(saved?.curators);
 
-    for (const c of saved?.curators || []) {
-      const name = c?.name;
-      if (!name || !rosterSet.has(name)) continue;
-      const trainees = (c.trainees || []).filter((t) => rosterSet.has(t) && t !== name && !used.has(t));
+    for (const item of rawList) {
+      const name = String(item.name || "").trim();
+      const rawTrainees = item.trainees || [];
+
+      if (!name || !rosterSet.has(name)) {
+        continue;
+      }
+
+      const trainees = rawTrainees
+        .map((t) => String(t || "").trim())
+        .filter((t) => rosterSet.has(t) && t !== name && !used.has(t));
       trainees.forEach((t) => used.add(t));
       used.add(name);
       curators.push({ name, trainees });
@@ -670,21 +715,25 @@
     }
     const bucket = getMonthBucket(true);
     if (!bucket) return;
+    const roster = api.getRosterNames();
+    const merged = mergeWithRoster(bucket, roster);
     layout = {
-      curators: (bucket.curators || []).map((c) => ({
+      curators: merged.curators.map((c) => ({
         name: c.name,
-        trainees: [...(c.trainees || [])],
+        trainees: [...c.trainees],
       })),
     };
-    const roster = api.getRosterNames();
-    const merged = mergeWithRoster({ curators: layout.curators }, roster);
-    layout.curators = merged.curators;
-    bucket.curators = merged.curators.map((c) => ({
+    const beforeNorm = JSON.stringify(bucket.curators || []);
+    bucket.curators = layout.curators.map((c) => ({
       name: c.name,
       trainees: [...c.trainees],
     }));
+    if (JSON.stringify(bucket.curators) !== beforeNorm) {
+      api.persistLocal();
+      api.scheduleRemotePersist();
+    }
     renderLayout();
-    const empty = roster.length === 0;
+    const empty = roster.length === 0 && merged.pool.length === 0 && merged.curators.length === 0;
     sectionEl.classList.toggle("curator-pairing--empty", empty);
   }
 
