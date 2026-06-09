@@ -102,6 +102,7 @@ const STORAGE_SCHEDULE_BY_MONTH = "ww-schedule-by-month";
 const STORAGE_ROSTER_EXTRAS = "ww-roster-extras";
 const STORAGE_LEGEND_INCLUDE_NO_SHIFTS = "ww-legend-include-no-shifts";
 const STORAGE_ZONE_PLACEMENT = "ww-zone-placement";
+const STORAGE_CURATOR_PAIRING = "ww-curator-pairing";
 const SUPABASE_PUSH_DEBOUNCE_MS = 900;
 const STORAGE_GOOGLE_SYNC_BACKUP = "ww-google-sync-backup";
 const GOOGLE_SHEET_FETCH_FN = "google-sheet-fetch";
@@ -2115,7 +2116,7 @@ function startPillFillInteraction(ev, rowIndex, day, pillEl, monthKey = state.mo
 }
 
 function loadUiBlocks() {
-  const collapsed = { legend: false, vacations: false, summary: false, zones: false };
+  const collapsed = { legend: false, vacations: false, summary: false, zones: false, curators: false };
   try {
     const r = localStorage.getItem(STORAGE_UI_BLOCKS);
     if (!r) return collapsed;
@@ -2125,6 +2126,7 @@ function loadUiBlocks() {
       vacations: o.vacations === true,
       summary: o.summary === true,
       zones: o.zones === true,
+      curators: o.curators === true,
     };
   } catch (_) {
     return collapsed;
@@ -2145,6 +2147,23 @@ function loadZonePlacementFromLocal() {
 function persistZonePlacementLocal() {
   try {
     localStorage.setItem(STORAGE_ZONE_PLACEMENT, JSON.stringify(state.zonePlacementByMonth));
+  } catch (_) {}
+}
+
+function loadCuratorPairingFromLocal() {
+  try {
+    const r = localStorage.getItem(STORAGE_CURATOR_PAIRING);
+    if (!r) return {};
+    const o = JSON.parse(r);
+    return typeof o === "object" && o !== null && !Array.isArray(o) ? o : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function persistCuratorPairingLocal() {
+  try {
+    localStorage.setItem(STORAGE_CURATOR_PAIRING, JSON.stringify(state.curatorPairingByMonth));
   } catch (_) {}
 }
 
@@ -2183,6 +2202,19 @@ function canEditZonePlacement() {
 function getZonePlacementLockHint() {
   if (isArchiveView()) return "В архиве расстановку менять нельзя.";
   if (state.mode !== "edit") return "Войдите в систему, чтобы редактировать расстановку.";
+  if (!isEditSessionUnlocked()) {
+    return "Войдите в систему (логин и пароль из Supabase).";
+  }
+  return "";
+}
+
+function canEditCuratorPairing() {
+  return canEditZonePlacement();
+}
+
+function getCuratorPairingLockHint() {
+  if (isArchiveView()) return "В архиве пары куратор — обучаемый менять нельзя.";
+  if (state.mode !== "edit") return "Войдите в систему, чтобы редактировать пары.";
   if (!isEditSessionUnlocked()) {
     return "Войдите в систему (логин и пароль из Supabase).";
   }
@@ -2250,6 +2282,8 @@ let state = {
   addedEmployeesByMonth: _rosterInit.addedEmployeesByMonth,
   /** Месяц → расстановка по зонам (утро/вечер) */
   zonePlacementByMonth: loadZonePlacementFromLocal(),
+  /** Месяц → кураторы и обучаемые */
+  curatorPairingByMonth: loadCuratorPairingFromLocal(),
 };
 
 function scheduleOverridesBucketFor(monthKey) {
@@ -2297,6 +2331,7 @@ function buildSharedPayload() {
     addedEmployeesByMonth: JSON.parse(JSON.stringify(state.addedEmployeesByMonth)),
     legendIncludeNoShifts: !!state.legendIncludeNoShifts,
     zonePlacementByMonth: JSON.parse(JSON.stringify(state.zonePlacementByMonth)),
+    curatorPairingByMonth: JSON.parse(JSON.stringify(state.curatorPairingByMonth)),
   };
 }
 
@@ -2618,6 +2653,13 @@ function applySharedPayload(payload) {
       window.WorkWatchZonePlacement.refresh();
     }
   }
+  if (payload.curatorPairingByMonth != null && typeof payload.curatorPairingByMonth === "object") {
+    state.curatorPairingByMonth = JSON.parse(JSON.stringify(payload.curatorPairingByMonth));
+    persistCuratorPairingLocal();
+    if (typeof window.WorkWatchCuratorPairing !== "undefined") {
+      window.WorkWatchCuratorPairing.refresh();
+    }
+  }
 }
 
 async function pullTabelRemoteState() {
@@ -2687,18 +2729,22 @@ function syncCollapsiblePanels() {
   const vacSec = document.getElementById("vacationCardsSection");
   const sumSec = document.getElementById("objectSummarySection");
   const zoneSec = document.getElementById("zonePlacementSection");
+  const curatorSec = document.getElementById("curatorPairingSection");
   const legBtn = document.getElementById("legendPanelToggle");
   const vacBtn = document.getElementById("vacationPanelToggle");
   const sumBtn = document.getElementById("objectSummaryPanelToggle");
   const zoneBtn = document.getElementById("zonePlacementPanelToggle");
+  const curatorBtn = document.getElementById("curatorPairingPanelToggle");
   if (legSec) legSec.classList.toggle("open", state.uiBlocks.legend);
   if (vacSec) vacSec.classList.toggle("open", state.uiBlocks.vacations);
   if (sumSec) sumSec.classList.toggle("open", state.uiBlocks.summary);
   if (zoneSec) zoneSec.classList.toggle("open", state.uiBlocks.zones);
+  if (curatorSec) curatorSec.classList.toggle("open", state.uiBlocks.curators);
   if (legBtn) legBtn.setAttribute("aria-expanded", state.uiBlocks.legend ? "true" : "false");
   if (vacBtn) vacBtn.setAttribute("aria-expanded", state.uiBlocks.vacations ? "true" : "false");
   if (sumBtn) sumBtn.setAttribute("aria-expanded", state.uiBlocks.summary ? "true" : "false");
   if (zoneBtn) zoneBtn.setAttribute("aria-expanded", state.uiBlocks.zones ? "true" : "false");
+  if (curatorBtn) curatorBtn.setAttribute("aria-expanded", state.uiBlocks.curators ? "true" : "false");
 }
 
 function bindCollapsiblePanels() {
@@ -2706,6 +2752,7 @@ function bindCollapsiblePanels() {
   const vacBtn = document.getElementById("vacationPanelToggle");
   const sumBtn = document.getElementById("objectSummaryPanelToggle");
   const zoneBtn = document.getElementById("zonePlacementPanelToggle");
+  const curatorBtn = document.getElementById("curatorPairingPanelToggle");
   if (legBtn) {
     legBtn.addEventListener("click", () => {
       state.uiBlocks.legend = !state.uiBlocks.legend;
@@ -2734,6 +2781,13 @@ function bindCollapsiblePanels() {
       syncCollapsiblePanels();
     });
   }
+  if (curatorBtn) {
+    curatorBtn.addEventListener("click", () => {
+      state.uiBlocks.curators = !state.uiBlocks.curators;
+      persistUiBlocks();
+      syncCollapsiblePanels();
+    });
+  }
 }
 
 function initZonePlacementModule() {
@@ -2748,6 +2802,21 @@ function initZonePlacementModule() {
     canEdit: canEditZonePlacement,
     getLockHint: getZonePlacementLockHint,
     persistLocal: persistZonePlacementLocal,
+    scheduleRemotePersist: scheduleRemotePersistDebounced,
+  });
+}
+
+function initCuratorPairingModule() {
+  if (typeof window.WorkWatchCuratorPairing === "undefined") return;
+  window.WorkWatchCuratorPairing.init({
+    state,
+    getMonthKey: () => state.monthKey,
+    getSectionId: () => state.sectionId,
+    getSectionTitle: () => sectionTabTitle(state.sectionId),
+    getRosterNames: () => getZoneRosterNamesForMonth(state.monthKey, state.sectionId),
+    canEdit: canEditCuratorPairing,
+    getLockHint: getCuratorPairingLockHint,
+    persistLocal: persistCuratorPairingLocal,
     scheduleRemotePersist: scheduleRemotePersistDebounced,
   });
 }
@@ -3063,6 +3132,7 @@ function init() {
   syncCollapsiblePanels();
   bindAppPageNav();
   initZonePlacementModule();
+  initCuratorPairingModule();
   render();
   void initRemoteSync();
 }
@@ -3772,6 +3842,9 @@ function render() {
   queueScheduleScrollToTodayColumn();
   if (typeof window.WorkWatchZonePlacement !== "undefined") {
     window.WorkWatchZonePlacement.refresh();
+  }
+  if (typeof window.WorkWatchCuratorPairing !== "undefined") {
+    window.WorkWatchCuratorPairing.refresh();
   }
 }
 

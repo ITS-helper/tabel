@@ -262,6 +262,57 @@
         </div>
       </section>
 
+      <section
+        id="curatorPairingSection"
+        class="ww-guide-group curator-pairing-group"
+        aria-label="Кураторы и обучаемые"
+      >
+        <button
+          type="button"
+          class="ww-group-header ww-group-header--full"
+          id="curatorPairingPanelToggle"
+          aria-expanded="false"
+          aria-controls="curatorPairingPanelBody"
+        >
+          <span class="ww-group-title">Кураторы и обучаемые</span>
+          <span class="ww-group-chevron" aria-hidden="true">▼</span>
+        </button>
+        <div class="ww-guide-body" id="curatorPairingPanelBody">
+          <div class="curator-pairing-inner">
+            <p class="curator-pairing-hint" id="curatorPairingHint">
+              Назначьте куратора и прикрепите к нему младших инженеров. Перетащите или клик: сотрудник → зона.
+            </p>
+            <p class="curator-pairing-lock-hint" id="curatorPairingLockHint" hidden></p>
+            <div class="pool-label">
+              Нераспределённые
+              <span class="pool-count" id="cpPoolCount">0</span>
+            </div>
+            <div class="cp-pool-zone" id="cpPool" data-zone="pool"></div>
+
+            <div
+              class="cp-curator-new"
+              id="cpCuratorNew"
+              data-zone="curator-new"
+              aria-label="Назначить куратором"
+            >
+              <span class="cp-curator-new__icon" aria-hidden="true">★</span>
+              <span class="cp-curator-new__text">Перетащите сюда, чтобы назначить <strong>куратором</strong></span>
+            </div>
+
+            <div class="curators-grid" id="cpCuratorsGrid"></div>
+
+            <div class="deployment-footer">
+              <button type="button" class="btn-copy-deploy" id="cpBtnCopy">
+                Копировать пары
+              </button>
+              <button type="button" class="btn-reset-deployment" id="cpBtnReset">
+                Сбросить
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="legendSection" class="ww-guide-group open" aria-label="Объекты">
         <button
           type="button"
@@ -507,6 +558,7 @@
   </div>
   <script src="scripts/parsed-employees-2026-h1.js"></script>
   <script src="zone-placement.js"></script>
+  <script src="curator-pairing.js"></script>
   <script src="google-sheet-sync.js"></script>
   <script src="app.js"></script>
 </body>

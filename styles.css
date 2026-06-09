@@ -2664,6 +2664,209 @@ body.zp-drag-active .person-chip:not(.dragging) {
   pointer-events: none;
 }
 
+/* ——— Кураторы и обучаемые ——— */
+.curator-pairing-inner {
+  padding: 4px 2px 8px;
+}
+
+.curator-pairing-hint {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.curator-pairing-lock-hint {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #9a3412;
+  background: color-mix(in srgb, #ffedd5 75%, var(--surface));
+  border: 1px solid color-mix(in srgb, #fdba74 55%, var(--border));
+}
+
+.curator-pairing--readonly .person-chip:not(.person-chip--curator) {
+  cursor: default;
+}
+
+.cp-pool-zone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 2px dashed var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 12px;
+}
+
+.cp-pool-zone.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+
+.cp-curator-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  border: 2px dashed color-mix(in srgb, #7c3aed 45%, var(--border));
+  background: color-mix(in srgb, #ede9fe 35%, var(--surface));
+  color: var(--text);
+  font-size: 0.88rem;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.cp-curator-new.drag-over {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #7c3aed 18%, transparent);
+  background: color-mix(in srgb, #ddd6fe 50%, var(--surface));
+}
+
+.cp-curator-new__icon {
+  font-size: 1.15rem;
+  color: #7c3aed;
+  line-height: 1;
+}
+
+.curators-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 760px) {
+  .curators-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .curators-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cp-curator-card {
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg));
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.cp-curator-card.drag-over {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #7c3aed 18%, transparent);
+}
+
+.cp-curator-card .zone-header {
+  background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #8b5cf6 100%);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.curator-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-remove-curator {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cp-remove-curator:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.cp-zone-drop {
+  min-height: 72px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: background 0.2s;
+}
+
+.cp-curator-card.drag-over .cp-zone-drop {
+  background: color-mix(in srgb, #ede9fe 40%, transparent);
+}
+
+.cp-curator-card .person-chip {
+  border-left: 3px solid #8b5cf6;
+}
+
+.person-chip--curator {
+  cursor: default;
+  border-left: 3px solid #fbbf24;
+  font-weight: 600;
+}
+
+.curator-pairing--pick-mode .cp-pool-zone,
+.curator-pairing--pick-mode .cp-curator-new,
+.curator-pairing--pick-mode .cp-zone-drop {
+  cursor: pointer;
+}
+
+.curator-pairing--pick-mode .cp-curator-card.drag-over,
+.curator-pairing--pick-mode .cp-pool-zone.drag-over,
+.curator-pairing--pick-mode .cp-curator-new.drag-over {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.curator-pairing--readonly .btn-reset-deployment {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.curator-pairing--empty .curator-pairing-inner,
+.curator-pairing--inactive .curator-pairing-inner {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.zsb-dot-curator {
+  background: linear-gradient(135deg, #5b21b6, #8b5cf6);
+  color: #fff;
+}
+
+.zsb-dot-pool {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+}
+
+.zsb-dot-trainee {
+  background: linear-gradient(135deg, #6d28d9, #a78bfa);
+  color: #fff;
+}
+
 .zone-sheet-overlay {
   position: fixed;
   inset: 0;

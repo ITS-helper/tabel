@@ -22,6 +22,7 @@ alwaysApply: true
 - `addedEmployeesByMonth` — вручную добавленные сотрудники
 - `legendIncludeNoShifts` — флаг «Показать всех»
 - `zonePlacementByMonth` — расстановка по зонам: месяц → объект (`ust` | `pilot`) → утро/вечер → pool, spg1–spg4, dayoff (ФИО с вкладки объекта)
+- `curatorPairingByMonth` — кураторы и обучаемые: месяц → объект (`ust` | `pilot`) → список `{ name, trainees[] }` (ФИО с вкладки объекта)
 
 После успешного pull **`applySharedPayload`** обновляет `state` и **дублирует** часть данных в **localStorage** (см. вызовы `persist*` внутри).
 
