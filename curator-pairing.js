@@ -190,10 +190,6 @@
     $("curatorPairingSection")?.classList.add("curator-pairing--pick-mode");
   }
 
-  function useTapAssign() {
-    return window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
-  }
-
   function beginPointerDrag(st, clientX, clientY) {
     st.dragging = true;
     dragSession = true;
@@ -281,11 +277,7 @@
       return;
     }
     cleanupPointerDrag();
-    if (useTapAssign()) {
-      openAssignSheet(st.name, st.from);
-    } else {
-      selectPerson(st.name, st.from, st.chip);
-    }
+    openAssignSheet(st.name, st.from);
   }
 
   function createChip(name, zone, role) {
@@ -311,21 +303,55 @@
     return chip;
   }
 
+  function getCuratorZoneLabel(toZone) {
+    if (toZone === "pool") return "Нераспределённые";
+    if (toZone === "curator-new") return "Назначить куратором";
+    const m = /^curator-(\d+)$/.exec(toZone);
+    if (m) {
+      const c = layout.curators[Number(m[1])];
+      return c ? "К " + c.name : "Куратор";
+    }
+    return toZone;
+  }
+
+  function getCandidatesForZone(toZone) {
+    const roster = api.getRosterNames();
+    const merged = mergeWithRoster({ curators: layout.curators }, roster);
+    if (toZone === "pool") {
+      const list = [];
+      merged.curators.forEach((c, i) => {
+        list.push({ name: c.name, from: "curator-" + i, sub: "Куратор" });
+        c.trainees.forEach((t) => {
+          list.push({ name: t, from: "curator-" + i, sub: "Обучаемый" });
+        });
+      });
+      return list.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    }
+    return merged.pool.map((name) => ({ name, from: "pool", sub: "нераспределён" }));
+  }
+
   function bindZoneClickTargetsOnce() {
     if (bindZoneClickTargetsOnce.done) return;
     bindZoneClickTargetsOnce.done = true;
     const section = $("curatorPairingSection");
     if (!section) return;
     section.addEventListener("click", (e) => {
-      if (!canEdit() || !selectedPerson) return;
+      if (!canEdit()) return;
       if (e.target.closest(".person-chip")) return;
       if (e.target.closest(".cp-remove-curator")) return;
       const zoneEl = e.target.closest("[data-zone]");
       if (!zoneEl || !section.contains(zoneEl)) return;
       const toZone = zoneEl.dataset.zone;
-      if (!toZone || toZone === selectedPerson.from) return;
+      if (!toZone) return;
       if (toZone.startsWith("curator-header")) return;
-      movePerson(selectedPerson.name, selectedPerson.from, toZone);
+      if (selectedPerson) {
+        if (toZone === selectedPerson.from) return;
+        movePerson(selectedPerson.name, selectedPerson.from, toZone);
+        return;
+      }
+      if (toZone === "pool" || toZone === "curator-new" || /^curator-\d+$/.test(toZone)) {
+        openPersonPicker(toZone);
+      }
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeAssignSheet();
@@ -499,7 +525,7 @@
     sheetOverlay.innerHTML =
       '<div class="zone-sheet" id="curatorSheet">' +
       '<div class="zone-sheet-handle"></div>' +
-      '<div class="zone-sheet-title">Назначить <span class="zone-sheet-person" id="curatorSheetPerson"></span></div>' +
+      '<div class="zone-sheet-title" id="curatorSheetTitle">Назначить <span class="zone-sheet-person" id="curatorSheetPerson"></span></div>' +
       '<div class="zone-sheet-options" id="curatorSheetOptions"></div>' +
       '<button type="button" class="zone-sheet-cancel" id="curatorSheetCancel">Отмена</button>' +
       "</div>";
@@ -510,9 +536,68 @@
     $("curatorSheetCancel")?.addEventListener("click", closeAssignSheet);
   }
 
+  function openPersonPicker(toZone) {
+    if (!canEdit()) return;
+    createSheet();
+    const titleEl = $("curatorSheetTitle");
+    if (titleEl) {
+      titleEl.innerHTML =
+        'Выберите сотрудника — <span class="zone-sheet-person">' +
+        getCuratorZoneLabel(toZone).replace(/</g, "&lt;") +
+        "</span>";
+    }
+    const optionsEl = $("curatorSheetOptions");
+    if (!optionsEl) return;
+    optionsEl.innerHTML = "";
+    const candidates = getCandidatesForZone(toZone);
+    if (!candidates.length) {
+      const empty = document.createElement("p");
+      empty.className = "zone-sheet-empty";
+      empty.textContent =
+        toZone === "pool" ? "Все в нераспределённых" : "Нет сотрудников для назначения";
+      optionsEl.appendChild(empty);
+    } else {
+      for (const c of candidates) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "zone-sheet-person-btn";
+        const avatar = document.createElement("div");
+        avatar.className = "person-avatar";
+        avatar.style.background = getAvatarColor(c.name);
+        avatar.textContent = getInitials(c.name);
+        const info = document.createElement("div");
+        info.className = "zsb-info";
+        const label = document.createElement("span");
+        label.className = "zsb-label";
+        label.textContent = c.name;
+        info.appendChild(label);
+        if (c.sub) {
+          const sub = document.createElement("span");
+          sub.className = "zsb-count";
+          sub.textContent = c.sub;
+          info.appendChild(sub);
+        }
+        btn.appendChild(avatar);
+        btn.appendChild(info);
+        btn.addEventListener("click", () => {
+          movePerson(c.name, c.from, toZone);
+          closeAssignSheet();
+        });
+        optionsEl.appendChild(btn);
+      }
+    }
+    sheetOverlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
   function openAssignSheet(personName, fromZone) {
     if (!canEdit()) return;
     createSheet();
+    const titleEl = $("curatorSheetTitle");
+    if (titleEl) {
+      titleEl.innerHTML =
+        'Назначить <span class="zone-sheet-person" id="curatorSheetPerson"></span>';
+    }
     $("curatorSheetPerson").textContent = personName;
     const optionsEl = $("curatorSheetOptions");
     if (!optionsEl) return;
@@ -580,7 +665,7 @@
       hint.textContent = canEdit()
         ? "Состав: «" +
           title +
-          "». Перетащите фамилию в «Назначить куратором» или к карточке куратора — как младшего инженера."
+          "». Перетащите или кликните по зоне — список сотрудников; клик по фамилии — выбор зоны."
         : "Состав: «" + title + "» — только просмотр.";
     }
     const bucket = getMonthBucket(true);

@@ -322,12 +322,34 @@
     }
 
     cleanupPointerDrag();
+    openSheet(st.name, st.from);
+  }
 
-    if (useTapAssign()) {
-      openSheet(st.name, st.from);
-    } else {
-      selectPerson(st.name, st.from, st.chip);
+  function getZoneLabel(key) {
+    const z = SHEET_ZONES.find((s) => s.key === key);
+    return z ? z.label : key;
+  }
+
+  function getCandidatesForZone(toZone) {
+    const deploy = readPlacementFromDom();
+    const labels = Object.fromEntries(SHEET_ZONES.map((z) => [z.key, z.label]));
+    const candidates = [];
+    for (const z of ZONE_KEYS) {
+      if (z === toZone) continue;
+      for (const name of deploy[z] || []) {
+        candidates.push({
+          name,
+          from: z,
+          sub: z === "pool" ? "нераспределён" : "из «" + labels[z] + "»",
+        });
+      }
     }
+    candidates.sort((a, b) => {
+      if (a.from === "pool" && b.from !== "pool") return -1;
+      if (b.from === "pool" && a.from !== "pool") return 1;
+      return a.name.localeCompare(b.name, "ru");
+    });
+    return candidates;
   }
 
   function bindZoneClickTargetsOnce() {
@@ -336,14 +358,19 @@
     const section = $("zonePlacementSection");
     if (!section) return;
     section.addEventListener("click", (e) => {
-      if (!canEdit() || !selectedPerson) return;
+      if (!canEdit()) return;
       if (e.target.closest(".person-chip")) return;
       const zoneEl = e.target.closest("[data-zone]");
       if (!zoneEl || !section.contains(zoneEl)) return;
       const toZone = zoneEl.dataset.zone;
-      if (!toZone || !ZONE_KEYS.includes(toZone) || toZone === selectedPerson.from) return;
-      movePerson(selectedPerson.name, selectedPerson.from, toZone);
-      clearSelection();
+      if (!toZone || !ZONE_KEYS.includes(toZone)) return;
+      if (selectedPerson) {
+        if (toZone === selectedPerson.from) return;
+        movePerson(selectedPerson.name, selectedPerson.from, toZone);
+        clearSelection();
+        return;
+      }
+      openPersonPicker(toZone);
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -568,7 +595,7 @@
     sheetOverlay.innerHTML =
       '<div class="zone-sheet" id="zoneSheet">' +
       '<div class="zone-sheet-handle"></div>' +
-      '<div class="zone-sheet-title">Переместить <span class="zone-sheet-person" id="zoneSheetPerson"></span></div>' +
+      '<div class="zone-sheet-title" id="zoneSheetTitle">Переместить <span class="zone-sheet-person" id="zoneSheetPerson"></span></div>' +
       '<div class="zone-sheet-options" id="zoneSheetOptions"></div>' +
       '<button type="button" class="zone-sheet-cancel" id="zoneSheetCancel">Отмена</button>' +
       "</div>";
@@ -597,11 +624,71 @@
     }
   }
 
+  function openPersonPicker(toZone) {
+    if (!canEdit()) return;
+    createSheet();
+    sheetPerson = null;
+    sheetSourceZone = null;
+    const titleEl = $("zoneSheetTitle");
+    if (titleEl) {
+      titleEl.innerHTML =
+        'Добавить в <span class="zone-sheet-person">' +
+        getZoneLabel(toZone).replace(/</g, "&lt;") +
+        "</span>";
+    }
+    const optionsEl = $("zoneSheetOptions");
+    if (!optionsEl) return;
+    optionsEl.innerHTML = "";
+    const candidates = getCandidatesForZone(toZone);
+    if (!candidates.length) {
+      const empty = document.createElement("p");
+      empty.className = "zone-sheet-empty";
+      empty.textContent = "Нет сотрудников для назначения";
+      optionsEl.appendChild(empty);
+    } else {
+      for (const c of candidates) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "zone-sheet-person-btn";
+        const avatar = document.createElement("div");
+        avatar.className = "person-avatar";
+        avatar.style.background = getAvatarColor(c.name);
+        avatar.textContent = getInitials(c.name);
+        const info = document.createElement("div");
+        info.className = "zsb-info";
+        const label = document.createElement("span");
+        label.className = "zsb-label";
+        label.textContent = c.name;
+        info.appendChild(label);
+        if (c.sub) {
+          const sub = document.createElement("span");
+          sub.className = "zsb-count";
+          sub.textContent = c.sub;
+          info.appendChild(sub);
+        }
+        btn.appendChild(avatar);
+        btn.appendChild(info);
+        btn.addEventListener("click", () => {
+          movePerson(c.name, c.from, toZone);
+          closeSheet();
+        });
+        optionsEl.appendChild(btn);
+      }
+    }
+    sheetOverlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
   function openSheet(personName, fromZone) {
     if (!canEdit()) return;
     createSheet();
     sheetPerson = personName;
     sheetSourceZone = fromZone;
+    const titleEl = $("zoneSheetTitle");
+    if (titleEl) {
+      titleEl.innerHTML =
+        'Переместить <span class="zone-sheet-person" id="zoneSheetPerson"></span>';
+    }
     const personEl = $("zoneSheetPerson");
     if (personEl) personEl.textContent = personName;
     const optionsEl = $("zoneSheetOptions");
@@ -676,7 +763,7 @@
       hint.textContent = canEdit()
         ? "Состав: «" +
           title +
-          "» (смены в месяце, сегодня не ОТ). Сегодня ВХ → «Выходной». Перетащите или клик: сотрудник → зона."
+          "» (смены в месяце, сегодня не ОТ). Сегодня ВХ → «Выходной». Перетащите или клик по зоне / фамилии — всплывающий список."
         : "Состав: «" + title + "» — смены в месяце, сегодня без ОТ. Сегодня ВХ в «Выходной».";
     }
     const roster = api.getRosterNames();
