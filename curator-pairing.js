@@ -476,11 +476,8 @@
         : "";
       card.innerHTML =
         '<div class="zone-header">' +
-        '<span class="zone-title">Куратор</span>' +
-        '<span class="curator-name" title="' +
-        c.name.replace(/"/g, "&quot;") +
-        '">' +
-        c.name +
+        '<span class="curator-name">' +
+        c.name.replace(/</g, "&lt;").replace(/>/g, "&gt;") +
         "</span>" +
         '<span class="zone-badge" id="cpBadge-' +
         i +
