@@ -322,7 +322,13 @@
     }
 
     cleanupPointerDrag();
-    openSheet(st.name, st.from);
+  }
+
+  function onChipClick(e) {
+    if (dragSession) return;
+    e.stopPropagation();
+    const chip = e.currentTarget;
+    if (chip.dataset.person) openSheet(chip.dataset.person, chip.dataset.zone);
   }
 
   function getZoneLabel(key) {
@@ -358,7 +364,6 @@
     const section = $("zonePlacementSection");
     if (!section) return;
     section.addEventListener("click", (e) => {
-      if (!canEdit()) return;
       if (e.target.closest(".person-chip")) return;
       const zoneEl = e.target.closest("[data-zone]");
       if (!zoneEl || !section.contains(zoneEl)) return;
@@ -381,19 +386,12 @@
   }
 
   function attachChipInteractions(chip) {
+    chip.addEventListener("click", onChipClick);
     if (!canEdit()) return;
     chip.addEventListener("pointerdown", onChipPointerDown);
     chip.addEventListener("pointermove", onChipPointerMove);
     chip.addEventListener("pointerup", onChipPointerUp);
     chip.addEventListener("pointercancel", onChipPointerUp);
-    chip.addEventListener("dblclick", (e) => {
-      if (useTapAssign() || !canEdit()) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const name = chip.dataset.person;
-      const zone = chip.dataset.zone;
-      if (name) openSheet(name, zone);
-    });
   }
 
   function createChip(name, zone) {
@@ -407,11 +405,8 @@
     avatar.textContent = getInitials(name);
     chip.appendChild(avatar);
     chip.appendChild(document.createTextNode(name));
-    if (canEdit()) {
-      attachChipInteractions(chip);
-    } else {
-      chip.classList.add("person-chip--readonly");
-    }
+    attachChipInteractions(chip);
+    if (!canEdit()) chip.classList.add("person-chip--readonly");
     return chip;
   }
 
@@ -624,8 +619,12 @@
     }
   }
 
+  function sheetReadOnlyHtml() {
+    if (canEdit()) return "";
+    return '<p class="zone-sheet-readonly-note">Только просмотр. Войдите и включите режим редактирования, чтобы менять расстановку.</p>';
+  }
+
   function openPersonPicker(toZone) {
-    if (!canEdit()) return;
     createSheet();
     sheetPerson = null;
     sheetSourceZone = null;
@@ -634,7 +633,8 @@
       titleEl.innerHTML =
         'Добавить в <span class="zone-sheet-person">' +
         getZoneLabel(toZone).replace(/</g, "&lt;") +
-        "</span>";
+        "</span>" +
+        sheetReadOnlyHtml();
     }
     const optionsEl = $("zoneSheetOptions");
     if (!optionsEl) return;
@@ -680,14 +680,14 @@
   }
 
   function openSheet(personName, fromZone) {
-    if (!canEdit()) return;
     createSheet();
     sheetPerson = personName;
     sheetSourceZone = fromZone;
     const titleEl = $("zoneSheetTitle");
     if (titleEl) {
       titleEl.innerHTML =
-        'Переместить <span class="zone-sheet-person" id="zoneSheetPerson"></span>';
+        'Переместить <span class="zone-sheet-person" id="zoneSheetPerson"></span>' +
+        sheetReadOnlyHtml();
     }
     const personEl = $("zoneSheetPerson");
     if (personEl) personEl.textContent = personName;
@@ -778,6 +778,9 @@
     applyPlacementState(placement);
     const empty = roster.length === 0;
     sectionEl.classList.toggle("zone-placement--empty", empty);
+    if (typeof window.WorkWatchCuratorPairing !== "undefined") {
+      window.WorkWatchCuratorPairing.refresh();
+    }
   }
 
   function init(workWatchApi) {

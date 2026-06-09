@@ -15,6 +15,10 @@
   const DROP_HIGHLIGHT_SEL =
     ".cp-pool-zone, .cp-curator-new, .cp-zone-drop, .cp-curator-card";
 
+  const ZONE_PLACEMENT_KEYS = [
+    "pool", "spg1", "spg2", "spg21", "spg3", "spg31", "spg4", "dayoff",
+  ];
+
   let api = null;
   /** @type {{ curators: { name: string, trainees: string[] }[] }} */
   let layout = { curators: [] };
@@ -84,9 +88,54 @@
 
   function normalizeCuratorBucket(bucket) {
     if (!bucket || typeof bucket !== "object") return emptyBucket();
+    if (bucket.morning || bucket.evening) {
+      return emptyBucket();
+    }
     const curators = normalizeCuratorList(bucket.curators);
     bucket.curators = curators;
     return bucket;
+  }
+
+  function getRosterFromZoneState() {
+    if (!api?.state?.zonePlacementByMonth) return [];
+    const mk = api.getMonthKey();
+    const sid = getSectionKey();
+    if (!sid) return [];
+    const sec = api.state.zonePlacementByMonth[mk]?.[sid];
+    if (!sec || typeof sec !== "object") return [];
+    const shift = sec.shift === "evening" ? "evening" : "morning";
+    const pl = sec[shift];
+    if (!pl || typeof pl !== "object") return [];
+    const names = new Set();
+    for (const z of ZONE_PLACEMENT_KEYS) {
+      for (const n of pl[z] || []) {
+        if (n) names.add(n);
+      }
+    }
+    return [...names];
+  }
+
+  function getRosterFromZoneDom() {
+    const sec = document.getElementById("zonePlacementSection");
+    if (!sec) return [];
+    const names = new Set();
+    sec.querySelectorAll(".person-chip[data-person]").forEach((chip) => {
+      const n = chip.dataset.person;
+      if (n) names.add(n);
+    });
+    return [...names];
+  }
+
+  function getEffectiveRoster() {
+    const names = new Set();
+    if (api?.getRosterNames) {
+      for (const n of api.getRosterNames() || []) {
+        if (n) names.add(n);
+      }
+    }
+    for (const n of getRosterFromZoneState()) names.add(n);
+    for (const n of getRosterFromZoneDom()) names.add(n);
+    return [...names];
   }
 
   function getMonthBucket(createIfMissing) {
@@ -322,7 +371,14 @@
       return;
     }
     cleanupPointerDrag();
-    openAssignSheet(st.name, st.from);
+  }
+
+  function onChipClick(e) {
+    if (dragSession) return;
+    const chip = e.currentTarget;
+    if (chip.dataset.role === "curator") return;
+    e.stopPropagation();
+    openAssignSheet(chip.dataset.person, chip.dataset.zone);
   }
 
   function createChip(name, zone, role) {
@@ -337,13 +393,16 @@
     avatar.textContent = getInitials(name);
     chip.appendChild(avatar);
     chip.appendChild(document.createTextNode(name));
-    if (canEdit() && role !== "curator") {
-      chip.addEventListener("pointerdown", onChipPointerDown);
-      chip.addEventListener("pointermove", onChipPointerMove);
-      chip.addEventListener("pointerup", onChipPointerUp);
-      chip.addEventListener("pointercancel", onChipPointerUp);
-    } else {
-      chip.classList.add("person-chip--readonly");
+    if (role !== "curator") {
+      chip.addEventListener("click", onChipClick);
+      if (canEdit()) {
+        chip.addEventListener("pointerdown", onChipPointerDown);
+        chip.addEventListener("pointermove", onChipPointerMove);
+        chip.addEventListener("pointerup", onChipPointerUp);
+        chip.addEventListener("pointercancel", onChipPointerUp);
+      } else {
+        chip.classList.add("person-chip--readonly");
+      }
     }
     return chip;
   }
@@ -360,7 +419,7 @@
   }
 
   function getCandidatesForZone(toZone) {
-    const roster = api.getRosterNames();
+    const roster = getEffectiveRoster();
     const merged = mergeWithRoster({ curators: layout.curators }, roster);
     if (toZone === "pool") {
       const list = [];
@@ -381,7 +440,6 @@
     const section = $("curatorPairingSection");
     if (!section) return;
     section.addEventListener("click", (e) => {
-      if (!canEdit()) return;
       if (e.target.closest(".person-chip")) return;
       if (e.target.closest(".cp-remove-curator")) return;
       const zoneEl = e.target.closest("[data-zone]");
@@ -470,7 +528,7 @@
   }
 
   function renderLayout() {
-    const roster = api.getRosterNames();
+    const roster = getEffectiveRoster();
     const merged = mergeWithRoster({ curators: layout.curators }, roster);
     layout.curators = merged.curators;
     renderPool(merged.pool);
@@ -581,15 +639,20 @@
     $("curatorSheetCancel")?.addEventListener("click", closeAssignSheet);
   }
 
+  function sheetReadOnlyHtml() {
+    if (canEdit()) return "";
+    return '<p class="zone-sheet-readonly-note">Только просмотр. Войдите и включите режим редактирования, чтобы менять пары.</p>';
+  }
+
   function openPersonPicker(toZone) {
-    if (!canEdit()) return;
     createSheet();
     const titleEl = $("curatorSheetTitle");
     if (titleEl) {
       titleEl.innerHTML =
         'Выберите сотрудника — <span class="zone-sheet-person">' +
         getCuratorZoneLabel(toZone).replace(/</g, "&lt;") +
-        "</span>";
+        "</span>" +
+        sheetReadOnlyHtml();
     }
     const optionsEl = $("curatorSheetOptions");
     if (!optionsEl) return;
@@ -636,12 +699,12 @@
   }
 
   function openAssignSheet(personName, fromZone) {
-    if (!canEdit()) return;
     createSheet();
     const titleEl = $("curatorSheetTitle");
     if (titleEl) {
       titleEl.innerHTML =
-        'Назначить <span class="zone-sheet-person" id="curatorSheetPerson"></span>';
+        'Назначить <span class="zone-sheet-person" id="curatorSheetPerson"></span>' +
+        sheetReadOnlyHtml();
     }
     $("curatorSheetPerson").textContent = personName;
     const optionsEl = $("curatorSheetOptions");
@@ -715,7 +778,7 @@
     }
     const bucket = getMonthBucket(true);
     if (!bucket) return;
-    const roster = api.getRosterNames();
+    const roster = getEffectiveRoster();
     const merged = mergeWithRoster(bucket, roster);
     layout = {
       curators: merged.curators.map((c) => ({
@@ -733,8 +796,8 @@
       api.scheduleRemotePersist();
     }
     renderLayout();
-    const empty = roster.length === 0 && merged.pool.length === 0 && merged.curators.length === 0;
-    sectionEl.classList.toggle("curator-pairing--empty", empty);
+    const effectiveCount = roster.length || merged.pool.length + merged.curators.length;
+    sectionEl.classList.toggle("curator-pairing--empty", effectiveCount === 0);
   }
 
   function init(workWatchApi) {

@@ -2516,7 +2516,7 @@ body.zp-drag-active .person-chip:not(.dragging) {
 }
 
 .person-chip--readonly {
-  cursor: default;
+  cursor: pointer;
 }
 
 .person-chip--readonly:hover {
@@ -2656,7 +2656,6 @@ body.zp-drag-active .person-chip:not(.dragging) {
 
 .zone-placement--empty .zone-placement-inner {
   opacity: 0.55;
-  pointer-events: none;
 }
 
 .zone-placement--inactive .zone-placement-inner {
@@ -2845,7 +2844,10 @@ body.zp-drag-active .person-chip:not(.dragging) {
   pointer-events: none;
 }
 
-.curator-pairing--empty .curator-pairing-inner,
+.curator-pairing--empty .curator-pairing-inner {
+  opacity: 0.55;
+}
+
 .curator-pairing--inactive .curator-pairing-inner {
   opacity: 0.55;
   pointer-events: none;
@@ -2870,7 +2872,7 @@ body.zp-drag-active .person-chip:not(.dragging) {
 .zone-sheet-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 10060;
   background: rgba(15, 23, 42, 0.4);
   backdrop-filter: blur(2px);
   opacity: 0;
@@ -2888,7 +2890,7 @@ body.zp-drag-active .person-chip:not(.dragging) {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 10001;
+  z-index: 10061;
   background: var(--surface);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.15);
@@ -3067,6 +3069,17 @@ body.zp-drag-active .person-chip:not(.dragging) {
   text-align: center;
   font-size: 0.88rem;
   color: var(--muted);
+}
+
+.zone-sheet-readonly-note {
+  margin: 0 16px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #9a3412;
+  background: color-mix(in srgb, #ffedd5 75%, var(--surface));
+  border: 1px solid color-mix(in srgb, #fdba74 55%, var(--border));
 }
 
 .zone-placement:not(.zone-placement--readonly) .zp-pool-zone,
