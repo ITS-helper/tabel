@@ -8,7 +8,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AppState, Vibration, type AppStateStatus } from "react-native";
+import {
+  AppState,
+  InteractionManager,
+  Vibration,
+  type AppStateStatus,
+} from "react-native";
 import { playFinderFoundSound } from "../audio/finderFoundSound";
 import { BleService } from "../ble/BleService";
 import { matchFinderTarget } from "../ble/finderMatch";
@@ -131,24 +136,39 @@ export function FinderProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    void (async () => {
-      const saved = await loadFinderSession();
-      if (!saved?.active || !saved.targets.length) return;
-      setInput(saved.input);
-      setTab(saved.tab);
-      setTargets(saved.targets);
-      lastAlertRef.current = new Map();
-      try {
-        await BleService.startFinderSession({
-          targets: saved.targets.map((t) => t.ble),
-          watchMode: saved.tab === "watch",
-        });
-        setScanning(true);
-        setStatus("Фоновый поиск (восстановлен)…");
-      } catch (e) {
-        setStatus(e instanceof Error ? e.message : "BLE ошибка");
-      }
-    })();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      timer = setTimeout(() => {
+        void (async () => {
+          if (cancelled || AppState.currentState !== "active") return;
+          const saved = await loadFinderSession();
+          if (!saved?.active || !saved.targets.length) return;
+          setInput(saved.input);
+          setTab(saved.tab);
+          setTargets(saved.targets);
+          lastAlertRef.current = new Map();
+          try {
+            await BleService.startFinderSession({
+              targets: saved.targets.map((t) => t.ble),
+              watchMode: saved.tab === "watch",
+            });
+            if (cancelled) return;
+            setScanning(true);
+            setStatus("Фоновый поиск (восстановлен)…");
+          } catch (e) {
+            if (!cancelled) {
+              setStatus(e instanceof Error ? e.message : "BLE ошибка");
+            }
+          }
+        })();
+      }, 2500);
+    });
+    return () => {
+      cancelled = true;
+      task.cancel();
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const ensureScanAlive = useCallback(async () => {

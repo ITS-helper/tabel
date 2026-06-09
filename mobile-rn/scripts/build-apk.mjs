@@ -29,18 +29,21 @@ run("node", ["scripts/sync-ble-cache-asset.mjs"]);
 console.log("[mobile-rn] prebuild android…");
 run("npx", ["expo", "prebuild", "--platform", "android", "--clean"]);
 
+const gradleProps = path.join(androidDir, "gradle.properties");
+if (fs.existsSync(gradleProps)) {
+  let gp = fs.readFileSync(gradleProps, "utf8");
+  if (/newArchEnabled=true/.test(gp)) {
+    gp = gp.replace(/newArchEnabled=true/g, "newArchEnabled=false");
+    fs.writeFileSync(gradleProps, gp);
+    console.log("[mobile-rn] newArchEnabled=false (как в app.json)");
+  }
+}
+
 const sdkProps = path.join(androidDir, "local.properties");
 const parentSdk = path.join(root, "..", "android", "local.properties");
 if (!fs.existsSync(sdkProps) && fs.existsSync(parentSdk)) {
   fs.copyFileSync(parentSdk, sdkProps);
   console.log("[mobile-rn] copied local.properties from Capacitor android/");
-}
-
-const gradleProps = path.join(androidDir, "gradle.properties");
-if (fs.existsSync(gradleProps)) {
-  let gp = fs.readFileSync(gradleProps, "utf8");
-  gp = gp.replace(/newArchEnabled=false/g, "newArchEnabled=true");
-  fs.writeFileSync(gradleProps, gp);
 }
 
 const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
