@@ -1,29 +1,24 @@
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 
-let ready = false;
+const FINDER_SOUND = require("../../assets/sounds/finder-found.mp3");
+
+let audioModeReady = false;
+let activePlayer: ReturnType<typeof createAudioPlayer> | null = null;
 
 async function ensureAudioMode(): Promise<void> {
-  if (ready) return;
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    shouldDuckAndroid: true,
-  });
-  ready = true;
+  if (audioModeReady) return;
+  await setAudioModeAsync({ playsInSilentMode: true });
+  audioModeReady = true;
 }
 
-/** Звук «метка найдена» — technologia-meme-2.mp3 */
+/** Звук «метка найдена». */
 export async function playFinderFoundSound(): Promise<void> {
   try {
     await ensureAudioMode();
-    const { sound } = await Audio.Sound.createAsync(
-      require("../../assets/sounds/finder-found.mp3"),
-      { shouldPlay: true, volume: 1 },
-    );
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        void sound.unloadAsync();
-      }
-    });
+    activePlayer?.release();
+    const player = createAudioPlayer(FINDER_SOUND);
+    activePlayer = player;
+    player.play();
   } catch (e) {
     console.warn("[finderFoundSound]", e);
   }
