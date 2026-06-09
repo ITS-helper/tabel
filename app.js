@@ -2316,6 +2316,51 @@ let state = {
   curatorPairingByMonth: loadCuratorPairingFromLocal(),
 };
 
+/** Сброс пустых overrides после обновления bundled-графика (сломанный sync затирал ячейки). */
+const PARSED_BUNDLE_VERSION = 2;
+const STORAGE_PARSED_BUNDLE_VERSION = "ww-parsed-bundle-ver";
+
+function reconcileStaleEmptyScheduleOverrides() {
+  let stored = 0;
+  try {
+    stored = Number(localStorage.getItem(STORAGE_PARSED_BUNDLE_VERSION) || 0);
+  } catch (_) {}
+  if (stored >= PARSED_BUNDLE_VERSION) return false;
+
+  let changed = false;
+  for (const mk of Object.keys(state.scheduleByMonth || {})) {
+    const rawEmps = (DATABASE[mk] || ARCHIVE_DATABASE[mk])?.employees;
+    if (!rawEmps) continue;
+    const bucket = state.scheduleByMonth[mk];
+    for (const ri of Object.keys(bucket)) {
+      const row = bucket[ri];
+      const baseEmp = rawEmps[Number(ri)];
+      if (!baseEmp || !row || typeof row !== "object") continue;
+      for (const d of Object.keys(row)) {
+        const ov = row[d];
+        const base = baseEmp.schedule?.[d] ?? "";
+        if (ov === "" && base) {
+          delete row[d];
+          changed = true;
+        }
+      }
+      if (!Object.keys(row).length) {
+        delete bucket[ri];
+        changed = true;
+      }
+    }
+  }
+
+  try {
+    localStorage.setItem(STORAGE_PARSED_BUNDLE_VERSION, String(PARSED_BUNDLE_VERSION));
+  } catch (_) {}
+  if (changed) {
+    persistScheduleByMonthLocal();
+    scheduleRemotePersistDebounced();
+  }
+  return changed;
+}
+
 function scheduleOverridesBucketFor(monthKey) {
   if (!state.scheduleByMonth[monthKey]) state.scheduleByMonth[monthKey] = {};
   return state.scheduleByMonth[monthKey];
@@ -2486,13 +2531,13 @@ function applyGoogleSheetParsed(parsed) {
       }
 
       const bucket = scheduleOverridesBucketFor(monthKey);
-      const data = getDatasetForMonthKey(monthKey);
-      const baseEmp = data?.employees?.[rowIndex];
+      const rawBase =
+        (DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey])?.employees?.[rowIndex] ?? null;
       if (bucket[rowIndex]) delete bucket[rowIndex];
       const nextRow = {};
       for (let d = 1; d <= empSheet.dim; d++) {
         const code = empSheet.schedule[d] ?? "";
-        const baseCode = baseEmp?.schedule?.[d] ?? "";
+        const baseCode = rawBase?.schedule?.[d] ?? "";
         if (code !== baseCode) {
           nextRow[d] = code;
           updatedCells++;
@@ -2737,6 +2782,7 @@ function scheduleRemotePersistDebounced() {
 async function initRemoteSync() {
   try {
     await pullTabelRemoteState();
+    reconcileStaleEmptyScheduleOverrides();
     render();
   } catch (e) {
     console.warn("Supabase pull:", e?.message || e);
@@ -3166,6 +3212,7 @@ function init() {
   bindAppPageNav();
   initZonePlacementModule();
   initCuratorPairingModule();
+  reconcileStaleEmptyScheduleOverrides();
   render();
   void initRemoteSync();
 }
