@@ -3888,9 +3888,11 @@ function render() {
   if (typeof window.WorkWatchZonePlacement !== "undefined") {
     window.WorkWatchZonePlacement.refresh();
   }
-  if (typeof window.WorkWatchCuratorPairing !== "undefined") {
-    window.WorkWatchCuratorPairing.refresh();
-  }
+  requestAnimationFrame(() => {
+    if (typeof window.WorkWatchCuratorPairing !== "undefined") {
+      window.WorkWatchCuratorPairing.refresh();
+    }
+  });
 }
 
 function allArchiveExportMonthKeys() {

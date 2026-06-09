@@ -140,6 +140,7 @@
 
   function getMonthBucket(createIfMissing) {
     const mk = api.getMonthKey();
+    if (!api.state.curatorPairingByMonth) api.state.curatorPairingByMonth = {};
     if (!api.state.curatorPairingByMonth[mk]) {
       if (createIfMissing === false) return null;
       api.state.curatorPairingByMonth[mk] = {};
@@ -338,7 +339,6 @@
     try {
       chip.setPointerCapture(e.pointerId);
     } catch (_) {}
-    e.preventDefault();
   }
 
   function onChipPointerMove(e) {
@@ -371,6 +371,7 @@
       return;
     }
     cleanupPointerDrag();
+    openAssignSheet(st.name, st.from);
   }
 
   function onChipClick(e) {
@@ -394,13 +395,13 @@
     chip.appendChild(avatar);
     chip.appendChild(document.createTextNode(name));
     if (role !== "curator") {
-      chip.addEventListener("click", onChipClick);
       if (canEdit()) {
         chip.addEventListener("pointerdown", onChipPointerDown);
         chip.addEventListener("pointermove", onChipPointerMove);
         chip.addEventListener("pointerup", onChipPointerUp);
         chip.addEventListener("pointercancel", onChipPointerUp);
       } else {
+        chip.addEventListener("click", onChipClick);
         chip.classList.add("person-chip--readonly");
       }
     }
@@ -468,6 +469,11 @@
     layout.curators.forEach((c, i) => {
       const card = document.createElement("div");
       card.className = "cp-curator-card curator-card";
+      const removeBtn = canEdit()
+        ? '<button type="button" class="cp-remove-curator" data-index="' +
+          i +
+          '" aria-label="Снять куратора">×</button>'
+        : "";
       card.innerHTML =
         '<div class="zone-header">' +
         '<span class="zone-title">Куратор</span>' +
@@ -481,17 +487,12 @@
         '">' +
         c.trainees.length +
         "</span>" +
-        (canEdit()
-          ? '<button type="button" class="cp-remove-curator" data-index="' +
-            i +
-            '" aria-label="Снять куратора">×</button>'
-          : "") +
-        "</div>" +
-        '<div class="cp-zone-drop" id="cp-zone-' +
+        removeBtn +
+        '</div><div class="cp-zone-drop" id="cp-zone-' +
         i +
         '" data-zone="curator-' +
         i +
-        '"></div>";
+        '"></div>';
       grid.appendChild(card);
       const drop = $("cp-zone-" + i);
       if (!drop) return;
@@ -531,7 +532,11 @@
     const roster = getEffectiveRoster();
     const merged = mergeWithRoster({ curators: layout.curators }, roster);
     layout.curators = merged.curators;
-    renderPool(merged.pool);
+    const pool =
+      merged.pool.length || merged.curators.length || !roster.length
+        ? merged.pool
+        : roster;
+    renderPool(pool);
     renderCuratorCards();
     updateChrome();
   }
@@ -552,7 +557,7 @@
       }
     }
     const newZone = $("cpCuratorNew");
-    if (newZone) newZone.hidden = !canEdit();
+    if (newZone) newZone.hidden = false;
   }
 
   function resetPairing() {

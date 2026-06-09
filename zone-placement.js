@@ -281,8 +281,6 @@
     try {
       chip.setPointerCapture(e.pointerId);
     } catch (_) {}
-
-    e.preventDefault();
   }
 
   function onChipPointerMove(e) {
@@ -322,6 +320,7 @@
     }
 
     cleanupPointerDrag();
+    openSheet(st.name, st.from);
   }
 
   function onChipClick(e) {
@@ -386,12 +385,14 @@
   }
 
   function attachChipInteractions(chip) {
-    chip.addEventListener("click", onChipClick);
-    if (!canEdit()) return;
-    chip.addEventListener("pointerdown", onChipPointerDown);
-    chip.addEventListener("pointermove", onChipPointerMove);
-    chip.addEventListener("pointerup", onChipPointerUp);
-    chip.addEventListener("pointercancel", onChipPointerUp);
+    if (canEdit()) {
+      chip.addEventListener("pointerdown", onChipPointerDown);
+      chip.addEventListener("pointermove", onChipPointerMove);
+      chip.addEventListener("pointerup", onChipPointerUp);
+      chip.addEventListener("pointercancel", onChipPointerUp);
+    } else {
+      chip.addEventListener("click", onChipClick);
+    }
   }
 
   function createChip(name, zone) {
