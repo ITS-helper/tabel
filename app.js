@@ -37,6 +37,8 @@ const LEGEND = [
   { code: "АПК", label: "Продовольственная программа (РМ АГРО)", bg: "#cffafe", fg: "#155e75" },
   { code: "ГАЛС", label: 'ООО "Галс-Девелопмент"', bg: "#f9a8d4", fg: "#831843" },
   { code: "ЗЛ", label: 'ТК "ЗЕЛЕНАЯ ЛИНИЯ"', bg: "#bbf7d0", fg: "#166534" },
+  { code: "ЛЕГ", label: "Легенда — Buildup (Сколково)", bg: "#fbcfe8", fg: "#9d174d" },
+  { code: "СПГ-", label: "ВСМ (Усть-Луга) СПГ (сокр.)", bg: "#7dd3fc", fg: "#0c4a6e" },
   { code: "ИНК", label: "Иркутская нефтяная компания", bg: "#a5b4fc", fg: "#312e81" },
 ];
 
@@ -44,6 +46,7 @@ const LEGEND = [
 const ON_SHIFT_CODES = new Set([
   "СПГ",
   "СПГ.",
+  "СПГ-",
   "ИНК",
   "УР",
   "ГАЛС",
@@ -2458,6 +2461,7 @@ function applyGoogleSheetParsed(parsed) {
       const bucket = scheduleOverridesBucketFor(monthKey);
       const data = getDatasetForMonthKey(monthKey);
       const baseEmp = data?.employees?.[rowIndex];
+      if (bucket[rowIndex]) delete bucket[rowIndex];
       const nextRow = {};
       for (let d = 1; d <= empSheet.dim; d++) {
         const code = empSheet.schedule[d] ?? "";
@@ -2468,7 +2472,6 @@ function applyGoogleSheetParsed(parsed) {
         }
       }
       if (Object.keys(nextRow).length) bucket[rowIndex] = nextRow;
-      else if (bucket[rowIndex]) delete bucket[rowIndex];
     }
   }
 

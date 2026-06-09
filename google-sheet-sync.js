@@ -95,10 +95,12 @@
     if (s === "—") return "";
     if (s === "-" || s === "−" || s === "–") return "-";
     const t = s.replace(/−/g, "-");
+    if (/^СПГ\s*[-–—]\s*$/i.test(t)) return "СПГ-";
     if (/^СПГ\.\s*$/i.test(t)) return "СПГ.";
     if (/^ТСБ\.\s*$/i.test(t)) return "ТСБ.";
     if (/^СПГ\s*$/i.test(t)) return "СПГ";
     if (/^ТСБ\s*$/i.test(t)) return "ТСБ";
+    if (/^ЛЕГ\s*$/i.test(t)) return "ЛЕГ";
     if (/^OT$/i.test(t)) return "ОТ";
     if (/^BX$/i.test(t)) return "ВХ";
     const map = new Map([
@@ -114,23 +116,88 @@
       ["М", "М"],
       ["АПК", "АПК"],
       ["ЗЛ", "ЗЛ"],
+      ["ЛЕГ", "ЛЕГ"],
+      ["СПГ-", "СПГ-"],
     ]);
     if (map.has(t)) return map.get(t);
     return t;
   }
 
-  function monthIndexFromHint(text) {
+  function monthIndexFromMonthLabel(text) {
     const low = String(text || "").trim().toLowerCase();
     if (!low) return null;
     for (const [hint, idx] of MONTH_HINTS) {
       if (low.includes(hint)) return idx;
     }
-    const m = low.match(/\b(1[0-2]|[1-9])\b/);
-    if (m) {
-      const n = Number(m[1], 10);
-      if (n >= 1 && n <= 12) return n - 1;
-    }
     return null;
+  }
+
+  function isDayNumberHeaderRow(row) {
+    if (!row) return false;
+    let hits = 0;
+    for (let c = COL_DAY_START; c < row.length && c < COL_DAY_START + 8; c++) {
+      const n = Number(String(row[c] || "").trim(), 10);
+      if (Number.isFinite(n) && n === c - COL_DAY_START + 1) hits++;
+    }
+    return hits >= 4;
+  }
+
+  function countMonthLabels(row) {
+    if (!row) return 0;
+    let n = 0;
+    for (let c = COL_DAY_START; c < row.length; c++) {
+      if (monthIndexFromMonthLabel(row[c]) != null) n++;
+    }
+    return n;
+  }
+
+  function findMaxDataCol(rows) {
+    let max = COL_DAY_START;
+    for (const row of rows) {
+      if (row && row.length - 1 > max) max = row.length - 1;
+    }
+    while (max > COL_DAY_START) {
+      let any = false;
+      for (const row of rows) {
+        if (String(row[max] || "").trim()) {
+          any = true;
+          break;
+        }
+      }
+      if (any) break;
+      max--;
+    }
+    return max;
+  }
+
+  function resolveSheetLayout(rows) {
+    let monthRowIdx = 0;
+    let bestLabels = 0;
+    for (let r = 0; r < Math.min(6, rows.length); r++) {
+      const n = countMonthLabels(rows[r]);
+      if (n > bestLabels) {
+        bestLabels = n;
+        monthRowIdx = r;
+      }
+    }
+    let dataStartRow = 1;
+    for (let r = 0; r < Math.min(12, rows.length); r++) {
+      if (String(rows[r][COL_FIO] || "").trim() === "ФИО") {
+        dataStartRow = r + 1;
+        break;
+      }
+    }
+    if (bestLabels < 2) {
+      for (let r = 0; r < Math.min(6, rows.length); r++) {
+        if (isDayNumberHeaderRow(rows[r])) {
+          dataStartRow = Math.max(dataStartRow, r + 1);
+          break;
+        }
+      }
+      return { monthRowIdx: -1, dataStartRow, useSequential: true };
+    }
+    dataStartRow = Math.max(dataStartRow, monthRowIdx + 1);
+    return { monthRowIdx, dataStartRow, useSequential: false };
   }
 
   function sequentialMonthSpans(year, maxCol) {
@@ -144,13 +211,15 @@
     return spans;
   }
 
-  function detectMonthSpans(headerRow, year) {
-    const spans = [];
-    let maxCol = headerRow.length - 1;
-    while (maxCol >= COL_DAY_START && !String(headerRow[maxCol] || "").trim()) maxCol--;
+  function detectMonthSpans(headerRow, year, allRows, useSequential) {
+    const maxCol = findMaxDataCol(allRows);
+    if (useSequential || !headerRow) {
+      return sequentialMonthSpans(year, maxCol);
+    }
 
+    const spans = [];
     for (let c = COL_DAY_START; c <= maxCol; c++) {
-      const mIdx = monthIndexFromHint(headerRow[c]);
+      const mIdx = monthIndexFromMonthLabel(headerRow[c]);
       if (mIdx == null) continue;
       const last = spans[spans.length - 1];
       if (last && last.monthIndex === mIdx) continue;
@@ -216,10 +285,11 @@
     if (rows.length < 2) {
       throw new Error("Таблица слишком короткая — проверьте лист и выгрузку.");
     }
-    const headerRow = rows[0];
-    const spans = detectMonthSpans(headerRow, year);
+    const layout = resolveSheetLayout(rows);
+    const headerRow = layout.useSequential ? null : rows[layout.monthRowIdx];
+    const spans = detectMonthSpans(headerRow, year, rows, layout.useSequential);
     if (!spans.length) {
-      throw new Error("Не удалось определить месяцы в первой строке (колонки с F).");
+      throw new Error("Не удалось определить месяцы (колонки с F).");
     }
 
     const byMonth = new Map();
@@ -227,7 +297,7 @@
       byMonth.set(span.monthKey, []);
     }
 
-    for (let r = 1; r < rows.length; r++) {
+    for (let r = layout.dataStartRow; r < rows.length; r++) {
       const cols = rows[r];
       if (!isEmployeeRow(cols)) continue;
       const name = String(cols[COL_FIO] || "").trim();
@@ -254,6 +324,7 @@
     return {
       year,
       spans,
+      layout,
       months: [...byMonth.entries()].map(([monthKey, employees]) => ({
         monthKey,
         employees,
