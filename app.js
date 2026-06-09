@@ -2320,6 +2320,41 @@ let state = {
 const PARSED_BUNDLE_VERSION = 2;
 const STORAGE_PARSED_BUNDLE_VERSION = "ww-parsed-bundle-ver";
 
+function normalizeEmployeeName(name) {
+  if (typeof WorkWatchGoogleSync !== "undefined") {
+    return WorkWatchGoogleSync.normalizeName(name);
+  }
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/** Убрать из addedEmployeesByMonth тех, кто уже есть в bundled-графике (дубли после regen). */
+function reconcileDuplicateAddedEmployees() {
+  const added = state.addedEmployeesByMonth;
+  if (!added || typeof added !== "object") return false;
+
+  let changed = false;
+  for (const mk of Object.keys(added)) {
+    const rawEmps = (DATABASE[mk] || ARCHIVE_DATABASE[mk])?.employees;
+    if (!Array.isArray(rawEmps) || !rawEmps.length) continue;
+    const baseNames = new Set(rawEmps.map((e) => normalizeEmployeeName(e.name)));
+    const list = added[mk];
+    if (!Array.isArray(list) || !list.length) continue;
+    const next = list.filter((a) => !baseNames.has(normalizeEmployeeName(a.name)));
+    if (next.length === list.length) continue;
+    if (next.length) added[mk] = next;
+    else delete added[mk];
+    changed = true;
+  }
+
+  if (changed) {
+    persistRosterExtrasLocal();
+    scheduleRemotePersistDebounced();
+  }
+  return changed;
+}
+
 function reconcileStaleEmptyScheduleOverrides() {
   let stored = 0;
   try {
@@ -2453,10 +2488,10 @@ function applyPayloadSnapshot(snapshot) {
 }
 
 function findEmployeeRowIndexByName(monthKey, name) {
-  const data = getDatasetForMonthKey(monthKey);
-  if (!data?.employees) return -1;
-  const target = WorkWatchGoogleSync.normalizeName(name);
-  return data.employees.findIndex((e) => WorkWatchGoogleSync.normalizeName(e.name) === target);
+  const raw = (DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey])?.employees;
+  if (!raw) return -1;
+  const target = normalizeEmployeeName(name);
+  return raw.findIndex((e) => normalizeEmployeeName(e.name) === target);
 }
 
 async function fetchGoogleSheetCsvText() {
@@ -2782,6 +2817,7 @@ function scheduleRemotePersistDebounced() {
 async function initRemoteSync() {
   try {
     await pullTabelRemoteState();
+    reconcileDuplicateAddedEmployees();
     reconcileStaleEmptyScheduleOverrides();
     render();
   } catch (e) {
@@ -2930,7 +2966,10 @@ function getDatasetForMonthKey(monthKey) {
     }
     return e;
   });
-  const rawAdded = state.addedEmployeesByMonth[monthKey] || [];
+  const baseNames = new Set(employeesBase.map((e) => normalizeEmployeeName(e.name)));
+  const rawAdded = (state.addedEmployeesByMonth[monthKey] || []).filter(
+    (a) => !baseNames.has(normalizeEmployeeName(a.name))
+  );
   const addedMapped = rawAdded.map((a) => ({
     tn: a.tn != null ? String(a.tn).trim() : "",
     name: a.name,
@@ -3212,6 +3251,7 @@ function init() {
   bindAppPageNav();
   initZonePlacementModule();
   initCuratorPairingModule();
+  reconcileDuplicateAddedEmployees();
   reconcileStaleEmptyScheduleOverrides();
   render();
   void initRemoteSync();
