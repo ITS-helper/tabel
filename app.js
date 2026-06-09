@@ -83,6 +83,9 @@ const DEFAULT_PILOT_NAMES = new Set([
   "Насыров Максим Тимурович",
 ]);
 
+/** Не учитываются в блоке «Сводка» (смены, ВХ, болезни, отпуска) */
+const SUMMARY_EXCLUDED_NAMES = new Set(["Бурангулов Руслан Азаматович"]);
+
 const STORAGE_SECTION_ASSIGN = "ww-section-overrides";
 const STORAGE_SECTION_TITLES = "ww-section-titles";
 /** Сессия входа (sessionStorage): токен и роль после workwatch_login в Supabase */
@@ -3105,7 +3108,9 @@ function renderObjectSummary() {
     return;
   }
 
-  const pool = employeesForSection(dataToday.employees, state.sectionId);
+  const pool = employeesForSection(dataToday.employees, state.sectionId).filter(
+    (emp) => !SUMMARY_EXCLUDED_NAMES.has(normalizeEmployeeName(emp.name))
+  );
   if (!pool.length) {
     mount.innerHTML = `<p class="object-summary__empty">Нет сотрудников на вкладке «${sectionTitle}».</p>`;
     return;
