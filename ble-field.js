@@ -88,12 +88,28 @@
     return store.dailyPatrol;
   }
 
+  function ensureDailyRouteResets(store) {
+    if (!store.dailyRouteResets || typeof store.dailyRouteResets !== "object") {
+      store.dailyRouteResets = {};
+    }
+    return store.dailyRouteResets;
+  }
+
   function pruneOldDaily(dailyPatrol) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - DAILY_KEEP_DAYS);
     const cutoffKey = localDateKey(cutoff);
     for (const k of Object.keys(dailyPatrol)) {
       if (k < cutoffKey) delete dailyPatrol[k];
+    }
+  }
+
+  function pruneOldRouteResets(dailyRouteResets) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - DAILY_KEEP_DAYS);
+    const cutoffKey = localDateKey(cutoff);
+    for (const k of Object.keys(dailyRouteResets)) {
+      if (k < cutoffKey) delete dailyRouteResets[k];
     }
   }
 
@@ -126,6 +142,7 @@
         const before = JSON.stringify(raw.dailyPatrol?.[today] || {});
         backfillDailyFromCheckins(raw);
         pruneOldDaily(ensureDailyPatrol(raw));
+        pruneOldRouteResets(ensureDailyRouteResets(raw));
         const after = JSON.stringify(raw.dailyPatrol?.[today] || {});
         if (before !== after) persistStore(raw);
         return raw;
@@ -138,6 +155,31 @@
 
   function persistStore(data) {
     localStorage.setItem(CHECKINS_KEY, JSON.stringify(data));
+  }
+
+  function isRouteResetToday(routeId) {
+    const rid = String(routeId ?? "");
+    if (!rid) return false;
+    const store = loadStore();
+    const resets = ensureDailyRouteResets(store);
+    return !!resets[localDateKey()]?.[rid];
+  }
+
+  function resetRouteToday(routeId) {
+    const rid = String(routeId ?? "");
+    if (!rid) return false;
+    const store = loadStore();
+    const day = localDateKey();
+    const resets = ensureDailyRouteResets(store);
+    const daily = ensureDailyPatrol(store);
+    if (!resets[day]) resets[day] = {};
+    resets[day][rid] = true;
+    if (!daily[day]) daily[day] = {};
+    delete daily[day][rid];
+    pruneOldDaily(daily);
+    pruneOldRouteResets(resets);
+    persistStore(store);
+    return true;
   }
 
   function pendingCheckins() {
@@ -172,18 +214,21 @@
   }
 
   function isTagDoneToday(tag) {
-    if (tag?.status && tag.status !== "inspection") return true;
     const rid = String(tag?.routeId ?? getRoute().routeId ?? "");
     if (!rid) return false;
+    if (!isRouteResetToday(rid) && tag?.status && tag.status !== "inspection") return true;
     return getDailyDoneSet(rid).has(normalizeBle(tag.ble));
   }
 
   function doneBleSetForRoute(scope, routeId) {
     const rid = String(routeId ?? "");
     const done = new Set();
-    for (const pt of scope) {
-      if (pt?.status && pt.status !== "inspection") {
-        done.add(normalizeBle(pt.ble));
+    const routeReset = isRouteResetToday(rid);
+    if (!routeReset) {
+      for (const pt of scope) {
+        if (pt?.status && pt.status !== "inspection") {
+          done.add(normalizeBle(pt.ble));
+        }
       }
     }
     for (const ble of getDailyDoneSet(rid)) {
@@ -197,6 +242,7 @@
     if (!rid) return null;
     const scope = getScopeMarkers();
     const api = deps?.getRouteProgress?.(rid);
+    const routeReset = isRouteResetToday(rid);
     const total =
       api?.total != null && api.total > 0
         ? Number(api.total)
@@ -206,7 +252,7 @@
     if (!total) return null;
     const doneSet = doneBleSetForRoute(scope, rid);
     let done = doneSet.size;
-    if (api?.done != null) {
+    if (!routeReset && api?.done != null) {
       const apiDone = Number(api.done);
       if (Number.isFinite(apiDone)) done = Math.max(done, apiDone);
     }
@@ -452,6 +498,21 @@
     <div class="ble-field-progress__bar" role="progressbar" aria-valuenow="${prog.done}" aria-valuemin="0" aria-valuemax="${prog.total}">
       <span class="ble-field-progress__fill" style="width:${pct}%"></span>
     </div>${pendingLine}`;
+  }
+
+  function renderResetRouteAction() {
+    const btn = $("bleFieldResetRouteBtn");
+    if (!btn) return;
+    const route = getRoute();
+    const visible = !!route.routeId;
+    btn.hidden = !visible;
+    if (!visible) return;
+    const active = isRouteResetToday(route.routeId);
+    btn.textContent = active ? "Маршрут обнулён" : "Обнулить маршрут";
+    btn.classList.toggle("is-active", active);
+    btn.title = active
+      ? "Локально считаем только новые обходы этого маршрута за сегодня"
+      : "Снова показать все метки маршрута как требующие обхода только на этом устройстве";
   }
 
   function nearbyActionsHtml(tag) {
@@ -924,6 +985,7 @@
     renderTagPatrolBlock();
     syncPatrolSearchInput();
     renderPanelHeader();
+    renderResetRouteAction();
     renderProgress();
     renderNearbyList();
     renderPendingBlock();
@@ -1755,6 +1817,26 @@
     $("bleFieldCloseBtn")?.addEventListener("click", () => {
       void closePanel();
     });
+    $("bleFieldResetRouteBtn")?.addEventListener("click", () => {
+      const route = getRoute();
+      if (!route?.routeId) {
+        setStatus("Сначала выберите маршрут", "error");
+        return;
+      }
+      const again = isRouteResetToday(route.routeId);
+      const ok = confirm(
+        `${again ? "Снова обнулить" : "Обнулить"} маршрут «${route.routeTitle}»?\n\n` +
+          "На этом устройстве все метки маршрута снова будут показаны как требующие обхода.\n" +
+          "На сервер ничего не отправляется."
+      );
+      if (!ok) return;
+      resetRouteToday(route.routeId);
+      focusBle = null;
+      tagPatrolMode = false;
+      clearPatrolSearch();
+      renderAll();
+      setStatus(`Маршрут «${route.routeTitle}» локально обнулён. Считаем только новые обходы за сегодня.`, "warn");
+    });
     $("bleFieldPhotoCloseBtn")?.addEventListener("click", closePhotoModal);
     $("bleFieldPhotoModal")?.addEventListener("click", (e) => {
       if (e.target?.id === "bleFieldPhotoModal") closePhotoModal();
@@ -1815,5 +1897,12 @@
     getPatrolStats(routeId, totalMarkers) {
       return patrolStatsForRoute(routeId, totalMarkers);
     },
+    isRouteReset(routeId) {
+      return isRouteResetToday(routeId);
+    },
+    getDailyDoneBles(routeId) {
+      return [...getDailyDoneSet(routeId)];
+    },
+    isTagDoneToday,
   };
 })();

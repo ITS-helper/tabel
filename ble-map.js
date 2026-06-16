@@ -1238,10 +1238,20 @@
 
   function mergeBleMapDataFromRaw(rawBle) {
     const prevById = new Map(bleMapData.map((p) => [p.id, p]));
-    return rawBle.map((point) => {
+    const next = rawBle.map((point) => {
       const prev = point.id != null ? prevById.get(point.id) : null;
       return classifyBle(point, prev);
     });
+    return applyLocalPatrolOverridesToPoints(next);
+  }
+
+  function applyLocalPatrolStateToMap() {
+    if (!bleMapData.length) return;
+    bleMapData = applyLocalPatrolOverridesToPoints(bleMapData);
+    rebuildBleIndex();
+    renderBleMarkers();
+    updateMapStats();
+    window.syncFsStats?.();
   }
 
   function invalidateMarkerRegistry() {
@@ -4767,6 +4777,48 @@
     };
   }
 
+  function localPatrolDoneSet(routeId) {
+    const list = window.WwBleField?.getDailyDoneBles?.(String(routeId ?? ""));
+    return new Set((Array.isArray(list) ? list : []).map((v) => String(v || "").replace(/\D/g, "")));
+  }
+
+  function applyLocalPatrolOverridesToPoints(points) {
+    if (!isBleNativeApp() || !window.WwBleField) return points;
+    const routeResetCache = new Map();
+    const doneCache = new Map();
+    const today = new Date().toISOString().slice(0, 10);
+    return points.map((pt) => {
+      const rid = pt.routeId != null ? String(pt.routeId) : "";
+      if (!rid) return pt;
+      let routeReset = routeResetCache.get(rid);
+      if (routeReset == null) {
+        routeReset = !!window.WwBleField?.isRouteReset?.(rid);
+        routeResetCache.set(rid, routeReset);
+      }
+      if (!routeReset) return pt;
+      let doneSet = doneCache.get(rid);
+      if (!doneSet) {
+        doneSet = localPatrolDoneSet(rid);
+        doneCache.set(rid, doneSet);
+      }
+      const bleKey = String(pt.ble || "").replace(/\D/g, "");
+      if (doneSet.has(bleKey)) {
+        return {
+          ...pt,
+          isInspected: true,
+          recordDt: today,
+          status: pt.isLowBattery ? "battery" : "ok",
+        };
+      }
+      return {
+        ...pt,
+        isInspected: false,
+        recordDt: "Требует обхода",
+        status: "inspection",
+      };
+    });
+  }
+
   function summarizeRoutePhotoStats(raw) {
     const stats = {
       urlCount: 0,
@@ -6123,7 +6175,9 @@ if(cards.length)selectIdx(0);
     const rid = String(routeId ?? bleMapRouteFilter ?? "");
     if (!rid) return null;
     const route = bleRoutes.find((r) => String(r.id) === rid);
-    const markers = bleMapData.filter((pt) => pointPassesRouteFilter(pt));
+    const markers = bleMapData.filter(
+      (pt) => pt.routeId != null && String(pt.routeId) === rid
+    );
     const toCount = (v) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
@@ -7265,8 +7319,11 @@ if(cards.length)selectIdx(0);
 
   function routeOptionLabel(route) {
     const title = route.title || `Маршрут ${route.id}`;
-    const insp = route.inspectedToday ?? 0;
-    const total = route.total ?? 0;
+    const local = isBleNativeApp()
+      ? window.WwBleField?.getPatrolStats?.(String(route.id), Number(route.total ?? 0))
+      : null;
+    const insp = local?.done ?? route.inspectedToday ?? 0;
+    const total = local?.total ?? route.total ?? 0;
     return `${title} ${insp}/${total}`;
   }
 
@@ -7773,9 +7830,12 @@ if(cards.length)selectIdx(0);
       },
       getRouteProgress: getRouteInspectionStats,
       onPatrolChanged: () => {
+        applyLocalPatrolStateToMap();
+        populateRouteSelect();
         void refreshFieldPackChrome();
       },
     });
+    applyLocalPatrolStateToMap();
   }
 
   function initNativeAppChrome() {

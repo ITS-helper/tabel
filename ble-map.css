@@ -1982,6 +1982,34 @@ body.ble-map--layer-satellite .leaflet-overlay-pane svg path.leaflet-interactive
   filter: brightness(0.96);
 }
 
+.ble-field-route-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: -2px 0 4px;
+}
+
+.ble-field-route-reset-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(191, 87, 0, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 244, 229, 0.96);
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ble-field-route-reset-btn:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.ble-field-route-reset-btn.is-active {
+  border-color: rgba(21, 128, 61, 0.28);
+  background: rgba(220, 252, 231, 0.96);
+  color: #166534;
+}
+
 .map-filter-label--short {
   display: none;
 }
