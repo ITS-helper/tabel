@@ -3230,6 +3230,7 @@ function bindAppPageNav() {
   })();
   if (saved === "blemap") showAppPage("blemap");
   if (saved === "damage") showAppPage("damage");
+  document.getElementById("appOpenTabelBtn")?.addEventListener("click", () => showAppPage("tabel"));
   document.getElementById("appOpenBleMapBtn")?.addEventListener("click", () => showAppPage("blemap"));
   document.getElementById("appOpenDamageReportsBtn")?.addEventListener("click", () => showAppPage("damage"));
   window.addEventListener("message", (e) => {
