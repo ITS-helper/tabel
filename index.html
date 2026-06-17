@@ -46,6 +46,16 @@
         <div class="header__actions">
           <button
             type="button"
+            class="btn btn--ghost app-damage-entry-btn"
+            id="appOpenDamageReportsBtn"
+            title="Повреждения"
+            aria-label="Повреждения"
+          >
+            <span class="icon-damage-report" aria-hidden="true"></span>
+            <span class="header__btn-text header__btn-text--long">Повреждения</span>
+          </button>
+          <button
+            type="button"
             class="btn btn--ghost app-blemap-entry-btn"
             id="appOpenBleMapBtn"
             title="Карта BLE-меток"
@@ -407,6 +417,24 @@
       ></iframe>
     </div>
 
+
+    <div id="page-damage" class="app-page app-page--damage" hidden>
+      <main class="main">
+        <section class="damage-reports surface-card surface-card--pad" aria-label="Отчеты по повреждениям">
+          <div class="damage-reports__hero">
+            <div class="damage-reports__hero-copy">
+              <p class="damage-reports__eyebrow">Device / Telegram</p>
+              <h2 class="damage-reports__title" id="damageReportsTitle">Повреждения</h2>
+              <p class="damage-reports__updated" id="damageReportsUpdated"></p>
+            </div>
+            <div class="damage-reports__date-tabs" id="damageReportsDateTabs"></div>
+          </div>
+          <p class="damage-reports__status" id="damageReportsStatus"></p>
+          <div id="damageReportsMount"></div>
+        </section>
+      </main>
+    </div>
+
     <dialog id="teamDialog" class="team-dialog">
       <div class="team-dialog__panel">
         <header class="team-dialog__head">
@@ -560,6 +588,7 @@
   <script src="zone-placement.js"></script>
   <script src="curator-pairing.js"></script>
   <script src="google-sheet-sync.js"></script>
+  <script src="damage-reports.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

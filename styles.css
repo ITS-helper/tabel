@@ -475,6 +475,17 @@ body {
     center / contain no-repeat;
 }
 
+
+.icon-damage-report::before {
+  content: "";
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5V4.5A1.5 1.5 0 0 1 5.5 3h10.879A1.5 1.5 0 0 1 17.44 3.44l2.12 2.12A1.5 1.5 0 0 1 20 6.621V19.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5Z'/%3E%3Cpath d='M8 8h5'/%3E%3Cpath d='M8 12h8'/%3E%3Cpath d='M8 16h8'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19.5V4.5A1.5 1.5 0 0 1 5.5 3h10.879A1.5 1.5 0 0 1 17.44 3.44l2.12 2.12A1.5 1.5 0 0 1 20 6.621V19.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5Z'/%3E%3Cpath d='M8 8h5'/%3E%3Cpath d='M8 12h8'/%3E%3Cpath d='M8 16h8'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .app-blemap-entry-btn .header__btn-text--long {
   font-family: Oswald, sans-serif;
   font-size: 0.78em;
@@ -3160,6 +3171,210 @@ body.zp-drag-active .person-chip:not(.dragging) {
   margin-top: 0;
 }
 
+.app-page--damage {
+  margin-top: 0;
+}
+
+.damage-reports {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--accent-soft) 50%, transparent), transparent 38%),
+    radial-gradient(90% 100% at 0% 100%, color-mix(in srgb, #14b8a6 12%, transparent), transparent 42%),
+    var(--surface);
+}
+
+.damage-reports__hero {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.damage-reports__hero-copy {
+  min-width: 0;
+}
+
+.damage-reports__eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.damage-reports__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 2vw, 1.9rem);
+  line-height: 1.08;
+  color: var(--portal-primary);
+}
+
+.damage-reports__updated,
+.damage-reports__status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.damage-reports__date-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.damage-reports__date-tab {
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  background: color-mix(in srgb, var(--surface) 82%, var(--bg));
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.damage-reports__date-tab.is-active,
+.damage-reports__date-tab:hover {
+  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--surface) 78%, #ffffff));
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.damage-reports__summary {
+  padding: 0;
+  margin-bottom: 14px;
+}
+
+.damage-reports__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.damage-reports__stat {
+  min-width: 0;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 88%, #ffffff), color-mix(in srgb, var(--bg) 55%, var(--surface)));
+}
+
+.damage-reports__stat--software {
+  border-left: 4px solid #2563eb;
+}
+
+.damage-reports__stat--hardware {
+  border-left: 4px solid #0f766e;
+}
+
+.damage-reports__stat--total {
+  border-left: 4px solid #7c3aed;
+}
+
+.damage-reports__stat-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.damage-reports__stat-value {
+  display: block;
+  font-size: 2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.damage-reports__columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.damage-reports__panel {
+  min-width: 0;
+  padding: 14px 16px 16px;
+}
+
+.damage-reports__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.damage-reports__panel-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.damage-reports__panel-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--portal-primary);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.damage-reports__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.damage-reports__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 85%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.damage-reports__link {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.damage-reports__link:hover {
+  color: var(--portal-primary);
+  text-decoration: underline;
+}
+
+.damage-reports__time {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.damage-reports__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
 /* Вкладка «Карта BLE»: на весь экран под переключателем График/Карта */
 body.app--blemap-tab {
   height: 100%;
@@ -3382,6 +3597,20 @@ html.app--blemap-tab {
     height: 100dvh;
     height: 100svh;
     padding: 0;
+  }
+
+  .damage-reports__hero {
+    display: grid;
+    gap: 12px;
+  }
+
+  .damage-reports__date-tabs {
+    justify-content: flex-start;
+  }
+
+  .damage-reports__summary-grid,
+  .damage-reports__columns {
+    grid-template-columns: 1fr;
   }
 
 }

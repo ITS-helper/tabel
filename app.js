@@ -3189,7 +3189,7 @@ function ensureBleMapIframeCurrent() {
 }
 
 function showAppPage(pageId) {
-  const valid = pageId === "blemap" ? "blemap" : "tabel";
+  const valid = pageId === "blemap" || pageId === "damage" ? pageId : "tabel";
   document.querySelectorAll(".app-page").forEach((el) => {
     const on = el.id === `page-${valid}`;
     el.classList.toggle("is-active", on);
@@ -3209,6 +3209,9 @@ function showAppPage(pageId) {
       }
     }
   }
+  if (valid === "damage" && typeof window.WorkWatchDamageReports !== "undefined") {
+    void window.WorkWatchDamageReports.init();
+  }
   try {
     sessionStorage.setItem(APP_PAGE_STORAGE_KEY, valid);
   } catch {
@@ -3226,10 +3229,12 @@ function bindAppPageNav() {
     }
   })();
   if (saved === "blemap") showAppPage("blemap");
+  if (saved === "damage") showAppPage("damage");
   document.getElementById("appOpenBleMapBtn")?.addEventListener("click", () => showAppPage("blemap"));
+  document.getElementById("appOpenDamageReportsBtn")?.addEventListener("click", () => showAppPage("damage"));
   window.addEventListener("message", (e) => {
     if (e.data?.type === "ww-app-nav") {
-      showAppPage(e.data.page === "blemap" ? "blemap" : "tabel");
+      showAppPage(e.data.page === "blemap" || e.data.page === "damage" ? e.data.page : "tabel");
       return;
     }
     if (e.data?.type === "ww-ble-map-fullscreen") {

@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sqlite3
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+@dataclass
+class Incident:
+    source: str
+    external_id: str
+    created_at: str
+    uid: str
+    issue_type: str
+    source_url: str
+
+    @property
+    def day_key(self) -> str:
+        dt = _parse_datetime(self.created_at)
+        return dt.date().isoformat()
+
+    @property
+    def time_label(self) -> str:
+        return _parse_datetime(self.created_at).strftime("%H:%M")
+
+    @property
+    def uid_short(self) -> str:
+        return (self.uid or "")[:4]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "external_id": self.external_id,
+            "created_at": self.created_at,
+            "time": self.time_label,
+            "uid": self.uid,
+            "uid_short": self.uid_short,
+            "issue_type": self.issue_type,
+            "source_url": _normalize_source_url(self.source, self.source_url, self.external_id),
+        }
+
+
+def _parse_datetime(raw: str) -> datetime:
+    value = (raw or "").strip()
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+
+
+def _load_incidents(db_path: Path) -> list[Incident]:
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """
+            select source, external_id, created_at, uid, issue_type, coalesce(source_url, '')
+            from incidents
+            where uid is not null and trim(uid) <> ''
+            order by created_at asc, source asc, external_id asc
+            """
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        Incident(
+            source=row[0],
+            external_id=row[1],
+            created_at=row[2],
+            uid=row[3],
+            issue_type=row[4],
+            source_url=row[5],
+        )
+        for row in rows
+    ]
+
+
+def _build_day_payload(day: str, day_incidents: list[Incident]) -> dict[str, Any]:
+    telegram = [item for item in day_incidents if item.source == "telegram"]
+    site = [item for item in day_incidents if item.source == "site"]
+    unique_uids = {item.uid for item in day_incidents if item.uid}
+
+    return {
+        "date": day,
+        "title": f"Повреждения от {datetime.strptime(day, '%Y-%m-%d').strftime('%d.%m.%Y')}",
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "counts": {
+            "telegram": len(telegram),
+            "site": len(site),
+            "total_devices": len(unique_uids),
+        },
+        "telegram": [item.to_payload() for item in telegram],
+        "site": [item.to_payload() for item in site],
+    }
+
+
+def _normalize_source_url(source: str, source_url: str, external_id: str = "") -> str:
+    value = (source_url or "").strip()
+    if source == "telegram":
+        if value:
+            return value
+        if ":" in external_id:
+            chat_id, message_id = external_id.split(":", 1)
+            chat_tail = chat_id.removeprefix("-100")
+            if chat_tail and message_id:
+                return f"https://t.me/c/{chat_tail}/{message_id}"
+        return value
+    match = re.search(r"id=(\d+)", value)
+    if match:
+        return f"https://device.workwatch.pro/views/service_requests/view.php?id={match.group(1)}"
+    return value
+
+
+def export_reports(db_path: Path, output_dir: Path) -> None:
+    incidents = _load_incidents(db_path)
+    by_day: dict[str, list[Incident]] = defaultdict(list)
+    for item in incidents:
+        by_day[item.day_key].append(item)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    available_dates = sorted(by_day.keys(), reverse=True)
+    summaries: list[dict[str, Any]] = []
+
+    for day in available_dates:
+        payload = _build_day_payload(day, by_day[day])
+        target = output_dir / f"{day}.json"
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        summaries.append(
+            {
+                "date": day,
+                "title": payload["title"],
+                "counts": payload["counts"],
+            }
+        )
+
+    index_payload = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "latest_date": available_dates[0] if available_dates else None,
+        "dates": summaries,
+    }
+    (output_dir / "index.json").write_text(
+        json.dumps(index_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--db",
+        default=str(Path("data") / "tgdevice.sqlite3"),
+        help="Path to tgdevice SQLite database",
+    )
+    parser.add_argument(
+        "--out",
+        default=str(Path("data") / "damage-reports"),
+        help="Output directory for static report JSON files",
+    )
+    args = parser.parse_args()
+    export_reports(Path(args.db), Path(args.out))
+
+
+if __name__ == "__main__":
+    main()

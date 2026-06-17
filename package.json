@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "ingest-xlsx": "node scripts/ingest-xlsx.mjs",
+    "damage:export": "py -3 scripts/export-damage-reports.py",
     "ble-cache": "node scripts/push-ble-cache.mjs",
     "ble-field-pack": "node scripts/build-ble-field-pack.mjs",
     "ble-genplan": "node scripts/build-ble-genplan.mjs",
