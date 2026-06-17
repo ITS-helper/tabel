@@ -3220,28 +3220,34 @@ body.zp-drag-active .person-chip:not(.dragging) {
   font-size: 0.92rem;
 }
 
-.damage-reports__date-tabs {
+.damage-reports__controls {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  align-items: end;
+  gap: 10px;
 }
 
-.damage-reports__date-tab {
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-  background: color-mix(in srgb, var(--surface) 82%, var(--bg));
-  color: var(--text);
-  border-radius: 999px;
-  padding: 8px 14px;
-  font: inherit;
+.damage-reports__picker {
+  display: grid;
+  gap: 6px;
+  min-width: min(360px, 100%);
+}
+
+.damage-reports__picker-label {
+  font-size: 0.76rem;
   font-weight: 700;
-  cursor: pointer;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
-.damage-reports__date-tab.is-active,
-.damage-reports__date-tab:hover {
-  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--surface) 78%, #ffffff));
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+.damage-reports__select {
+  min-width: min(360px, 100%);
+}
+
+.damage-reports__copy-btn {
+  white-space: nowrap;
 }
 
 .damage-reports__summary {
@@ -3604,8 +3610,15 @@ html.app--blemap-tab {
     gap: 12px;
   }
 
-  .damage-reports__date-tabs {
-    justify-content: flex-start;
+  .damage-reports__controls {
+    justify-content: stretch;
+  }
+
+  .damage-reports__picker,
+  .damage-reports__select,
+  .damage-reports__copy-btn {
+    width: 100%;
+    min-width: 0;
   }
 
   .damage-reports__summary-grid,

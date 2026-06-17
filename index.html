@@ -420,14 +420,22 @@
 
     <div id="page-damage" class="app-page app-page--damage" hidden>
       <main class="main">
-        <section class="damage-reports surface-card surface-card--pad" aria-label="Отчеты по повреждениям">
+        <section class="damage-reports surface-card surface-card--pad" aria-label="?????? ?? ????????????">
           <div class="damage-reports__hero">
             <div class="damage-reports__hero-copy">
               <p class="damage-reports__eyebrow">Device / Telegram</p>
-              <h2 class="damage-reports__title" id="damageReportsTitle">Повреждения</h2>
+              <h2 class="damage-reports__title" id="damageReportsTitle">???????????</h2>
               <p class="damage-reports__updated" id="damageReportsUpdated"></p>
             </div>
-            <div class="damage-reports__date-tabs" id="damageReportsDateTabs"></div>
+            <div class="damage-reports__controls">
+              <label class="damage-reports__picker">
+                <span class="damage-reports__picker-label">???? ??????</span>
+                <select class="select damage-reports__select" id="damageReportsDateSelect"></select>
+              </label>
+              <button type="button" class="btn btn--outline damage-reports__copy-btn" id="damageReportsCopyBtn">
+                ?????????? ?????
+              </button>
+            </div>
           </div>
           <p class="damage-reports__status" id="damageReportsStatus"></p>
           <div id="damageReportsMount"></div>
