@@ -2332,6 +2332,38 @@ function normalizeEmployeeName(name) {
     .replace(/\s+/g, " ");
 }
 
+function sanitizeAddedEmployeeEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const name = normalizeEmployeeName(entry.name);
+  if (!name) return null;
+  return {
+    tn: entry.tn != null ? String(entry.tn).trim() : "",
+    name,
+    position: entry.position != null ? String(entry.position).trim() : "",
+    daysOnShift: Number(entry.daysOnShift) || 0,
+    schedule: entry.schedule && typeof entry.schedule === "object" ? { ...entry.schedule } : {},
+  };
+}
+
+function dedupeAddedEmployeesList(monthKey, list) {
+  if (!Array.isArray(list) || !list.length) return [];
+  const rawEmps = (DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey])?.employees;
+  const baseNames = new Set((rawEmps || []).map((e) => normalizeEmployeeName(e.name)));
+  const order = [];
+  const byName = new Map();
+
+  for (const item of list) {
+    const next = sanitizeAddedEmployeeEntry(item);
+    if (!next) continue;
+    const key = normalizeEmployeeName(next.name);
+    if (!key || baseNames.has(key)) continue;
+    if (!byName.has(key)) order.push(key);
+    byName.set(key, next);
+  }
+
+  return order.map((key) => byName.get(key));
+}
+
 /** Убрать из addedEmployeesByMonth тех, кто уже есть в bundled-графике (дубли после regen). */
 function reconcileDuplicateAddedEmployees() {
   const added = state.addedEmployeesByMonth;
@@ -2339,13 +2371,12 @@ function reconcileDuplicateAddedEmployees() {
 
   let changed = false;
   for (const mk of Object.keys(added)) {
-    const rawEmps = (DATABASE[mk] || ARCHIVE_DATABASE[mk])?.employees;
-    if (!Array.isArray(rawEmps) || !rawEmps.length) continue;
-    const baseNames = new Set(rawEmps.map((e) => normalizeEmployeeName(e.name)));
     const list = added[mk];
     if (!Array.isArray(list) || !list.length) continue;
-    const next = list.filter((a) => !baseNames.has(normalizeEmployeeName(a.name)));
-    if (next.length === list.length) continue;
+    const next = dedupeAddedEmployeesList(mk, list);
+    if (JSON.stringify(next) === JSON.stringify(list)) {
+      continue;
+    }
     if (next.length) added[mk] = next;
     else delete added[mk];
     changed = true;
@@ -2541,18 +2572,25 @@ function applyGoogleSheetParsed(parsed) {
 
       if (rowIndex < 0) {
         if (!state.addedEmployeesByMonth[monthKey]) state.addedEmployeesByMonth[monthKey] = [];
+        const addedList = state.addedEmployeesByMonth[monthKey];
         const pos =
           typeof POSITION_BY_NAME !== "undefined" && POSITION_BY_NAME[name]
             ? POSITION_BY_NAME[name]
             : "";
-        state.addedEmployeesByMonth[monthKey].push({
+        const nextEntry = {
           tn: empSheet.tn,
           name,
           position: pos,
           daysOnShift: empSheet.daysOnShift,
           schedule: { ...empSheet.schedule },
-        });
-        addedRows++;
+        };
+        const addedIndex = addedList.findIndex((item) => normalizeEmployeeName(item.name) === name);
+        if (addedIndex >= 0) {
+          addedList[addedIndex] = nextEntry;
+        } else {
+          addedList.push(nextEntry);
+          addedRows++;
+        }
         continue;
       }
 
@@ -2586,6 +2624,7 @@ function applyGoogleSheetParsed(parsed) {
   }
 
   persistSectionAssignOverrides();
+  reconcileDuplicateAddedEmployees();
   persistScheduleByMonthLocal();
   persistRosterExtrasLocal();
   return { updatedCells, updatedSections, addedRows, skippedMonths };
@@ -2970,7 +3009,7 @@ function getDatasetForMonthKey(monthKey) {
     return e;
   });
   const baseNames = new Set(employeesBase.map((e) => normalizeEmployeeName(e.name)));
-  const rawAdded = (state.addedEmployeesByMonth[monthKey] || []).filter(
+  const rawAdded = dedupeAddedEmployeesList(monthKey, state.addedEmployeesByMonth[monthKey] || []).filter(
     (a) => !baseNames.has(normalizeEmployeeName(a.name))
   );
   const addedMapped = rawAdded.map((a) => ({
