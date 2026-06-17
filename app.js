@@ -2349,6 +2349,8 @@ function dedupeAddedEmployeesList(monthKey, list) {
   if (!Array.isArray(list) || !list.length) return [];
   const rawEmps = (DATABASE[monthKey] || ARCHIVE_DATABASE[monthKey])?.employees;
   const baseNames = new Set((rawEmps || []).map((e) => normalizeEmployeeName(e.name)));
+  const { year, monthIndex } = parseMonthKey(monthKey);
+  const dim = daysInMonth(year, monthIndex);
   const order = [];
   const byName = new Map();
 
@@ -2357,6 +2359,7 @@ function dedupeAddedEmployeesList(monthKey, list) {
     if (!next) continue;
     const key = normalizeEmployeeName(next.name);
     if (!key || baseNames.has(key)) continue;
+    if (employeeHasNoShiftsInMonth(next, dim)) continue;
     if (!byName.has(key)) order.push(key);
     byName.set(key, next);
   }
@@ -2585,7 +2588,12 @@ function applyGoogleSheetParsed(parsed) {
           schedule: { ...empSheet.schedule },
         };
         const addedIndex = addedList.findIndex((item) => normalizeEmployeeName(item.name) === name);
-        if (addedIndex >= 0) {
+        const hasShifts = !employeeHasNoShiftsInMonth(nextEntry, empSheet.dim);
+        if (!hasShifts) {
+          if (addedIndex >= 0) {
+            addedList.splice(addedIndex, 1);
+          }
+        } else if (addedIndex >= 0) {
           addedList[addedIndex] = nextEntry;
         } else {
           addedList.push(nextEntry);
@@ -3424,9 +3432,8 @@ function employeeHasLegendCodeInMonth(emp, code, dim) {
   return false;
 }
 
-/** Вручную добавленные показываем в табеле даже без смен; остальных — только при наличии смен */
+/** В табеле показываем только тех, у кого в месяце есть хотя бы одна смена. */
 function employeeRowShownInSchedule(emp, dim) {
-  if (emp.__fromManualAdd) return true;
   return !employeeHasNoShiftsInMonth(emp, dim);
 }
 
