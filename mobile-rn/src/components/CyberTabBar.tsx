@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
+import { PassScanButton } from "./PassScanButton";
 import { TabMapIcon, TabPatrolIcon, TabSearchIcon } from "./TabIcons";
 import { ThemeToggleButton } from "./ThemeToggleButton";
 import { NetworkTabIndicator } from "./NetworkStatusBar";
@@ -109,6 +110,7 @@ export function CyberTabBar({ state, navigation }: CyberTabBarProps) {
           );
         })}
         <NetworkTabIndicator />
+        <PassScanButton />
         <ThemeToggleButton />
       </View>
     </View>
@@ -135,6 +137,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 8,
     paddingHorizontal: 12,
+    gap: 6,
   },
   tab: {
     flex: 1,

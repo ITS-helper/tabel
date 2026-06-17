@@ -51,6 +51,7 @@ export default function MapScreen() {
     routeProgress,
     dailyDone,
     todayPatrol,
+    routeResetMap,
     refreshPending,
     setFocusBle,
     photoMeta,
@@ -480,6 +481,7 @@ export default function MapScreen() {
         routes={routes}
         markers={markers}
         todayPatrol={todayPatrol}
+        routeResetMap={routeResetMap}
         selectedId={route.routeId}
         onSelect={setRoute}
         onClose={() => setRouteOpen(false)}

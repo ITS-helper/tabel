@@ -508,5 +508,13 @@ export function buildInspectionBody(
     bleType: inspectionBleTypeFromTag(tag),
     firmwareVersion: fw,
     rssi: checkin.rssi ?? null,
+    passUid: checkin.passUid,
+    pass_uid: checkin.passUid,
+    passCardUid: checkin.passUid,
+    pass_card_uid: checkin.passUid,
+    passUidReversed: checkin.passUidReversed,
+    pass_uid_reversed: checkin.passUidReversed,
+    passScannedAt: checkin.passScannedAt,
+    pass_scanned_at: checkin.passScannedAt,
   };
 }

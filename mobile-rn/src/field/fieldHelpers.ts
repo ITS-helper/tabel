@@ -207,14 +207,50 @@ export function isPatrolDone(tag: BleTagMarker, dailyDone: Set<string>): boolean
   return dailyDone.has(normalizeBle(tag.ble)) || !!tag.isInspected;
 }
 
+export function isRouteReset(
+  routeResetMap: Record<string, boolean> | undefined,
+  routeId: string,
+): boolean {
+  const rid = routeId || "all";
+  return !!routeResetMap?.[rid];
+}
+
+export function applyRouteResetOverrides(
+  markers: BleTagMarker[],
+  todayPatrol: Record<string, string[]>,
+  routeResetMap: Record<string, boolean>,
+): BleTagMarker[] {
+  return markers.map((tag) => {
+    const rid = String(tag.routeId ?? "") || "all";
+    if (!isRouteReset(routeResetMap, rid)) return tag;
+    const ble = normalizeBle(tag.ble);
+    const done = (todayPatrol[rid] ?? []).some((b) => normalizeBle(b) === ble);
+    if (done) {
+      return {
+        ...tag,
+        isInspected: true,
+        status: tag.isLowBattery ? "battery" : "ok",
+        recordDt: tag.recordDt || "сегодня",
+      };
+    }
+    return {
+      ...tag,
+      isInspected: false,
+      status: "inspection",
+      recordDt: "Требует обхода",
+    };
+  });
+}
+
 function patrolDoneForRoute(
   tag: BleTagMarker,
   todayPatrol: Record<string, string[]>,
   filterRouteId: string,
+  routeResetMap: Record<string, boolean> = {},
 ): boolean {
-  if (tag.isInspected) return true;
   const ble = normalizeBle(tag.ble);
   const markerRouteId = String(tag.routeId ?? "") || "all";
+  if (!isRouteReset(routeResetMap, markerRouteId) && tag.isInspected) return true;
   const buckets = new Set<string>(["all"]);
   if (filterRouteId) buckets.add(filterRouteId);
   else buckets.add(markerRouteId);
@@ -230,13 +266,14 @@ export function routeProgressFor(
   markers: BleTagMarker[],
   todayPatrol: Record<string, string[]>,
   filterRouteId = "",
+  routeResetMap: Record<string, boolean> = {},
 ): { done: number; total: number } {
   const list = filterRouteId
     ? markers.filter((m) => String(m.routeId ?? "") === filterRouteId)
     : markers;
   let done = 0;
   for (const m of list) {
-    if (patrolDoneForRoute(m, todayPatrol, filterRouteId)) done++;
+    if (patrolDoneForRoute(m, todayPatrol, filterRouteId, routeResetMap)) done++;
   }
   return { done, total: list.length };
 }
@@ -248,6 +285,7 @@ export function buildNearbyRows(
     scanPaused: boolean;
     showPassedMarkers: boolean;
     dailyDone: Set<string>;
+    routeResetMap?: Record<string, boolean>;
     findTag?: (ble: string) => BleTagMarker | undefined;
   },
 ): NearbyRow[] {
@@ -258,9 +296,11 @@ export function buildNearbyRows(
     const tag = resolveTagForDevice(dev, scopeMarkers, opts.findTag);
     if (!tag) continue;
     const key = normalizeBle(tag.ble);
-    const saved =
-      opts.dailyDone.has(key) ||
-      !!tag.isInspected;
+    const routeReset = isRouteReset(
+      opts.routeResetMap,
+      String(tag.routeId ?? "") || "all",
+    );
+    const saved = opts.dailyDone.has(key) || (!routeReset && !!tag.isInspected);
     const prev = byBle.get(key);
     if (!prev || (dev.rssi ?? -999) > (prev.dev.rssi ?? -999)) {
       byBle.set(key, { tag, dev, saved });

@@ -17,7 +17,7 @@ import {
 } from "../api/bleMapApi";
 import type { BleRoute, BleTagMarker, BleZone, RouteRef } from "../ble/types";
 import { normalizeBle, normalizeMac } from "../ble/wwAdvert";
-import { routeProgressFor, tagMacKeys } from "../field/fieldHelpers";
+import { applyRouteResetOverrides, routeProgressFor, tagMacKeys } from "../field/fieldHelpers";
 import { BleService } from "../ble/BleService";
 import { BLE_DEFAULT_COMPANY_ID } from "../config";
 import {
@@ -40,9 +40,11 @@ import {
 } from "../storage/markerEdits";
 import {
   getDailyDoneSet,
+  getTodayRouteResetMap,
   getTodayPatrolMap,
   loadStore,
   pendingCount,
+  resetRoutePatrolToday,
 } from "../storage/checkins";
 import {
   loadClusterEnabled,
@@ -80,6 +82,8 @@ type AppDataContextValue = {
   refreshPending: () => Promise<void>;
   dailyDone: Set<string>;
   todayPatrol: Record<string, string[]>;
+  routeResetMap: Record<string, boolean>;
+  resetRoutePatrol: (routeId: string) => Promise<void>;
   focusBle: string | null;
   setFocusBle: (ble: string | null) => void;
   photoMeta: PhotoCacheMeta | null;
@@ -109,6 +113,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [focusBle, setFocusBle] = useState<string | null>(null);
   const [dailyDone, setDailyDone] = useState<Set<string>>(new Set());
   const [todayPatrol, setTodayPatrol] = useState<Record<string, string[]>>({});
+  const [routeResetMap, setRouteResetMap] = useState<Record<string, boolean>>({});
   const [photoMeta, setPhotoMeta] = useState<PhotoCacheMeta | null>(null);
   const [photoSyncNote, setPhotoSyncNote] = useState<string | null>(null);
   const [pendingMarkerEdits, setPendingMarkerEdits] = useState(0);
@@ -152,6 +157,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setPendingUploads(await pendingCount());
     const store = await loadStore();
     setTodayPatrol(getTodayPatrolMap(store));
+    setRouteResetMap(getTodayRouteResetMap(store));
     setDailyDone(getDailyDoneSet(store, route.routeId));
   }, [route.routeId]);
 
@@ -323,6 +329,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setPhotoMeta(await loadPhotoCacheMeta());
       const store = await loadStore();
       setTodayPatrol(getTodayPatrolMap(store));
+      setRouteResetMap(getTodayRouteResetMap(store));
       setDailyDone(getDailyDoneSet(store, routePref.routeId));
       await applyPack();
     })();
@@ -334,8 +341,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await saveRouteFilter(routeId, routeTitle);
     const store = await loadStore();
     setTodayPatrol(getTodayPatrolMap(store));
+    setRouteResetMap(getTodayRouteResetMap(store));
     setDailyDone(getDailyDoneSet(store, routeId));
   }, []);
+
+  const resetRoutePatrol = useCallback(
+    async (routeId: string) => {
+      await resetRoutePatrolToday(routeId);
+      const store = await loadStore();
+      setTodayPatrol(getTodayPatrolMap(store));
+      setRouteResetMap(getTodayRouteResetMap(store));
+      setDailyDone(getDailyDoneSet(store, route.routeId));
+      setPendingUploads(await pendingCount());
+    },
+    [route.routeId],
+  );
 
   const setClusterEnabled = useCallback(async (v: boolean) => {
     setClusterEnabledState(v);
@@ -347,19 +367,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await saveShowPassedMarkers(v);
   }, []);
 
+  const patrolMarkers = useMemo(
+    () => applyRouteResetOverrides(markers, todayPatrol, routeResetMap),
+    [markers, todayPatrol, routeResetMap],
+  );
+
   const routeMarkers = useMemo(() => {
-    if (!route.routeId) return markers;
+    if (!route.routeId) return patrolMarkers;
     const rid = Number(route.routeId);
-    return markers.filter((m) => Number(m.routeId) === rid);
-  }, [markers, route.routeId]);
+    return patrolMarkers.filter((m) => Number(m.routeId) === rid);
+  }, [patrolMarkers, route.routeId]);
 
   const routeProgress = useMemo(
-    () => routeProgressFor(routeMarkers, todayPatrol, route.routeId),
-    [routeMarkers, todayPatrol, route.routeId],
+    () => routeProgressFor(routeMarkers, todayPatrol, route.routeId, routeResetMap),
+    [routeMarkers, todayPatrol, route.routeId, routeResetMap],
   );
 
   const value: AppDataContextValue = {
-    markers,
+    markers: patrolMarkers,
     zones,
     routes,
     route,
@@ -381,6 +406,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     refreshPending,
     dailyDone,
     todayPatrol,
+    routeResetMap,
+    resetRoutePatrol,
     focusBle,
     setFocusBle,
     photoMeta,

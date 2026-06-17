@@ -6,11 +6,17 @@ import {
   inspectionPowerFromTag,
 } from "../ble/zoneType";
 import { CHECKINS_STORAGE_KEY, DAILY_KEEP_DAYS } from "../config";
-import type { CheckinStore, FieldCheckin } from "../ble/types";
+import type { CheckinStore, FieldCheckin, PassScan } from "../ble/types";
 import { normalizeBle } from "../ble/wwAdvert";
 
 function emptyStore(): CheckinStore {
-  return { version: 2, checkins: [], dailyPatrol: {} };
+  return {
+    version: 2,
+    checkins: [],
+    dailyPatrol: {},
+    dailyRouteResets: {},
+    dailyPassScans: {},
+  };
 }
 
 export async function loadStore(): Promise<CheckinStore> {
@@ -23,6 +29,8 @@ export async function loadStore(): Promise<CheckinStore> {
       version: 2,
       checkins: parsed.checkins,
       dailyPatrol: parsed.dailyPatrol ?? {},
+      dailyRouteResets: parsed.dailyRouteResets ?? {},
+      dailyPassScans: parsed.dailyPassScans ?? {},
     };
   } catch {
     return emptyStore();
@@ -46,6 +54,16 @@ function pruneOldDaily(store: CheckinStore): void {
   while (keys.length > DAILY_KEEP_DAYS) {
     const k = keys.shift();
     if (k) delete store.dailyPatrol[k];
+  }
+  const resetKeys = Object.keys(store.dailyRouteResets).sort();
+  while (resetKeys.length > DAILY_KEEP_DAYS) {
+    const k = resetKeys.shift();
+    if (k) delete store.dailyRouteResets[k];
+  }
+  const passKeys = Object.keys(store.dailyPassScans).sort();
+  while (passKeys.length > DAILY_KEEP_DAYS) {
+    const k = passKeys.shift();
+    if (k) delete store.dailyPassScans[k];
   }
 }
 
@@ -74,6 +92,45 @@ export function getDailyDoneSet(
   return new Set(list.map(normalizeBle));
 }
 
+export function isRouteResetToday(store: CheckinStore, routeId: string): boolean {
+  const rid = routeId || "all";
+  return !!store.dailyRouteResets[localDateKey()]?.[rid];
+}
+
+export function getTodayRouteResetMap(
+  store: CheckinStore,
+): Record<string, boolean> {
+  return store.dailyRouteResets[localDateKey()] ?? {};
+}
+
+export async function resetRoutePatrolToday(routeId: string): Promise<void> {
+  const rid = routeId || "all";
+  const day = localDateKey();
+  const store = await loadStore();
+  if (!store.dailyRouteResets[day]) store.dailyRouteResets[day] = {};
+  store.dailyRouteResets[day][rid] = true;
+  if (!store.dailyPatrol[day]) store.dailyPatrol[day] = {};
+  delete store.dailyPatrol[day][rid];
+  await persistStore(store);
+}
+
+export function getTodayPassScan(store: CheckinStore): PassScan | null {
+  return store.dailyPassScans[localDateKey()] ?? null;
+}
+
+export async function saveTodayPassScan(scan: PassScan): Promise<PassScan> {
+  const store = await loadStore();
+  const saved: PassScan = {
+    ...scan,
+    uid: scan.uid.toUpperCase(),
+    uidReversed: scan.uidReversed?.toUpperCase(),
+    scannedAt: scan.scannedAt || new Date().toISOString(),
+  };
+  store.dailyPassScans[localDateKey()] = saved;
+  await persistStore(store);
+  return saved;
+}
+
 /** Обходы за сегодня: routeId → список BLE (routeId "" → ключ «all»). */
 export function getTodayPatrolMap(
   store: CheckinStore,
@@ -96,6 +153,7 @@ export async function saveCheckinRecord(
   const power = inspectionPowerFromTag(tag);
   const frequency = inspectionFrequencyFromTag(tag);
   const bleType = inspectionBleTypeFromTag(tag);
+  const passScan = getTodayPassScan(store);
 
   store.checkins = store.checkins.filter(
     (c) =>
@@ -126,6 +184,9 @@ export async function saveCheckinRecord(
     bleType,
     firmwareVersion: tag.firmwareVersion || "bt1",
     gattLive: !!live.fromGatt,
+    passUid: passScan?.uid,
+    passUidReversed: passScan?.uidReversed,
+    passScannedAt: passScan?.scannedAt,
   };
 
   store.checkins.unshift(checkin);
@@ -159,6 +220,8 @@ export async function exportCheckinsBackup(): Promise<string> {
       pending: store.checkins.filter((c) => !c.uploaded),
       all: store.checkins,
       dailyPatrol: store.dailyPatrol,
+      dailyRouteResets: store.dailyRouteResets,
+      dailyPassScans: store.dailyPassScans,
     },
     null,
     2,

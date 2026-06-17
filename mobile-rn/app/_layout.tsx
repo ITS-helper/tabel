@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { AppDataProvider } from "../src/context/AppDataContext";
 import { FinderProvider } from "../src/context/FinderContext";
+import { PassProvider } from "../src/context/PassContext";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 
 function RootStack() {
@@ -31,7 +32,9 @@ export default function RootLayout() {
         <ErrorBoundary>
           <AppDataProvider>
             <FinderProvider>
-              <RootStack />
+              <PassProvider>
+                <RootStack />
+              </PassProvider>
             </FinderProvider>
           </AppDataProvider>
         </ErrorBoundary>

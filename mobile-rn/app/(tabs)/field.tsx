@@ -2,6 +2,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -39,6 +40,7 @@ import {
   exportCheckinsBackup,
 } from "../../src/storage/checkins";
 import { useTheme } from "../../src/context/ThemeContext";
+import { usePassScan } from "../../src/context/PassContext";
 import type { AppColors } from "../../src/theme/palettes";
 
 export default function FieldScreen() {
@@ -55,9 +57,12 @@ export default function FieldScreen() {
     setFocusBle,
     pendingUploads,
     refreshPending,
+    routeResetMap,
+    resetRoutePatrol,
     showPassedMarkers,
     setShowPassedMarkers,
   } = useAppData();
+  const { passScan, requestPassScan, refreshPassScan } = usePassScan();
 
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [scanActive, setScanActive] = useState(false);
@@ -85,21 +90,30 @@ export default function FieldScreen() {
   const refreshDaily = useCallback(async () => {
     const store = await loadStore();
     setDailyDone(getDailyDoneSet(store, route.routeId));
+    await refreshPassScan();
     setPending(await getPendingCheckins());
     await refreshPending();
-  }, [route.routeId, refreshPending]);
+  }, [route.routeId, refreshPassScan, refreshPending]);
 
   const focusHandledRef = useRef<string | null>(null);
 
+  const requirePassScan = useCallback(() => {
+    if (passScan?.uid) return true;
+    setStatus("РџРµСЂРµРґ РѕР±С…РѕРґРѕРј РѕС‚СЃРєР°РЅРёСЂСѓР№С‚Рµ СЃРІРѕР№ РїСЂРѕРїСѓСЃРє NFC");
+    void requestPassScan(false);
+    return false;
+  }, [passScan?.uid, requestPassScan]);
+
   const openTagPatrol = useCallback(
     async (ble: string, fromSearch = false) => {
+      if (!requirePassScan()) return;
       const tag = findTag(ble);
       if (!tag) {
-        setStatus(`Метка #${ble} не в базе`);
+        setStatus(`РњРµС‚РєР° #${ble} РЅРµ РІ Р±Р°Р·Рµ`);
         return;
       }
       if (route.routeId && String(tag.routeId ?? "") !== String(route.routeId)) {
-        setStatus(`Метка #${ble} на другом маршруте: «${tag.routeTitle ?? "—"}»`);
+        setStatus(`РњРµС‚РєР° #${ble} РЅР° РґСЂСѓРіРѕРј РјР°СЂС€СЂСѓС‚Рµ: В«${tag.routeTitle ?? "вЂ”"}В»`);
         return;
       }
       await BleService.disconnect();
@@ -108,7 +122,7 @@ export default function FieldScreen() {
       setPatrolQuery(ble);
       setConnectedId(null);
       autoConnectRef.current = false;
-      setStatus(`Метка #${ble}. Идёт сканирование…`);
+      setStatus(`РњРµС‚РєР° #${ble}. РРґС‘С‚ СЃРєР°РЅРёСЂРѕРІР°РЅРёРµвЂ¦`);
       try {
         if (!BleService.isScanning()) {
           await BleService.beginFieldScan(true);
@@ -116,10 +130,10 @@ export default function FieldScreen() {
           setScanPaused(false);
         }
       } catch (e) {
-        setStatus(e instanceof Error ? e.message : "BLE ошибка");
+        setStatus(e instanceof Error ? e.message : "BLE РѕС€РёР±РєР°");
       }
     },
-    [findTag, route.routeId, setFocusBle],
+    [findTag, route.routeId, requirePassScan, setFocusBle],
   );
 
   useEffect(() => {
@@ -130,8 +144,8 @@ export default function FieldScreen() {
     if (!focusBle) {
       setStatus(
         route.routeId
-          ? `Маршрут «${route.routeTitle}». Нажмите «Сканировать».`
-          : "Все маршруты. Нажмите «Сканировать».",
+          ? `РњР°СЂС€СЂСѓС‚ В«${route.routeTitle}В». РќР°Р¶РјРёС‚Рµ В«РЎРєР°РЅРёСЂРѕРІР°С‚СЊВ».`
+          : "Р’СЃРµ РјР°СЂС€СЂСѓС‚С‹. РќР°Р¶РјРёС‚Рµ В«РЎРєР°РЅРёСЂРѕРІР°С‚СЊВ».",
       );
     }
     return () => {
@@ -180,9 +194,10 @@ export default function FieldScreen() {
         scanPaused,
         showPassedMarkers,
         dailyDone,
+        routeResetMap,
         findTag,
       }),
-    [devices, routeMarkers, scanPaused, showPassedMarkers, dailyDone, findTag],
+    [devices, routeMarkers, scanPaused, showPassedMarkers, dailyDone, routeResetMap, findTag],
   );
 
   const liveCount = useMemo(
@@ -190,7 +205,7 @@ export default function FieldScreen() {
     [devices, scanPaused],
   );
 
-  const scanBtnLabel = scanActive ? "Пауза" : scanPaused ? "Продолжить" : "Сканировать";
+  const scanBtnLabel = scanActive ? "РџР°СѓР·Р°" : scanPaused ? "РџСЂРѕРґРѕР»Р¶РёС‚СЊ" : "РЎРєР°РЅРёСЂРѕРІР°С‚СЊ";
 
   const onSearchSubmit = () => {
     const ble = normalizeBle(patrolQuery);
@@ -204,28 +219,30 @@ export default function FieldScreen() {
         await BleService.pauseScan();
         setScanActive(false);
         setScanPaused(true);
-        setStatus(`Пауза — ${nearbyRows.length} меток в списке`);
+        setStatus(`РџР°СѓР·Р° вЂ” ${nearbyRows.length} РјРµС‚РѕРє РІ СЃРїРёСЃРєРµ`);
         return;
       }
       if (scanPaused) {
+        if (!requirePassScan()) return;
         await BleService.beginFieldScan(false);
         setScanActive(true);
         setScanPaused(false);
         setStatus(
           tagPatrolMode && focusBle
-            ? `Сканирование метки #${focusBle}…`
+            ? `РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ РјРµС‚РєРё #${focusBle}вЂ¦`
             : route.routeId
-              ? `Сканирование «${route.routeTitle}»…`
-              : "Сканирование всех меток…",
+              ? `РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ В«${route.routeTitle}В»вЂ¦`
+              : "РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ РІСЃРµС… РјРµС‚РѕРєвЂ¦",
         );
         return;
       }
+      if (!requirePassScan()) return;
       await BleService.beginFieldScan(true);
       setScanActive(true);
       setScanPaused(false);
-      setStatus("Сканирование…");
+      setStatus("РЎРєР°РЅРёСЂРѕРІР°РЅРёРµвЂ¦");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "BLE ошибка");
+      setStatus(e instanceof Error ? e.message : "BLE РѕС€РёР±РєР°");
     }
   };
 
@@ -235,14 +252,14 @@ export default function FieldScreen() {
       if (normalizeBle(tag.ble) !== normalizeBle(focusBle ?? "")) return;
       autoConnectRef.current = true;
       setConnecting(true);
-      setStatus(`Подключение к метке #${tag.ble}…`);
+      setStatus(`РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє РјРµС‚РєРµ #${tag.ble}вЂ¦`);
       try {
         await BleService.connectToTag(dev.id);
         setConnectedId(dev.id);
-        setStatus(`Метка #${tag.ble} подключена. Нажмите «Отправить обход».`);
+        setStatus(`РњРµС‚РєР° #${tag.ble} РїРѕРґРєР»СЋС‡РµРЅР°. РќР°Р¶РјРёС‚Рµ В«РћС‚РїСЂР°РІРёС‚СЊ РѕР±С…РѕРґВ».`);
       } catch (e) {
         autoConnectRef.current = false;
-        setStatus(e instanceof Error ? e.message : "Ошибка подключения");
+        setStatus(e instanceof Error ? e.message : "РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ");
       } finally {
         setConnecting(false);
       }
@@ -260,25 +277,26 @@ export default function FieldScreen() {
 
   const saveCheckinForBle = async (bleNum: string) => {
     if (gattBusy) return;
+    if (!requirePassScan()) return;
     const tag =
       routeMarkers.find((t) => normalizeBle(t.ble) === normalizeBle(bleNum)) ||
       findTag(bleNum);
     if (!tag) {
-      setStatus("Метка не найдена в данных карты");
+      setStatus("РњРµС‚РєР° РЅРµ РЅР°Р№РґРµРЅР° РІ РґР°РЅРЅС‹С… РєР°СЂС‚С‹");
       return;
     }
     const dev = BleService.findDeviceForTag(tag);
     if (!dev) {
       setStatus(
         scanPaused
-          ? "Метки нет в списке. Нажмите «Продолжить» и поднесите телефон."
-          : "Метка не видна по Bluetooth. Подойдите ближе.",
+          ? "РњРµС‚РєРё РЅРµС‚ РІ СЃРїРёСЃРєРµ. РќР°Р¶РјРёС‚Рµ В«РџСЂРѕРґРѕР»Р¶РёС‚СЊВ» Рё РїРѕРґРЅРµСЃРёС‚Рµ С‚РµР»РµС„РѕРЅ."
+          : "РњРµС‚РєР° РЅРµ РІРёРґРЅР° РїРѕ Bluetooth. РџРѕРґРѕР№РґРёС‚Рµ Р±Р»РёР¶Рµ.",
       );
       return;
     }
     setBusyBle(tag.ble);
     setGattBusy(true);
-    setStatus(`Подключение к метке #${tag.ble}…`);
+    setStatus(`РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє РјРµС‚РєРµ #${tag.ble}вЂ¦`);
     try {
       const live = await BleService.withGattSession(dev.id, () =>
         BleService.readTagGattTelemetry(dev.id, {
@@ -287,7 +305,7 @@ export default function FieldScreen() {
         }),
       );
       if (!live.fromGatt) {
-        setStatus(`GATT: данных нет (#${tag.ble})`);
+        setStatus(`GATT: РґР°РЅРЅС‹С… РЅРµС‚ (#${tag.ble})`);
         return;
       }
       await saveCheckinRecord(tag, { deviceId: dev.id, rssi: dev.rssi }, live, route);
@@ -297,11 +315,11 @@ export default function FieldScreen() {
       const charge = live.chargeValue ?? 100;
       setStatus(
         charge <= LOW_BATTERY_PCT
-          ? `Обход #${tag.ble} записан (батарея ${charge}%). Внизу «Отправить на сервер».`
-          : `Обход #${tag.ble} записан. Внизу «Отправить на сервер».`,
+          ? `РћР±С…РѕРґ #${tag.ble} Р·Р°РїРёСЃР°РЅ (Р±Р°С‚Р°СЂРµСЏ ${charge}%). Р’РЅРёР·Сѓ В«РћС‚РїСЂР°РІРёС‚СЊ РЅР° СЃРµСЂРІРµСЂВ».`
+          : `РћР±С…РѕРґ #${tag.ble} Р·Р°РїРёСЃР°РЅ. Р’РЅРёР·Сѓ В«РћС‚РїСЂР°РІРёС‚СЊ РЅР° СЃРµСЂРІРµСЂВ».`,
       );
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка GATT");
+      setStatus(e instanceof Error ? e.message : "РћС€РёР±РєР° GATT");
     } finally {
       setBusyBle(null);
       setGattBusy(false);
@@ -311,8 +329,9 @@ export default function FieldScreen() {
 
   const saveCheckinForFocus = async () => {
     if (!tagPatrolMode || !focusTag || !connectedId || gattBusy) return;
+    if (!requirePassScan()) return;
     setGattBusy(true);
-    setStatus(`Читаем данные метки #${focusTag.ble}…`);
+    setStatus(`Р§РёС‚Р°РµРј РґР°РЅРЅС‹Рµ РјРµС‚РєРё #${focusTag.ble}вЂ¦`);
     try {
       const dev = devices.find((d) => d.id === connectedId);
       const live = await BleService.readTagGattTelemetry(connectedId, {
@@ -320,7 +339,7 @@ export default function FieldScreen() {
         advTelemetry: dev?.advTelemetry,
       });
       if (!live.fromGatt) {
-        setStatus(`GATT: данных нет (#${focusTag.ble})`);
+        setStatus(`GATT: РґР°РЅРЅС‹С… РЅРµС‚ (#${focusTag.ble})`);
         return;
       }
       await saveCheckinRecord(
@@ -340,9 +359,9 @@ export default function FieldScreen() {
       setScanPaused(false);
       setPendingOpen(true);
       await refreshDaily();
-      setStatus(`Обход #${focusTag.ble} записан. Внизу «Отправить на сервер».`);
+      setStatus(`РћР±С…РѕРґ #${focusTag.ble} Р·Р°РїРёСЃР°РЅ. Р’РЅРёР·Сѓ В«РћС‚РїСЂР°РІРёС‚СЊ РЅР° СЃРµСЂРІРµСЂВ».`);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Ошибка чтения");
+      setStatus(e instanceof Error ? e.message : "РћС€РёР±РєР° С‡С‚РµРЅРёСЏ");
     } finally {
       setGattBusy(false);
     }
@@ -352,38 +371,38 @@ export default function FieldScreen() {
     if (uploadBusy) return;
     const list = await getPendingCheckins();
     if (!list.length) {
-      setStatus("Нет обходов для отправки");
+      setStatus("РќРµС‚ РѕР±С…РѕРґРѕРІ РґР»СЏ РѕС‚РїСЂР°РІРєРё");
       return;
     }
     setUploadBusy(true);
     setUploadProgress(`0 / ${list.length}`);
-    setStatus(`Отправка ${list.length} обходов…`);
+    setStatus(`РћС‚РїСЂР°РІРєР° ${list.length} РѕР±С…РѕРґРѕРІвЂ¦`);
     try {
       const result = await uploadCheckins(
         list,
         (ble) => findTag(ble),
         (p) => {
           setUploadProgress(`${p.done} / ${p.total}`);
-          setStatus(`Отправка ${p.done} / ${p.total} · #${p.currentBle}…`);
+          setStatus(`РћС‚РїСЂР°РІРєР° ${p.done} / ${p.total} В· #${p.currentBle}вЂ¦`);
         },
         markers,
       );
       await refreshDaily();
       if (result.fail && result.ok) {
         setStatus(
-          `Отправлено ${result.ok} из ${list.length}. Осталось ${result.fail} — нажмите ещё раз. ${result.lastErr.slice(0, 80)}`,
+          `РћС‚РїСЂР°РІР»РµРЅРѕ ${result.ok} РёР· ${list.length}. РћСЃС‚Р°Р»РѕСЃСЊ ${result.fail} вЂ” РЅР°Р¶РјРёС‚Рµ РµС‰С‘ СЂР°Р·. ${result.lastErr.slice(0, 80)}`,
         );
       } else if (result.fail) {
         setStatus(
-          `Не отправлено (${result.fail}). Обходы сохранены на телефоне — повторите. ${result.lastErr.slice(0, 100)}`,
+          `РќРµ РѕС‚РїСЂР°РІР»РµРЅРѕ (${result.fail}). РћР±С…РѕРґС‹ СЃРѕС…СЂР°РЅРµРЅС‹ РЅР° С‚РµР»РµС„РѕРЅРµ вЂ” РїРѕРІС‚РѕСЂРёС‚Рµ. ${result.lastErr.slice(0, 100)}`,
         );
       } else {
-        setStatus(`Все обходы отправлены (${result.ok})`);
+        setStatus(`Р’СЃРµ РѕР±С…РѕРґС‹ РѕС‚РїСЂР°РІР»РµРЅС‹ (${result.ok})`);
         setUploadProgress(null);
       }
     } catch (e) {
       setStatus(
-        `Ошибка отправки. ${list.length} обходов сохранены на телефоне — повторите. ${e instanceof Error ? e.message : ""}`.slice(
+        `РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё. ${list.length} РѕР±С…РѕРґРѕРІ СЃРѕС…СЂР°РЅРµРЅС‹ РЅР° С‚РµР»РµС„РѕРЅРµ вЂ” РїРѕРІС‚РѕСЂРёС‚Рµ. ${e instanceof Error ? e.message : ""}`.slice(
           0,
           200,
         ),
@@ -396,18 +415,18 @@ export default function FieldScreen() {
   const backupCheckins = async () => {
     const list = await getPendingCheckins();
     if (!list.length) {
-      setStatus("Нет сохранённых обходов для резервной копии");
+      setStatus("РќРµС‚ СЃРѕС…СЂР°РЅС‘РЅРЅС‹С… РѕР±С…РѕРґРѕРІ РґР»СЏ СЂРµР·РµСЂРІРЅРѕР№ РєРѕРїРёРё");
       return;
     }
     try {
       const json = await exportCheckinsBackup();
       await Share.share({
         message: json,
-        title: `WW обходы ${list.length} шт.`,
+        title: `WW РѕР±С…РѕРґС‹ ${list.length} С€С‚.`,
       });
-      setStatus(`Резервная копия ${list.length} обходов — отправьте себе в Telegram/почту`);
+      setStatus(`Р РµР·РµСЂРІРЅР°СЏ РєРѕРїРёСЏ ${list.length} РѕР±С…РѕРґРѕРІ вЂ” РѕС‚РїСЂР°РІСЊС‚Рµ СЃРµР±Рµ РІ Telegram/РїРѕС‡С‚Сѓ`);
     } catch {
-      setStatus(`${list.length} обходов на телефоне — не удаляйте приложение`);
+      setStatus(`${list.length} РѕР±С…РѕРґРѕРІ РЅР° С‚РµР»РµС„РѕРЅРµ вЂ” РЅРµ СѓРґР°Р»СЏР№С‚Рµ РїСЂРёР»РѕР¶РµРЅРёРµ`);
     }
   };
 
@@ -449,6 +468,39 @@ export default function FieldScreen() {
       ? Math.round((routeProgress.done / routeProgress.total) * 100)
       : 0;
 
+  const routeResetActive = !!(route.routeId && routeResetMap[route.routeId]);
+
+  const resetCurrentRoute = useCallback(() => {
+    if (!route.routeId) {
+      setStatus("РЎРЅР°С‡Р°Р»Р° РІС‹Р±РµСЂРёС‚Рµ РјР°СЂС€СЂСѓС‚");
+      return;
+    }
+    Alert.alert(
+      "Локально сбросить обход?",
+      `Маршрут «${route.routeTitle}» на этом телефоне снова будет считаться непройденным. На сервер ничего не отправляется.`, 
+      [
+        { text: "РћС‚РјРµРЅР°", style: "cancel" },
+        {
+          text: "Сбросить",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              await resetRoutePatrol(route.routeId);
+              const store = await loadStore();
+              setDailyDone(getDailyDoneSet(store, route.routeId));
+              await refreshPassScan();
+              setPending(await getPendingCheckins());
+              setTagPatrolMode(false);
+              setFocusBle(null);
+              setPatrolQuery("");
+              setStatus(`Обход маршрута «${route.routeTitle}» локально сброшен`);
+            })();
+          },
+        },
+      ],
+    );
+  }, [route.routeId, route.routeTitle, resetRoutePatrol, setFocusBle]);
+
   return (
     <ScrollView
       style={styles.root}
@@ -457,33 +509,53 @@ export default function FieldScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>
           {tagPatrolMode && focusBle
-            ? `Обход · #${focusBle}`
-            : "Обход маршрута"}
+            ? `РћР±С…РѕРґ В· #${focusBle}`
+            : "РћР±С…РѕРґ РјР°СЂС€СЂСѓС‚Р°"}
         </Text>
         <Text style={styles.route}>
-          {route.routeId ? route.routeTitle : "все маршруты"}
+          {route.routeId ? route.routeTitle : "РІСЃРµ РјР°СЂС€СЂСѓС‚С‹"}
         </Text>
       </View>
 
       {route.routeId ? (
         <View style={styles.progressBox}>
           <Text style={styles.progressText}>
-            Пройдено {routeProgress.done} / {routeProgress.total}
+            РџСЂРѕР№РґРµРЅРѕ {routeProgress.done} / {routeProgress.total}
           </Text>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
           </View>
         </View>
       ) : pendingUploads > 0 ? (
-        <Text style={styles.progressText}>К отправке: {pendingUploads}</Text>
+        <Text style={styles.progressText}>Рљ РѕС‚РїСЂР°РІРєРµ: {pendingUploads}</Text>
       ) : null}
+
+      {route.routeId ? (
+        <Pressable
+          style={[
+            styles.resetRouteBtn,
+            routeResetActive && styles.resetRouteBtnActive,
+          ]}
+          onPress={resetCurrentRoute}
+        >
+          <Text
+            style={[
+              styles.resetRouteText,
+              routeResetActive && styles.resetRouteTextActive,
+            ]}
+          >
+            {routeResetActive ? "Локальный сброс активен" : "Сбросить обход локально"}
+          </Text>
+        </Pressable>
+      ) : null}
+
 
       {status ? <Text style={styles.status}>{status}</Text> : null}
 
       <View style={styles.searchRow}>
         <SearchField
           style={styles.searchInput}
-          placeholder="№ метки для обхода"
+          placeholder="в„– РјРµС‚РєРё РґР»СЏ РѕР±С…РѕРґР°"
           placeholderTextColor={colors.textMuted}
           value={patrolQuery}
           onChangeText={setPatrolQuery}
@@ -491,26 +563,26 @@ export default function FieldScreen() {
           onSubmitEditing={onSearchSubmit}
         />
         <Pressable style={styles.searchGo} onPress={onSearchSubmit}>
-          <Text style={styles.searchGoText}>Найти</Text>
+          <Text style={styles.searchGoText}>РќР°Р№С‚Рё</Text>
         </Pressable>
       </View>
 
       {tagPatrolMode && focusTag ? (
         <View style={styles.focusBox}>
           <Text style={styles.focusTitle}>
-            Метка #{focusTag.ble}
-            {zoneShortLabel(focusTag) ? ` · ${zoneShortLabel(focusTag)}` : ""}
+            РњРµС‚РєР° #{focusTag.ble}
+            {zoneShortLabel(focusTag) ? ` В· ${zoneShortLabel(focusTag)}` : ""}
           </Text>
           <Text style={styles.focusSub}>
             {connecting
-                ? "Подключение…"
+                ? "РџРѕРґРєР»СЋС‡РµРЅРёРµвЂ¦"
               : gattBusy
-                ? "Читаем GATT…"
+                ? "Р§РёС‚Р°РµРј GATTвЂ¦"
                 : connectedId
-                  ? "Подключено — можно записать обход"
+                  ? "РџРѕРґРєР»СЋС‡РµРЅРѕ вЂ” РјРѕР¶РЅРѕ Р·Р°РїРёСЃР°С‚СЊ РѕР±С…РѕРґ"
                   : scanActive
-                    ? "Сканирование… поднесите телефон"
-                    : "Пауза или ожидание метки"}
+                    ? "РЎРєР°РЅРёСЂРѕРІР°РЅРёРµвЂ¦ РїРѕРґРЅРµСЃРёС‚Рµ С‚РµР»РµС„РѕРЅ"
+                    : "РџР°СѓР·Р° РёР»Рё РѕР¶РёРґР°РЅРёРµ РјРµС‚РєРё"}
           </Text>
           <Pressable
             style={[styles.saveBtn, (!connectedId || gattBusy) && styles.saveBtnOff]}
@@ -520,7 +592,7 @@ export default function FieldScreen() {
             {gattBusy ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveBtnText}>Записать обход</Text>
+              <Text style={styles.saveBtnText}>Р—Р°РїРёСЃР°С‚СЊ РѕР±С…РѕРґ</Text>
             )}
           </Pressable>
           <Pressable
@@ -531,16 +603,16 @@ export default function FieldScreen() {
               autoConnectRef.current = false;
             }}
           >
-            <Text style={styles.cancel}>Отмена</Text>
+            <Text style={styles.cancel}>РћС‚РјРµРЅР°</Text>
           </Pressable>
         </View>
       ) : null}
 
       <View style={styles.sectionHead}>
-        <Text style={styles.sectionLabel}>Метки рядом (BLE)</Text>
+        <Text style={styles.sectionLabel}>РњРµС‚РєРё СЂСЏРґРѕРј (BLE)</Text>
         <View style={styles.sectionActions}>
           <View style={styles.toggleItem}>
-            <Text style={styles.toggleLabel}>Пройденные</Text>
+            <Text style={styles.toggleLabel}>РџСЂРѕР№РґРµРЅРЅС‹Рµ</Text>
             <Switch
               value={showPassedMarkers}
               onValueChange={setShowPassedMarkers}
@@ -556,10 +628,10 @@ export default function FieldScreen() {
       {nearbyRows.length === 0 ? (
         <Text style={styles.empty}>
           {!scanActive && !scanPaused
-            ? "Нажмите «Сканировать» и подойдите к метке."
+            ? "РќР°Р¶РјРёС‚Рµ В«РЎРєР°РЅРёСЂРѕРІР°С‚СЊВ» Рё РїРѕРґРѕР№РґРёС‚Рµ Рє РјРµС‚РєРµ."
             : scanPaused
-              ? "Список пуст. «Продолжить» и поднесите телефон."
-              : `BLE в эфире: ${liveCount}. Сопоставленных меток нет.`}
+              ? "РЎРїРёСЃРѕРє РїСѓСЃС‚. В«РџСЂРѕРґРѕР»Р¶РёС‚СЊВ» Рё РїРѕРґРЅРµСЃРёС‚Рµ С‚РµР»РµС„РѕРЅ."
+              : `BLE РІ СЌС„РёСЂРµ: ${liveCount}. РЎРѕРїРѕСЃС‚Р°РІР»РµРЅРЅС‹С… РјРµС‚РѕРє РЅРµС‚.`}
         </Text>
       ) : (
         nearbyRows.map(({ tag, dev, saved }) => {
@@ -604,12 +676,12 @@ export default function FieldScreen() {
               </View>
               {tag.title ? <Text style={styles.sub}>{tag.title}</Text> : null}
               <Text style={styles.meta}>
-                {dev.rssi ?? "—"} dBm ·{" "}
+                {dev.rssi ?? "вЂ”"} dBm В·{" "}
                 {dev.advTelemetry?.chargeValue != null
                   ? `${dev.advTelemetry.chargeValue}%`
                   : tag.charge != null
                     ? `${tag.charge}%`
-                    : "—"}
+                    : "вЂ”"}
               </Text>
             </View>
             <View style={styles.rowActions}>
@@ -624,7 +696,7 @@ export default function FieldScreen() {
                     !tagHasPhotos(tag) && styles.photoBtnTextOff,
                   ]}
                 >
-                  Фото
+                  Р¤РѕС‚Рѕ
                 </Text>
               </Pressable>
               <Pressable
@@ -635,7 +707,7 @@ export default function FieldScreen() {
                 {busyBle === tag.ble ? (
                   <ActivityIndicator color={colors.accent} size="small" />
                 ) : (
-                  <Text style={styles.sendBtnText}>Отметить</Text>
+                  <Text style={styles.sendBtnText}>РћС‚РјРµС‚РёС‚СЊ</Text>
                 )}
               </Pressable>
             </View>
@@ -649,9 +721,9 @@ export default function FieldScreen() {
         onPress={() => pending.length && setPendingOpen((v) => !v)}
       >
         <Text style={styles.pendingLabel}>
-          Сохранено · {pending.length}
+          РЎРѕС…СЂР°РЅРµРЅРѕ В· {pending.length}
         </Text>
-        <Text style={styles.pendingChev}>{pendingOpen ? "▴" : "▾"}</Text>
+        <Text style={styles.pendingChev}>{pendingOpen ? "в–ґ" : "в–ѕ"}</Text>
       </Pressable>
 
       {pendingOpen && pending.length > 0 ? (
@@ -679,14 +751,14 @@ export default function FieldScreen() {
           <View style={styles.uploadBtnInner}>
             <ActivityIndicator color="#fff" size="small" />
             <Text style={styles.uploadBtnText}>
-              {uploadProgress ? `Отправка ${uploadProgress}…` : "Отправка…"}
+              {uploadProgress ? `РћС‚РїСЂР°РІРєР° ${uploadProgress}вЂ¦` : "РћС‚РїСЂР°РІРєР°вЂ¦"}
             </Text>
           </View>
         ) : (
           <Text style={styles.uploadBtnText}>
             {pending.length
-              ? `Отправить на сервер (${pending.length})`
-              : "Отправить на сервер"}
+              ? `РћС‚РїСЂР°РІРёС‚СЊ РЅР° СЃРµСЂРІРµСЂ (${pending.length})`
+              : "РћС‚РїСЂР°РІРёС‚СЊ РЅР° СЃРµСЂРІРµСЂ"}
           </Text>
         )}
       </Pressable>
@@ -694,7 +766,7 @@ export default function FieldScreen() {
       {pending.length > 0 ? (
         <Pressable style={styles.backupBtn} onPress={backupCheckins} disabled={uploadBusy}>
           <Text style={styles.backupBtnText}>
-            Резервная копия ({pending.length}) — не потерять обход
+            Р РµР·РµСЂРІРЅР°СЏ РєРѕРїРёСЏ ({pending.length}) вЂ” РЅРµ РїРѕС‚РµСЂСЏС‚СЊ РѕР±С…РѕРґ
           </Text>
         </Pressable>
       ) : null}
@@ -711,11 +783,11 @@ export default function FieldScreen() {
               <Text style={styles.photoModalTitle}>
                 #{photoModalTag?.ble}
                 {photoModalTag && zoneShortLabel(photoModalTag)
-                  ? ` · ${zoneShortLabel(photoModalTag)}`
+                  ? ` В· ${zoneShortLabel(photoModalTag)}`
                   : ""}
               </Text>
               <Pressable onPress={closePhotoModal} hitSlop={8}>
-                <Text style={styles.photoModalClose}>×</Text>
+                <Text style={styles.photoModalClose}>Г—</Text>
               </Pressable>
             </View>
             {photoModalLoading ? (
@@ -735,7 +807,7 @@ export default function FieldScreen() {
               </ScrollView>
             ) : (
               <Text style={styles.photoModalEmpty}>
-                Нет фото. Обновите карту (↻) на вкладке «Карта».
+                РќРµС‚ С„РѕС‚Рѕ. РћР±РЅРѕРІРёС‚Рµ РєР°СЂС‚Сѓ (в†») РЅР° РІРєР»Р°РґРєРµ В«РљР°СЂС‚Р°В».
               </Text>
             )}
           </Pressable>
@@ -761,6 +833,21 @@ const createStyles = (colors: AppColors) =>
     overflow: "hidden",
   },
   progressFill: { height: "100%", backgroundColor: colors.success },
+  resetRouteBtn: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  resetRouteBtnActive: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.success,
+  },
+  resetRouteText: { color: colors.warning, fontWeight: "700", fontSize: 12 },
+  resetRouteTextActive: { color: colors.success },
   status: { color: colors.warning, fontSize: 13 },
   searchRow: { flexDirection: "row", gap: 8 },
   searchInput: {

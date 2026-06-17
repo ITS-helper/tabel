@@ -131,12 +131,25 @@ export type FieldCheckin = {
   bleType?: number;
   firmwareVersion?: string;
   gattLive?: boolean;
+  passUid?: string;
+  passUidReversed?: string;
+  passScannedAt?: string;
+};
+
+export type PassScan = {
+  uid: string;
+  uidReversed?: string;
+  bytes?: number[];
+  techs?: string[];
+  scannedAt: string;
 };
 
 export type CheckinStore = {
   version: 2;
   checkins: FieldCheckin[];
   dailyPatrol: Record<string, Record<string, string[]>>;
+  dailyRouteResets: Record<string, Record<string, boolean>>;
+  dailyPassScans: Record<string, PassScan>;
 };
 
 export type RouteRef = {

@@ -18,6 +18,7 @@ type Props = {
   routes: BleRoute[];
   markers: BleTagMarker[];
   todayPatrol: Record<string, string[]>;
+  routeResetMap: Record<string, boolean>;
   selectedId: string;
   onSelect: (id: string, title: string) => void;
   onClose: () => void;
@@ -28,6 +29,7 @@ export function RoutePickerModal({
   routes,
   markers,
   todayPatrol,
+  routeResetMap,
   selectedId,
   onSelect,
   onClose,
@@ -40,8 +42,8 @@ export function RoutePickerModal({
     [routes],
   );
   const allProgress = useMemo(
-    () => routeProgressFor(markers, todayPatrol, ""),
-    [markers, todayPatrol],
+    () => routeProgressFor(markers, todayPatrol, "", routeResetMap),
+    [markers, todayPatrol, routeResetMap],
   );
 
   return (
@@ -62,7 +64,7 @@ export function RoutePickerModal({
             const id = r.id ? String(r.id) : "";
             const active = id === selectedId;
             const progress = id
-              ? routeProgressFor(markers, todayPatrol, id)
+              ? routeProgressFor(markers, todayPatrol, id, routeResetMap)
               : allProgress;
             const progressLabel =
               progress.total > 0 ? `${progress.done}/${progress.total}` : "—";
