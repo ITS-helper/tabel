@@ -10,10 +10,17 @@ import requests
 from ..config import Settings
 from ..db import Database
 from ..models import DeviceIncident
-from ..parsers import extract_uid_from_text
 
 
 class SiteCollector:
+    REQUEST_NUMBER_INDEX = 0
+    SERIAL_INDEX = 1
+    EUI_INDEX = 2
+    FAULT_INDEX = 6
+    PROBLEM_INDEX = 7
+    CREATED_INDEX = 9
+    CREATOR_INDEX = 10
+
     def __init__(self, settings: Settings, db: Database) -> None:
         self.settings = settings
         self.db = db
@@ -30,144 +37,119 @@ class SiteCollector:
         return incidents
 
     def _login(self) -> None:
-        login_url = (
-            urljoin(self.settings.site_base_url, self.settings.site_login_path)
-            if self.settings.site_login_path
-            else self.settings.site_base_url
-        )
+        login_url = urljoin(self.settings.site_base_url, self.settings.site_login_path)
         response = self.session.get(login_url, timeout=30)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, "lxml")
-        form = soup.find("form")
+        soup = BeautifulSoup(response.text, 'lxml')
+        form = soup.find('form')
         if form is None:
-            raise RuntimeError("Login form not found on site")
+            raise RuntimeError('Login form not found on site')
 
-        action = form.get("action") or login_url
+        action = form.get('action') or login_url
         action_url = urljoin(login_url, action)
-        payload = {}
+        payload: dict[str, str] = {}
         username_field = None
         password_field = None
 
-        for input_tag in form.find_all("input"):
-            name = input_tag.get("name")
+        for input_tag in form.find_all('input'):
+            name = input_tag.get('name')
             if not name:
                 continue
-            input_type = (input_tag.get("type") or "text").lower()
-            value = input_tag.get("value", "")
-            payload[name] = value
+            input_type = (input_tag.get('type') or 'text').lower()
+            payload[name] = input_tag.get('value', '')
             lowered = name.lower()
-
-            if input_type == "password" or "pass" in lowered:
+            if input_type == 'password' or 'pass' in lowered:
                 password_field = name
-            elif any(token in lowered for token in ("login", "user", "email", "username")):
+            elif any(token in lowered for token in ('login', 'user', 'email', 'username')):
                 username_field = name
 
         if not username_field or not password_field:
-            raise RuntimeError("Could not detect username/password fields in login form")
+            raise RuntimeError('Could not detect username/password fields in login form')
 
         payload[username_field] = self.settings.site_username
         payload[password_field] = self.settings.site_password
 
         post_response = self.session.post(action_url, data=payload, timeout=30)
         post_response.raise_for_status()
+        if 'login.php' in post_response.url.lower() and 'logout' not in post_response.text.lower():
+            raise RuntimeError('Site login failed. Check SITE_USERNAME and SITE_PASSWORD.')
 
     def _parse_service_requests(self, html: str, target_day: date) -> list[DeviceIncident]:
-        soup = BeautifulSoup(html, "lxml")
+        soup = BeautifulSoup(html, 'lxml')
         incidents: list[DeviceIncident] = []
 
-        for table in soup.find_all("table"):
-            headers = [
-                self._normalize_header(cell.get_text(" ", strip=True))
-                for cell in table.find_all("th")
-            ]
+        for table in soup.find_all('table'):
+            headers = [cell.get_text(' ', strip=True) for cell in table.find_all('th')]
             if not headers:
                 continue
-            if not any("дата" in header or "create" in header for header in headers):
+            if 'MAC / EUI' not in headers or len(headers) < 11:
                 continue
 
-            for row in table.find_all("tr"):
-                cells = [cell.get_text(" ", strip=True) for cell in row.find_all("td")]
-                if not cells or len(cells) != len(headers):
+            for row in table.find_all('tr'):
+                cells = row.find_all('td')
+                if len(cells) < len(headers):
                     continue
 
-                record = dict(zip(headers, cells))
-                created_at = self._extract_created_at(record)
+                values = [cell.get_text(' ', strip=True) for cell in cells]
+                created_at = self._parse_created_at(values[self.CREATED_INDEX])
                 if created_at is None or created_at.date() != target_day:
                     continue
 
-                uid = self._extract_uid(record)
+                uid = self._extract_uid(values[self.EUI_INDEX])
                 if not uid:
                     continue
 
-                external_id = self._extract_external_id(record, uid, created_at)
-                issue_type = self._extract_issue_type(record)
-                device_code = self._extract_device_code(record)
-                employee_name = self._extract_employee_name(record)
+                request_number = values[self.REQUEST_NUMBER_INDEX].strip()
+                issue_type = self._pick_issue_type(values[self.PROBLEM_INDEX], values[self.FAULT_INDEX])
+                source_url = self._extract_source_url(cells)
+                raw_text = '\n'.join(values)
 
-                raw_text = "\n".join(f"{key}: {value}" for key, value in record.items())
                 incidents.append(
                     DeviceIncident(
-                        source="site",
-                        external_id=external_id,
+                        source='site',
+                        external_id=request_number or f'{uid}:{created_at.isoformat()}',
                         created_at=created_at,
                         uid=uid,
                         issue_type=issue_type,
-                        device_code=device_code,
+                        device_code=values[self.SERIAL_INDEX].strip() or None,
                         employee_number=None,
-                        employee_name=employee_name,
+                        employee_name=values[self.CREATOR_INDEX].strip() or None,
                         reporter_username=None,
                         raw_text=raw_text,
+                        source_url=source_url,
                     )
                 )
 
         return incidents
 
-    def _extract_created_at(self, record: dict[str, str]) -> datetime | None:
-        for key, value in record.items():
-            if "дата" not in key and "create" not in key:
+    def _parse_created_at(self, value: str) -> datetime | None:
+        value = value.strip()
+        for fmt in ('%d.%m.%Y %H:%M', '%d.%m.%Y %H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
                 continue
-            for fmt in ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-                try:
-                    return datetime.strptime(value, fmt)
-                except ValueError:
-                    continue
         return None
 
-    def _extract_uid(self, record: dict[str, str]) -> str | None:
-        for key, value in record.items():
-            if "uid" in key:
-                return re.sub(r"\s+", "", value).lower()
-            uid = extract_uid_from_text(value)
-            if uid:
-                return uid
+    def _extract_uid(self, eui_value: str) -> str | None:
+        compact = re.sub(r'[^a-f0-9]', '', eui_value.strip().lower())
+        if len(compact) >= 16:
+            return compact[-16:]
         return None
 
-    def _extract_external_id(self, record: dict[str, str], uid: str, created_at: datetime) -> str:
-        for key, value in record.items():
-            if any(token in key for token in ("id", "номер", "request")):
-                compact = value.strip()
-                if compact:
-                    return compact
-        return f"{uid}:{created_at.isoformat()}"
+    def _pick_issue_type(self, problem: str, fault: str) -> str:
+        problem = problem.strip()
+        if problem and problem != '-':
+            return problem
+        fault = fault.strip()
+        if fault and fault != '-':
+            return fault
+        return 'service_request'
 
-    def _extract_issue_type(self, record: dict[str, str]) -> str:
-        for key, value in record.items():
-            if any(token in key for token in ("problem", "issue", "неисправ", "тип")):
-                return value
-        return "service_request"
-
-    def _extract_device_code(self, record: dict[str, str]) -> str | None:
-        for value in record.values():
-            if re.match(r"^[A-Z]\d?-?\d+$", value.replace(" ", "")):
-                return value.replace(" ", "")
-        return None
-
-    def _extract_employee_name(self, record: dict[str, str]) -> str | None:
-        for key, value in record.items():
-            if any(token in key for token in ("сотруд", "employee", "фио", "name")):
-                return value
-        return None
-
-    def _normalize_header(self, value: str) -> str:
-        return re.sub(r"\s+", " ", value.strip().lower())
+    def _extract_source_url(self, cells) -> str | None:
+        link = cells[-1].find('a', href=True)
+        if not link:
+            return None
+        requests_dir = urljoin(self.settings.site_base_url, 'views/service_requests/')
+        return urljoin(requests_dir, link['href'])

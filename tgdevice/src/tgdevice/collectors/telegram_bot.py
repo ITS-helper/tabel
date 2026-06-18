@@ -9,7 +9,7 @@ import requests
 
 from ..config import Settings
 from ..db import Database
-from ..parsers import parse_telegram_incident
+from ..parsers import looks_like_template_message, parse_telegram_incident
 
 
 class TelegramArchiver:
@@ -63,7 +63,7 @@ class TelegramArchiver:
             text=text,
         )
 
-        if chat_id == self.settings.telegram_source_chat_id and text:
+        if chat_id == self.settings.telegram_source_chat_id and text and looks_like_template_message(text):
             external_id = f"{chat_id}:{message_id}"
             parsed = parse_telegram_incident(
                 text,
@@ -83,14 +83,17 @@ class TelegramArchiver:
 
         self._set_offset(update_id + 1)
 
-    def send_message(self, text: str) -> None:
+    def send_message(self, text: str, *, parse_mode: str | None = None) -> None:
+        payload = {
+            "chat_id": self.settings.telegram_report_chat_id,
+            "text": text,
+            "disable_web_page_preview": True,
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
         response = requests.post(
             f"{self.base_url}/sendMessage",
-            json={
-                "chat_id": self.settings.telegram_report_chat_id,
-                "text": text,
-                "disable_web_page_preview": True,
-            },
+            json=payload,
             timeout=30,
         )
         response.raise_for_status()

@@ -35,6 +35,15 @@ def parse_message_datetime(value: str) -> datetime:
     raise ValueError(f"Unsupported date format: {value}")
 
 
+def looks_like_template_message(text: str) -> bool:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 6:
+        return False
+    if not lines[0].startswith("#"):
+        return False
+    return any(re.search(r"uid\s*[-: ]\s*[a-z0-9]+", line, flags=re.IGNORECASE) for line in lines)
+
+
 def parse_telegram_incident(
     text: str,
     *,
@@ -57,7 +66,7 @@ def parse_telegram_incident(
         return ParsedTelegramMessage(None, "Uid not found")
     uid = uid_match.group(1).lower()
 
-    device_code = _extract_after_dash(lines[3])
+    device_code = _extract_device_code(lines[3])
     employee_number = _extract_after_dash(lines[4])
     employee_name = lines[5].strip() if len(lines) >= 6 else None
     reporter_username = lines[6].strip() if len(lines) >= 7 else None
@@ -77,6 +86,15 @@ def parse_telegram_incident(
         ),
         None,
     )
+
+
+def _extract_device_code(value: str) -> str | None:
+    compact = re.sub(r"\s+", "", value.upper())
+    if re.fullmatch(r"W\d-?\d+", compact):
+        if "-" not in compact:
+            return compact[:2] + "-" + compact[2:]
+        return compact
+    return _extract_after_dash(value)
 
 
 def _extract_after_dash(value: str) -> str | None:

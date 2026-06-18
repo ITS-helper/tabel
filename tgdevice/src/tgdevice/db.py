@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     employee_name TEXT,
     reporter_username TEXT,
     raw_text TEXT NOT NULL,
+    source_url TEXT,
     PRIMARY KEY (source, external_id)
 );
 
@@ -72,11 +73,14 @@ class Database:
     def init(self) -> None:
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            columns = {row['name'] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
+            if 'source_url' not in columns:
+                conn.execute("ALTER TABLE incidents ADD COLUMN source_url TEXT")
 
     def get_state(self, key: str) -> str | None:
         with self.connect() as conn:
             row = conn.execute("SELECT value FROM bot_state WHERE key = ?", (key,)).fetchone()
-            return row["value"] if row else None
+            return row['value'] if row else None
 
     def set_state(self, key: str, value: str) -> None:
         with self.connect() as conn:
@@ -122,8 +126,8 @@ class Database:
                 """
                 INSERT INTO incidents(
                     source, external_id, created_at, uid, issue_type, device_code,
-                    employee_number, employee_name, reporter_username, raw_text
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    employee_number, employee_name, reporter_username, raw_text, source_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(source, external_id) DO UPDATE SET
                     created_at = excluded.created_at,
                     uid = excluded.uid,
@@ -132,7 +136,8 @@ class Database:
                     employee_number = excluded.employee_number,
                     employee_name = excluded.employee_name,
                     reporter_username = excluded.reporter_username,
-                    raw_text = excluded.raw_text
+                    raw_text = excluded.raw_text,
+                    source_url = excluded.source_url
                 """,
                 (
                     incident.source,
@@ -145,6 +150,7 @@ class Database:
                     incident.employee_name,
                     incident.reporter_username,
                     incident.raw_text,
+                    incident.source_url,
                 ),
             )
 
@@ -198,18 +204,19 @@ class Database:
                 """,
                 (start, end),
             ).fetchone()
-        return int(row["total"])
+        return int(row['total'])
 
     def _row_to_incident(self, row: sqlite3.Row) -> DeviceIncident:
         return DeviceIncident(
-            source=row["source"],
-            external_id=row["external_id"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            uid=row["uid"],
-            issue_type=row["issue_type"],
-            device_code=row["device_code"],
-            employee_number=row["employee_number"],
-            employee_name=row["employee_name"],
-            reporter_username=row["reporter_username"],
-            raw_text=row["raw_text"],
+            source=row['source'],
+            external_id=row['external_id'],
+            created_at=datetime.fromisoformat(row['created_at']),
+            uid=row['uid'],
+            issue_type=row['issue_type'],
+            device_code=row['device_code'],
+            employee_number=row['employee_number'],
+            employee_name=row['employee_name'],
+            reporter_username=row['reporter_username'],
+            raw_text=row['raw_text'],
+            source_url=row['source_url'],
         )

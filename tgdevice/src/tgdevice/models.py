@@ -16,6 +16,7 @@ class DeviceIncident:
     employee_name: str | None
     reporter_username: str | None
     raw_text: str
+    source_url: str | None = None
 
 
 @dataclass(slots=True)

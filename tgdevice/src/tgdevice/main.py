@@ -9,7 +9,7 @@ from .collectors.telegram_bot import TelegramArchiver
 from .collectors.telegram_telethon import TelethonHistoryCollector
 from .config import load_settings
 from .db import Database
-from .report import build_daily_report
+from .report import build_daily_report_html, build_daily_report_plain
 
 
 def main() -> None:
@@ -23,6 +23,7 @@ def main() -> None:
 
     subparsers.add_parser("poll-updates")
     subparsers.add_parser("telethon-login")
+    subparsers.add_parser("telethon-login-qr")
     subparsers.add_parser("telethon-string-session")
 
     import_history_parser = subparsers.add_parser("import-history")
@@ -51,7 +52,7 @@ def main() -> None:
 
     if args.command in {"archive-updates", "poll-updates", "report", "run-daily"}:
         _require_setting(settings.telegram_bot_token, "TELEGRAM_BOT_TOKEN")
-    if args.command in {"telethon-login", "telethon-string-session", "import-history"}:
+    if args.command in {"telethon-login", "telethon-login-qr", "telethon-string-session", "import-history"}:
         _require_setting(settings.telethon_api_id, "TELETHON_API_ID")
         _require_setting(settings.telethon_api_hash, "TELETHON_API_HASH")
     if args.command in {"report", "run-daily"} and getattr(args, "send", True):
@@ -78,6 +79,11 @@ def main() -> None:
         print("Telethon session saved")
         return
 
+    if args.command == "telethon-login-qr":
+        qr_path = telethon_collector.login_qr()
+        print(f"Telethon QR session saved via {qr_path}")
+        return
+
     if args.command == "telethon-string-session":
         print(telethon_collector.export_string_session())
         return
@@ -96,10 +102,10 @@ def main() -> None:
 
     if args.command == "report":
         target_day = _resolve_day(args.date, settings.timezone)
-        report_text = build_daily_report(db, target_day)
+        report_text = build_daily_report_plain(db, target_day)
         print(report_text)
         if args.send:
-            telegram.send_message(report_text)
+            telegram.send_message(build_daily_report_html(db, target_day), parse_mode="HTML")
         return
 
     if args.command == "run-daily":
@@ -108,9 +114,9 @@ def main() -> None:
             telegram.archive_once(limit=100)
         if not args.skip_site_fetch:
             site.collect_for_day(target_day)
-        report_text = build_daily_report(db, target_day)
+        report_text = build_daily_report_plain(db, target_day)
         print(report_text)
-        telegram.send_message(report_text)
+        telegram.send_message(build_daily_report_html(db, target_day), parse_mode="HTML")
         return
 
 
