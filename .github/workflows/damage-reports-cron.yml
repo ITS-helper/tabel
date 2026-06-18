@@ -29,6 +29,7 @@ concurrency:
 jobs:
   refresh-damage-reports:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       TZ: Europe/Moscow
     steps:

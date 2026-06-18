@@ -46,15 +46,13 @@ class TelethonHistoryCollector:
         processed = 0
         async with self._client() as client:
             entity = await client.get_entity(int(self.settings.telegram_source_chat_id))
-            async for message in client.iter_messages(entity, reverse=True):
+            async for message in client.iter_messages(entity):
                 if message.date is None:
                     continue
                 message_dt = message.date.astimezone(timezone.utc)
-                if message_dt < start_utc:
-                    continue
                 if message_dt >= end_utc:
-                    if processed == 0:
-                        continue
+                    continue
+                if message_dt < start_utc:
                     break
 
                 text = message.message or ""
