@@ -82,6 +82,38 @@ jobs:
           REPORT_HOUR=08:00
           EOF
 
+      - name: Validate restored Telethon session
+        working-directory: tgdevice
+        shell: bash
+        run: |
+          ls -l ../data/telethon_user.session
+          ../.venv/bin/python - <<'PY'
+          import asyncio
+          from tgdevice.config import load_settings
+          from telethon import TelegramClient
+
+          settings = load_settings(".env")
+
+          async def main():
+              client = TelegramClient(
+                  settings.telethon_session_name,
+                  int(settings.telethon_api_id),
+                  settings.telethon_api_hash,
+              )
+              await client.connect()
+              authorized = await client.is_user_authorized()
+              await client.disconnect()
+              if not authorized:
+                  raise RuntimeError(
+                      "Telethon session is present but not authorized. "
+                      "Recreate TELETHON_SESSION_B64 from a fresh local telethon-login "
+                      "using the same TELETHON_API_ID and TELETHON_API_HASH as the GitHub secrets."
+                  )
+              print("Telethon session is authorized")
+
+          asyncio.run(main())
+          PY
+
       - name: Collect incidents and build report payloads
         working-directory: tgdevice
         shell: bash
