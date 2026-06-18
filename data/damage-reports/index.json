@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-18T09:19:06",
+  "generated_at": "2026-06-18T09:27:33",
   "latest_date": "2026-06-17",
   "dates": [
     {
@@ -7,8 +7,8 @@
       "title": "Повреждения от 17.06.2026",
       "counts": {
         "telegram": 7,
-        "site": 0,
-        "total_devices": 7
+        "site": 5,
+        "total_devices": 11
       }
     },
     {
