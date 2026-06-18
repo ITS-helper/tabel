@@ -1,23 +1,144 @@
 {
   "date": "2026-06-16",
   "title": "Повреждения от 16.06.2026",
-  "generated_at": "2026-06-18T09:47:45",
+  "generated_at": "2026-06-18T13:18:01",
   "counts": {
-    "telegram": 1,
-    "site": 0,
-    "total_devices": 1
+    "telegram": 7,
+    "site": 6,
+    "total_devices": 13
   },
   "telegram": [
     {
       "source": "telegram",
-      "external_id": "-1001169689924:263472",
-      "created_at": "2026-06-16T19:00:00",
-      "time": "19:00",
-      "uid": "a40911fefff7a608",
-      "uid_short": "a409",
+      "external_id": "-1001169689924:263249",
+      "created_at": "2026-06-16T08:52:00",
+      "time": "08:52",
+      "uid": "000d11fefff7a608",
+      "uid_short": "000d",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/263249"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263301",
+      "created_at": "2026-06-16T11:22:00",
+      "time": "11:22",
+      "uid": "bc1b11fefff7a608",
+      "uid_short": "bc1b",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/263301"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263347",
+      "created_at": "2026-06-16T13:14:00",
+      "time": "13:14",
+      "uid": "d81c11fefff7a608",
+      "uid_short": "d81c",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/263347"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263361",
+      "created_at": "2026-06-16T13:36:00",
+      "time": "13:36",
+      "uid": "c00a11fefff7a608",
+      "uid_short": "c00a",
       "issue_type": "Падение",
-      "source_url": "https://t.me/c/1169689924/263472"
+      "source_url": "https://t.me/c/1169689924/263361"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263367",
+      "created_at": "2026-06-16T13:56:00",
+      "time": "13:56",
+      "uid": "040711fefff7a608",
+      "uid_short": "0407",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/263367"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263468",
+      "created_at": "2026-06-16T20:16:00",
+      "time": "20:16",
+      "uid": "980111fefff7a608",
+      "uid_short": "9801",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/263468"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263471",
+      "created_at": "2026-06-16T20:30:00",
+      "time": "20:30",
+      "uid": "680811fefff7a608",
+      "uid_short": "6808",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/263471"
     }
   ],
-  "site": []
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0011",
+      "created_at": "2026-06-16T14:33:00",
+      "time": "14:33",
+      "uid": "1c0111fefff7a608",
+      "uid_short": "1c01",
+      "issue_type": "Ошибка открытия соединения при открытии смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2924"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0012",
+      "created_at": "2026-06-16T14:35:00",
+      "time": "14:35",
+      "uid": "b01c11fefff7a608",
+      "uid_short": "b01c",
+      "issue_type": "Ошибка открытия соединения при закрытии смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2925"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0013",
+      "created_at": "2026-06-16T14:42:00",
+      "time": "14:42",
+      "uid": "50bc8cfeff29e748",
+      "uid_short": "50bc",
+      "issue_type": "Загрязнены контакты питания",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2926"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0014",
+      "created_at": "2026-06-16T14:44:00",
+      "time": "14:44",
+      "uid": "24fd10fefff7a608",
+      "uid_short": "24fd",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2927"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0015",
+      "created_at": "2026-06-16T14:45:00",
+      "time": "14:45",
+      "uid": "dc1b11fefff7a608",
+      "uid_short": "dc1b",
+      "issue_type": "Дисплей неисправен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2928"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0016",
+      "created_at": "2026-06-16T14:47:00",
+      "time": "14:47",
+      "uid": "b80611fefff7a608",
+      "uid_short": "b806",
+      "issue_type": "Не включаются, не реагируют на среднюю кнопку",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2929"
+    }
+  ]
 }
