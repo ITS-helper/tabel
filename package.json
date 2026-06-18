@@ -7,6 +7,7 @@
     "damage:export": "py -3 scripts/export-damage-reports.py",
     "ble-cache": "node scripts/push-ble-cache.mjs",
     "ble-field-pack": "node scripts/build-ble-field-pack.mjs",
+    "ble-field-pack:publish": "node scripts/publish-ble-field-pack.mjs",
     "ble-genplan": "node scripts/build-ble-genplan.mjs",
     "ble-field-pack:tag-only": "node scripts/build-ble-field-pack.mjs --tag-only",
     "seed-auth": "node scripts/seed-auth-users.mjs",

@@ -1,0 +1,53 @@
+name: BLE field pack refresh
+
+on:
+  schedule:
+    - cron: "15 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ble-field-pack-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh BLE cache snapshot
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/push-ble-cache.mjs
+
+      - name: Build BLE field pack
+        run: node scripts/build-ble-field-pack.mjs
+
+      - name: Publish BLE field pack asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/publish-ble-field-pack.mjs
+
+      - name: Commit refreshed metadata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/ble-map-cache.json data/ble-map-cache-meta.json data/ble-field-pack-meta.json
+          if git diff --cached --quiet; then
+            echo "BLE cache/pack metadata unchanged; no commit"
+            exit 0
+          fi
+          git commit -m "chore: auto-refresh BLE field pack metadata"
+          git push origin HEAD:main

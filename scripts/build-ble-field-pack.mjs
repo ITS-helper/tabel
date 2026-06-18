@@ -12,12 +12,27 @@ import { zipSync, strToU8 } from "fflate";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
-const WORKER = "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy";
 const USER = process.env.BLE_AUTO_USER || "impl_dept";
 const PASS = process.env.BLE_AUTO_PASS || "impl_dept_vsm_2024";
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://owcuvcshwtivqueftiuk.supabase.co";
+const FIELD_PACK_URL = process.env.BLE_FIELD_PACK_URL || "data/ble-field-pack.zip";
 const TAG_ONLY = process.argv.includes("--tag-only");
 const CONCURRENCY = Number(process.env.BLE_PACK_CONCURRENCY || 12) || 12;
 const MAX_PHOTO_BYTES = 2.5 * 1024 * 1024;
+const API_BASES = [
+  {
+    id: "supabase",
+    base: `${SUPABASE_URL}/functions/v1/ble-map-proxy`,
+  },
+  {
+    id: "backend",
+    base: "https://backend.vsm.workwatch.pro",
+  },
+  {
+    id: "worker",
+    base: "https://raspy-sound-6f18.kejexu8hem1.workers.dev/proxy",
+  },
+];
 
 const PHOTO_TAG_KEYS = ["ble_image_url", "bleImageUrl", "ble_image"];
 const PHOTO_PLACE_KEYS = ["location_image_url", "locationImageUrl", "location_image"];
@@ -82,10 +97,33 @@ function collectUrls(raw) {
   return [...urls];
 }
 
-async function workerFetch(path, init = {}) {
-  const res = await fetch(`${WORKER}${path}`, init);
-  if (!res.ok) throw new Error(`${path} HTTP ${res.status}`);
+async function apiFetch(base, apiPath, init = {}) {
+  const res = await fetch(`${base}${apiPath}`, init);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`${apiPath} HTTP ${res.status}${detail ? `: ${detail.slice(0, 120)}` : ""}`);
+  }
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("json")) {
+    const text = await res.text();
+    throw new Error(`${apiPath} not_json: ${text.slice(0, 80)}`);
+  }
   return res.json();
+}
+
+async function fetchWithFailover(apiPath, init = {}) {
+  let lastErr = null;
+  for (const { id, base } of API_BASES) {
+    try {
+      const data = await apiFetch(base, apiPath, init);
+      console.log(`[ble-field-pack] OK via ${id}: ${apiPath}`);
+      return data;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[ble-field-pack] ${id} fail:`, e.message || e);
+    }
+  }
+  throw lastErr || new Error("all_transports_failed");
 }
 
 async function maybeCompress(buf) {
@@ -132,7 +170,7 @@ async function poolMap(items, limit, fn) {
 
 async function main() {
   const tokenBody = new URLSearchParams({ username: USER, password: PASS });
-  const tok = await workerFetch("/api/v1/token", {
+  const tok = await fetchWithFailover("/api/v1/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: tokenBody,
@@ -141,9 +179,9 @@ async function main() {
   if (!token) throw new Error("no_token");
   const auth = { Authorization: `Bearer ${token}` };
 
-  const me = await workerFetch("/api/v1/user/me/", { headers: auth });
+  const me = await fetchWithFailover("/api/v1/user/me/", { headers: auth });
   const companyId = me.companyId ?? me.company_id ?? 1;
-  const raw = await workerFetch(`/api/v1/map/ble/${companyId}`, { headers: auth });
+  const raw = await fetchWithFailover(`/api/v1/map/ble/${companyId}`, { headers: auth });
   if (!Array.isArray(raw) || !raw.length) throw new Error("empty_ble_list");
 
   const slim = raw.map(slimPoint).filter(Boolean);
@@ -209,7 +247,7 @@ async function main() {
     metaPath,
     JSON.stringify(
       {
-        packUrl: "data/ble-field-pack.zip",
+        packUrl: FIELD_PACK_URL,
         updated_at: savedAt,
         company_id: companyId,
         markerCount: slim.length,
