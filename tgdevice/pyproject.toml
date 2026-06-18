@@ -1,0 +1,22 @@
+[project]
+name = "tgdevice"
+version = "0.1.0"
+description = "Daily Telegram report for broken devices from Telegram and device.workwatch.pro"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12.3",
+  "lxml>=5.2.2",
+  "python-dotenv>=1.0.1",
+  "requests>=2.32.3",
+  "telethon>=1.36.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
