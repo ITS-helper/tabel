@@ -1,6 +1,10 @@
 name: Damage reports cloud refresh
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/damage-reports-cron.yml"
   schedule:
     - cron: "15 5 * * *"
   workflow_dispatch:
