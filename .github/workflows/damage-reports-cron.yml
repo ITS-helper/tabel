@@ -64,21 +64,21 @@ jobs:
             exit 1
           fi
           cat > tgdevice/.env <<'EOF'
-TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-TELEGRAM_REPORT_CHAT_ID=${{ secrets.TELEGRAM_REPORT_CHAT_ID }}
-TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
-TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
-TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
-TELETHON_STRING_SESSION=${{ secrets.TELETHON_STRING_SESSION }}
-SITE_BASE_URL=https://device.workwatch.pro/
-SITE_LOGIN_PATH=/login.php
-SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php
-SITE_USERNAME=${{ secrets.SITE_USERNAME }}
-SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}
-DATABASE_PATH=../data/tgdevice.sqlite3
-TIMEZONE=Europe/Moscow
-REPORT_HOUR=08:00
-EOF
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_REPORT_CHAT_ID=${{ secrets.TELEGRAM_REPORT_CHAT_ID }}
+          TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
+          TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
+          TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
+          TELETHON_STRING_SESSION=${{ secrets.TELETHON_STRING_SESSION }}
+          SITE_BASE_URL=https://device.workwatch.pro/
+          SITE_LOGIN_PATH=/login.php
+          SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php
+          SITE_USERNAME=${{ secrets.SITE_USERNAME }}
+          SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}
+          DATABASE_PATH=../data/tgdevice.sqlite3
+          TIMEZONE=Europe/Moscow
+          REPORT_HOUR=08:00
+          EOF
 
       - name: Validate restored Telethon session
         working-directory: tgdevice
