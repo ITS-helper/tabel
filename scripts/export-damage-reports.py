@@ -59,9 +59,11 @@ def _parse_datetime(raw: str) -> datetime:
 def _load_incidents(db_path: Path) -> list[Incident]:
     con = sqlite3.connect(db_path)
     try:
+        columns = {row[1] for row in con.execute("PRAGMA table_info(incidents)").fetchall()}
+        source_url_expr = "coalesce(source_url, '')" if "source_url" in columns else "''"
         rows = con.execute(
-            """
-            select source, external_id, created_at, uid, issue_type, coalesce(source_url, '')
+            f"""
+            select source, external_id, created_at, uid, issue_type, {source_url_expr}
             from incidents
             where uid is not null and trim(uid) <> ''
             order by created_at asc, source asc, external_id asc
