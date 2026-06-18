@@ -88,6 +88,9 @@ Build report and send it to Telegram:
 py -3 -m tgdevice.main report --date 2026-06-17 --send
 ```
 
+`TELEGRAM_REPORT_CHAT_ID` may contain one destination or several destinations separated by commas.
+Supported forms: `-100...`, `-100.../4`, `https://t.me/c/.../4`.
+
 Full daily run:
 
 ```powershell

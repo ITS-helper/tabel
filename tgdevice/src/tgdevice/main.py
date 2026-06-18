@@ -56,7 +56,10 @@ def main() -> None:
         _require_setting(settings.telethon_api_id, "TELETHON_API_ID")
         _require_setting(settings.telethon_api_hash, "TELETHON_API_HASH")
     if args.command in {"report", "run-daily"} and getattr(args, "send", True):
-        _require_setting(settings.telegram_report_chat_id, "TELEGRAM_REPORT_CHAT_ID")
+        if not settings.report_destinations():
+            raise RuntimeError(
+                "Missing required setting: TELEGRAM_REPORT_CHAT_ID or TELEGRAM_REPORT_CHAT_IDS"
+            )
     if args.command in {"fetch-site", "run-daily"}:
         _require_setting(settings.site_username, "SITE_USERNAME")
         _require_setting(settings.site_password, "SITE_PASSWORD")

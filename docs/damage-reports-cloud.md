@@ -21,6 +21,11 @@ Schedule: every day at `05:15 UTC`, which is `08:15 Europe/Moscow`.
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_REPORT_CHAT_ID`
+  One destination or several destinations separated by commas.
+  Supported forms:
+  `-1002186739705`
+  `-1002186739705/4`
+  `https://t.me/c/2186739705/4`
 - `TELEGRAM_SOURCE_CHAT_ID`
 - `TELETHON_API_ID`
 - `TELETHON_API_HASH`

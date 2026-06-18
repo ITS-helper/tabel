@@ -84,22 +84,30 @@ class TelegramArchiver:
         self._set_offset(update_id + 1)
 
     def send_message(self, text: str, *, parse_mode: str | None = None) -> None:
-        payload = {
-            "chat_id": self.settings.telegram_report_chat_id,
-            "text": text,
-            "disable_web_page_preview": True,
-        }
-        if parse_mode:
-            payload["parse_mode"] = parse_mode
-        response = requests.post(
-            f"{self.base_url}/sendMessage",
-            json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not payload.get("ok"):
-            raise RuntimeError(f"Telegram sendMessage failed: {payload}")
+        errors: list[str] = []
+        for destination in self.settings.report_destinations():
+            payload = {
+                "chat_id": destination.chat_id,
+                "text": text,
+                "disable_web_page_preview": True,
+            }
+            if destination.message_thread_id is not None:
+                payload["message_thread_id"] = destination.message_thread_id
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
+            response = requests.post(
+                f"{self.base_url}/sendMessage",
+                json=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+            body = response.json()
+            if not body.get("ok"):
+                errors.append(
+                    f"{destination.chat_id}/{destination.message_thread_id or '-'}: {body}"
+                )
+        if errors:
+            raise RuntimeError(f"Telegram sendMessage failed: {'; '.join(errors)}")
 
     def _get_offset(self) -> int | None:
         value = self.db.get_state("telegram_update_offset")
