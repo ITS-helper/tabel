@@ -20,6 +20,7 @@ on:
         type: boolean
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -135,6 +136,8 @@ jobs:
 
       - name: Commit and push if reports changed
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -145,3 +148,4 @@ jobs:
           fi
           git commit -m "chore: refresh damage reports for ${{ steps.target-date.outputs.target_date }}"
           git push origin HEAD:main
+          gh workflow run pages.yml --ref main
