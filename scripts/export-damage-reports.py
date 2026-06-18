@@ -118,6 +118,40 @@ def _normalize_source_url(source: str, source_url: str, external_id: str = "") -
     return value
 
 
+def _load_existing_summaries(output_dir: Path) -> dict[str, dict[str, Any]]:
+    summaries: dict[str, dict[str, Any]] = {}
+    if not output_dir.exists():
+        return summaries
+
+    for path in output_dir.glob("*.json"):
+        if path.name == "index.json":
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        day = str(payload.get("date") or path.stem).strip()
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            continue
+
+        counts = payload.get("counts")
+        if not isinstance(counts, dict):
+            continue
+
+        summaries[day] = {
+            "date": day,
+            "title": payload.get("title") or f"Повреждения от {day}",
+            "counts": {
+                "telegram": int(counts.get("telegram", 0) or 0),
+                "site": int(counts.get("site", 0) or 0),
+                "total_devices": int(counts.get("total_devices", 0) or 0),
+            },
+        }
+
+    return summaries
+
+
 def export_reports(db_path: Path, output_dir: Path) -> None:
     incidents = _load_incidents(db_path)
     by_day: dict[str, list[Incident]] = defaultdict(list)
@@ -125,20 +159,20 @@ def export_reports(db_path: Path, output_dir: Path) -> None:
         by_day[item.day_key].append(item)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    available_dates = sorted(by_day.keys(), reverse=True)
-    summaries: list[dict[str, Any]] = []
+    summaries_by_day = _load_existing_summaries(output_dir)
 
-    for day in available_dates:
+    for day in sorted(by_day.keys()):
         payload = _build_day_payload(day, by_day[day])
         target = output_dir / f"{day}.json"
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        summaries.append(
-            {
-                "date": day,
-                "title": payload["title"],
-                "counts": payload["counts"],
-            }
-        )
+        summaries_by_day[day] = {
+            "date": day,
+            "title": payload["title"],
+            "counts": payload["counts"],
+        }
+
+    available_dates = sorted(summaries_by_day.keys(), reverse=True)
+    summaries = [summaries_by_day[day] for day in available_dates]
 
     index_payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),

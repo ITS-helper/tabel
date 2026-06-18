@@ -1,0 +1,116 @@
+name: Damage reports cloud refresh
+
+on:
+  schedule:
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "Report date in YYYY-MM-DD. Empty means yesterday in Europe/Moscow."
+        required: false
+        type: string
+      send_telegram:
+        description: "Send the Telegram report after refresh."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: damage-reports-cron
+  cancel-in-progress: false
+
+jobs:
+  refresh-damage-reports:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Moscow
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Prepare virtualenv
+        run: |
+          python -m venv .venv
+          ./.venv/bin/python -m pip install --upgrade pip
+          ./.venv/bin/python -m pip install -e ./tgdevice
+
+      - name: Resolve target date
+        id: target-date
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.target_date }}" ]; then
+            target_date="${{ github.event.inputs.target_date }}"
+          else
+            target_date="$(date -d 'yesterday' +%F)"
+          fi
+          echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
+          echo "Using target date: $target_date"
+
+      - name: Restore Telethon session
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.TELETHON_SESSION_B64 }}" ]; then
+            echo "Missing TELETHON_SESSION_B64 secret" >&2
+            exit 1
+          fi
+          mkdir -p data
+          printf '%s' '${{ secrets.TELETHON_SESSION_B64 }}' | base64 -d > data/telethon_user.session
+
+      - name: Write tgdevice env file
+        shell: bash
+        run: |
+          cat > tgdevice/.env <<'EOF'
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_REPORT_CHAT_ID=${{ secrets.TELEGRAM_REPORT_CHAT_ID }}
+          TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
+          TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
+          TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
+          TELETHON_SESSION_NAME=../data/telethon_user
+          SITE_BASE_URL=https://device.workwatch.pro/
+          SITE_LOGIN_PATH=/login.php
+          SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php
+          SITE_USERNAME=${{ secrets.SITE_USERNAME }}
+          SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}
+          DATABASE_PATH=../data/tgdevice.sqlite3
+          TIMEZONE=Europe/Moscow
+          REPORT_HOUR=08:00
+          EOF
+
+      - name: Collect incidents and build report payloads
+        working-directory: tgdevice
+        shell: bash
+        run: |
+          ../.venv/bin/python -m tgdevice.main init-db
+          ../.venv/bin/python -m tgdevice.main import-history --date "${{ steps.target-date.outputs.target_date }}"
+          ../.venv/bin/python -m tgdevice.main fetch-site --date "${{ steps.target-date.outputs.target_date }}"
+
+      - name: Send Telegram report
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.send_telegram == 'true' }}
+        working-directory: tgdevice
+        shell: bash
+        run: |
+          ../.venv/bin/python -m tgdevice.main report --date "${{ steps.target-date.outputs.target_date }}" --send
+
+      - name: Export static JSON for Pages
+        shell: bash
+        run: |
+          ./.venv/bin/python scripts/export-damage-reports.py --db data/tgdevice.sqlite3 --out data/damage-reports
+
+      - name: Commit and push if reports changed
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/damage-reports
+          if git diff --cached --quiet; then
+            echo "Damage reports unchanged"
+            exit 0
+          fi
+          git commit -m "chore: refresh damage reports for ${{ steps.target-date.outputs.target_date }}"
+          git push origin HEAD:main
