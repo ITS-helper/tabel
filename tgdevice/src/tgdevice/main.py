@@ -23,6 +23,7 @@ def main() -> None:
 
     subparsers.add_parser("poll-updates")
     subparsers.add_parser("telethon-login")
+    subparsers.add_parser("telethon-string-session")
 
     import_history_parser = subparsers.add_parser("import-history")
     import_history_parser.add_argument("--date", default=None)
@@ -50,7 +51,7 @@ def main() -> None:
 
     if args.command in {"archive-updates", "poll-updates", "report", "run-daily"}:
         _require_setting(settings.telegram_bot_token, "TELEGRAM_BOT_TOKEN")
-    if args.command in {"telethon-login", "import-history"}:
+    if args.command in {"telethon-login", "telethon-string-session", "import-history"}:
         _require_setting(settings.telethon_api_id, "TELETHON_API_ID")
         _require_setting(settings.telethon_api_hash, "TELETHON_API_HASH")
     if args.command in {"report", "run-daily"} and getattr(args, "send", True):
@@ -75,6 +76,10 @@ def main() -> None:
     if args.command == "telethon-login":
         telethon_collector.login()
         print("Telethon session saved")
+        return
+
+    if args.command == "telethon-string-session":
+        print(telethon_collector.export_string_session())
         return
 
     if args.command == "import-history":

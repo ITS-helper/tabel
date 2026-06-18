@@ -52,51 +52,45 @@ jobs:
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
           echo "Using target date: $target_date"
 
-      - name: Restore Telethon session
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.TELETHON_SESSION_B64 }}" ]; then
-            echo "Missing TELETHON_SESSION_B64 secret" >&2
-            exit 1
-          fi
-          mkdir -p data
-          printf '%s' '${{ secrets.TELETHON_SESSION_B64 }}' | base64 -d > data/telethon_user.session
-
       - name: Write tgdevice env file
         shell: bash
         run: |
+          if [ -z "${{ secrets.TELETHON_STRING_SESSION }}" ]; then
+            echo "Missing TELETHON_STRING_SESSION secret" >&2
+            exit 1
+          fi
           cat > tgdevice/.env <<'EOF'
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_REPORT_CHAT_ID=${{ secrets.TELEGRAM_REPORT_CHAT_ID }}
-          TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
-          TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
-          TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
-          TELETHON_SESSION_NAME=../data/telethon_user
-          SITE_BASE_URL=https://device.workwatch.pro/
-          SITE_LOGIN_PATH=/login.php
-          SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php
-          SITE_USERNAME=${{ secrets.SITE_USERNAME }}
-          SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}
-          DATABASE_PATH=../data/tgdevice.sqlite3
-          TIMEZONE=Europe/Moscow
-          REPORT_HOUR=08:00
-          EOF
+TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+TELEGRAM_REPORT_CHAT_ID=${{ secrets.TELEGRAM_REPORT_CHAT_ID }}
+TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
+TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
+TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
+TELETHON_STRING_SESSION=${{ secrets.TELETHON_STRING_SESSION }}
+SITE_BASE_URL=https://device.workwatch.pro/
+SITE_LOGIN_PATH=/login.php
+SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php
+SITE_USERNAME=${{ secrets.SITE_USERNAME }}
+SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}
+DATABASE_PATH=../data/tgdevice.sqlite3
+TIMEZONE=Europe/Moscow
+REPORT_HOUR=08:00
+EOF
 
       - name: Validate restored Telethon session
         working-directory: tgdevice
         shell: bash
         run: |
-          ls -l ../data/telethon_user.session
           ../.venv/bin/python - <<'PY'
           import asyncio
           from tgdevice.config import load_settings
           from telethon import TelegramClient
+          from telethon.sessions import StringSession
 
           settings = load_settings(".env")
 
           async def main():
               client = TelegramClient(
-                  settings.telethon_session_name,
+                  StringSession(settings.telethon_string_session),
                   int(settings.telethon_api_id),
                   settings.telethon_api_hash,
               )
@@ -105,11 +99,11 @@ jobs:
               await client.disconnect()
               if not authorized:
                   raise RuntimeError(
-                      "Telethon session is present but not authorized. "
-                      "Recreate TELETHON_SESSION_B64 from a fresh local telethon-login "
-                      "using the same TELETHON_API_ID and TELETHON_API_HASH as the GitHub secrets."
+                      "TELETHON_STRING_SESSION is present but not authorized. "
+                      "Regenerate it with tgdevice.main telethon-string-session using "
+                      "the same TELETHON_API_ID and TELETHON_API_HASH as the GitHub secrets."
                   )
-              print("Telethon session is authorized")
+              print("Telethon string session is authorized")
 
           asyncio.run(main())
           PY

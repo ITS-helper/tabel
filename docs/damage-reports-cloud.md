@@ -8,7 +8,7 @@ Workflow: [`.github/workflows/damage-reports-cron.yml`](../.github/workflows/dam
 
 It does this:
 
-1. Restores a Telethon session from GitHub Secrets.
+1. Restores a Telethon string session from GitHub Secrets.
 2. Imports Telegram history for the target day.
 3. Fetches `device.workwatch.pro` incidents for the same day.
 4. Sends the Telegram report.
@@ -24,23 +24,23 @@ Schedule: every day at `05:15 UTC`, which is `08:15 Europe/Moscow`.
 - `TELEGRAM_SOURCE_CHAT_ID`
 - `TELETHON_API_ID`
 - `TELETHON_API_HASH`
-- `TELETHON_SESSION_B64`
+- `TELETHON_STRING_SESSION`
 - `SITE_USERNAME`
 - `SITE_PASSWORD`
 
-## How to prepare `TELETHON_SESSION_B64`
+## How to prepare `TELETHON_STRING_SESSION`
 
-Create or refresh the local session first, then encode it:
+Create or refresh the local session first, then export it as a Telethon string session:
 
 ```powershell
 cd D:\tabel\tgdevice
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\python.exe -m tgdevice.main telethon-login
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("D:\tabel\data\telethon_user.session"))
+.\.venv\Scripts\python.exe -m tgdevice.main telethon-string-session
 ```
 
-Copy the printed Base64 string into the GitHub secret `TELETHON_SESSION_B64`.
+Copy the printed string into the GitHub secret `TELETHON_STRING_SESSION`.
 
 ## Manual backfill
 

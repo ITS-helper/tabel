@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 
 from ..config import Settings
 from ..db import Database
@@ -19,12 +20,21 @@ class TelethonHistoryCollector:
     def login(self) -> None:
         asyncio.run(self._login())
 
+    def export_string_session(self) -> str:
+        return asyncio.run(self._export_string_session())
+
     def import_day(self, target_day: date) -> int:
         return asyncio.run(self._import_day(target_day))
 
     async def _login(self) -> None:
         async with self._client() as client:
             await client.start()
+
+    async def _export_string_session(self) -> str:
+        async with self._client() as client:
+            if not await client.is_user_authorized():
+                await client.start()
+            return StringSession.save(client.session)
 
     async def _import_day(self, target_day: date) -> int:
         tz = ZoneInfo(self.settings.timezone)
@@ -73,8 +83,13 @@ class TelethonHistoryCollector:
         return processed
 
     def _client(self) -> TelegramClient:
+        session = (
+            StringSession(self.settings.telethon_string_session)
+            if self.settings.telethon_string_session
+            else self.settings.telethon_session_name
+        )
         return TelegramClient(
-            self.settings.telethon_session_name,
+            session,
             int(self.settings.telethon_api_id),
             self.settings.telethon_api_hash,
         )

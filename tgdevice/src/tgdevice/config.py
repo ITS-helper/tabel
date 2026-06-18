@@ -15,6 +15,7 @@ class Settings:
     telethon_api_id: str
     telethon_api_hash: str
     telethon_session_name: str
+    telethon_string_session: str
     site_base_url: str
     site_login_path: str
     site_service_requests_path: str
@@ -36,6 +37,7 @@ def load_settings(env_path: str | None = None) -> Settings:
         telethon_api_id=os.getenv("TELETHON_API_ID", ""),
         telethon_api_hash=os.getenv("TELETHON_API_HASH", ""),
         telethon_session_name=os.getenv("TELETHON_SESSION_NAME", "./data/telethon_user"),
+        telethon_string_session=os.getenv("TELETHON_STRING_SESSION", ""),
         site_base_url=os.getenv("SITE_BASE_URL", "https://device.workwatch.pro/"),
         site_login_path=os.getenv("SITE_LOGIN_PATH", "/login.php"),
         site_service_requests_path=os.getenv(
