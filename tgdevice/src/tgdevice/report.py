@@ -120,7 +120,7 @@ def build_daily_report_html(db: Database, target_day: date) -> str:
 
 
 def _count_total_devices(telegram_incidents: list[DeviceIncident], site_incidents: list[DeviceIncident]) -> int:
-    return len({incident.uid for incident in telegram_incidents + site_incidents if incident.uid})
+    return len(telegram_incidents) + len(site_incidents)
 
 
 def _format_match_text(telegram_incident: DeviceIncident, site_incident: DeviceIncident) -> str:

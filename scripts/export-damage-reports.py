@@ -87,7 +87,6 @@ def _load_incidents(db_path: Path) -> list[Incident]:
 def _build_day_payload(day: str, day_incidents: list[Incident]) -> dict[str, Any]:
     telegram = [item for item in day_incidents if item.source == "telegram"]
     site = [item for item in day_incidents if item.source == "site"]
-    unique_uids = {item.uid for item in day_incidents if item.uid}
 
     return {
         "date": day,
@@ -96,7 +95,7 @@ def _build_day_payload(day: str, day_incidents: list[Incident]) -> dict[str, Any
         "counts": {
             "telegram": len(telegram),
             "site": len(site),
-            "total_devices": len(unique_uids),
+            "total_devices": len(telegram) + len(site),
         },
         "telegram": [item.to_payload() for item in telegram],
         "site": [item.to_payload() for item in site],
