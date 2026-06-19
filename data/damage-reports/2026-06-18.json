@@ -1,11 +1,11 @@
 {
   "date": "2026-06-18",
   "title": "Повреждения от 18.06.2026",
-  "generated_at": "2026-06-19T08:17:15",
+  "generated_at": "2026-06-19T12:53:41",
   "counts": {
     "telegram": 9,
-    "site": 18,
-    "total_devices": 27
+    "site": 16,
+    "total_devices": 25
   },
   "telegram": [
     {
@@ -100,26 +100,6 @@
     }
   ],
   "site": [
-    {
-      "source": "site",
-      "external_id": "SR-20260618-0004",
-      "created_at": "2026-06-18T09:06:00",
-      "time": "09:06",
-      "uid": "6cb18cfeff29e748",
-      "uid_short": "6cb1",
-      "issue_type": "Неисправен акб",
-      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2938"
-    },
-    {
-      "source": "site",
-      "external_id": "SR-20260618-0005",
-      "created_at": "2026-06-18T09:07:00",
-      "time": "09:07",
-      "uid": "dc1111fefff7a608",
-      "uid_short": "dc11",
-      "issue_type": "Кварц сопроцессора недоступен",
-      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2939"
-    },
     {
       "source": "site",
       "external_id": "SR-20260618-0006",
