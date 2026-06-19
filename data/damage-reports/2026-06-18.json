@@ -1,11 +1,11 @@
 {
   "date": "2026-06-18",
   "title": "Повреждения от 18.06.2026",
-  "generated_at": "2026-06-19T08:05:03",
+  "generated_at": "2026-06-19T08:17:15",
   "counts": {
     "telegram": 9,
     "site": 18,
-    "total_devices": 24
+    "total_devices": 27
   },
   "telegram": [
     {
