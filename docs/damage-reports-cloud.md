@@ -26,6 +26,12 @@ Schedule: every day at `05:15 UTC`, which is `08:15 Europe/Moscow`.
   `-1002186739705`
   `-1002186739705/4`
   `https://t.me/c/2186739705/4`
+- `TELEGRAM_REPORT_CHAT_IDS`
+  Optional. Preferred over `TELEGRAM_REPORT_CHAT_ID` when you want several default destinations.
+- `TELEGRAM_REPORT_CHAT_GROUP`
+  Optional. Destination for manual test runs when `report_chat_target=group`.
+- `TELEGRAM_REPORT_CHAT_PERSONAL`
+  Optional. Destination for manual test runs when `report_chat_target=personal`.
 - `TELEGRAM_SOURCE_CHAT_ID`
 - `TELETHON_API_ID`
 - `TELETHON_API_HASH`
@@ -52,6 +58,15 @@ Copy the printed string into the GitHub secret `TELETHON_STRING_SESSION`.
 Open GitHub Actions and run `Damage reports cloud refresh` manually.
 
 - `target_date`: `YYYY-MM-DD`
+- `report_chat_target`: `default`, `group`, `personal`, or `custom`
+- `custom_report_chat`: custom destination for `report_chat_target=custom`
 - `send_telegram`: `true` or `false`
+
+Destination formats:
+
+- `-1002186739705`
+- `-1002186739705/4`
+- `https://t.me/c/2186739705/4`
+- several destinations separated by commas
 
 The export script preserves older JSON day files already committed in `data/damage-reports`, so a one-day cloud run does not wipe site history.

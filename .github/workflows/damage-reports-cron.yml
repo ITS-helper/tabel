@@ -9,6 +9,20 @@ on:
         description: "Report date in YYYY-MM-DD. Empty means yesterday in Europe/Moscow."
         required: false
         type: string
+      report_chat_target:
+        description: "Where to send the Telegram report: default, group, personal, or custom."
+        required: false
+        default: default
+        type: choice
+        options:
+          - default
+          - group
+          - personal
+          - custom
+      custom_report_chat:
+        description: "Custom destination for manual runs. Supports -100..., -100.../topic, https://t.me/c/.../..., or comma-separated values."
+        required: false
+        type: string
       send_telegram:
         description: "Send the Telegram report after refresh."
         required: false
@@ -61,22 +75,49 @@ jobs:
             echo "Missing TELETHON_STRING_SESSION secret" >&2
             exit 1
           fi
-          cat > tgdevice/.env <<'EOF'
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_REPORT_CHAT_ID=${{ secrets.TELEGRAM_REPORT_CHAT_ID }}
-          TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
-          TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
-          TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
-          TELETHON_STRING_SESSION=${{ secrets.TELETHON_STRING_SESSION }}
-          SITE_BASE_URL=https://device.workwatch.pro/
-          SITE_LOGIN_PATH=/login.php
-          SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php
-          SITE_USERNAME=${{ secrets.SITE_USERNAME }}
-          SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}
-          DATABASE_PATH=../data/tgdevice.sqlite3
-          TIMEZONE=Europe/Moscow
-          REPORT_HOUR=08:00
-          EOF
+          report_chat_target=""
+          case "${{ github.event.inputs.report_chat_target }}" in
+            ""|"default")
+              report_chat_target="${{ secrets.TELEGRAM_REPORT_CHAT_IDS }}"
+              if [ -z "$report_chat_target" ]; then
+                report_chat_target="${{ secrets.TELEGRAM_REPORT_CHAT_ID }}"
+              fi
+              ;;
+            "group")
+              report_chat_target="${{ secrets.TELEGRAM_REPORT_CHAT_GROUP }}"
+              ;;
+            "personal")
+              report_chat_target="${{ secrets.TELEGRAM_REPORT_CHAT_PERSONAL }}"
+              ;;
+            "custom")
+              report_chat_target="${{ github.event.inputs.custom_report_chat }}"
+              ;;
+            *)
+              echo "Unsupported report_chat_target value: ${{ github.event.inputs.report_chat_target }}" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.send_telegram }}" = "true" ] && [ -z "$report_chat_target" ]; then
+            echo "Selected Telegram destination is empty. Check report_chat_target input and related secrets." >&2
+            exit 1
+          fi
+          {
+            printf '%s\n' "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            printf '%s\n' "TELEGRAM_REPORT_CHAT_ID="
+            printf '%s\n' "TELEGRAM_REPORT_CHAT_IDS=$report_chat_target"
+            printf '%s\n' "TELEGRAM_SOURCE_CHAT_ID=${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}"
+            printf '%s\n' "TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}"
+            printf '%s\n' "TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}"
+            printf '%s\n' "TELETHON_STRING_SESSION=${{ secrets.TELETHON_STRING_SESSION }}"
+            printf '%s\n' "SITE_BASE_URL=https://device.workwatch.pro/"
+            printf '%s\n' "SITE_LOGIN_PATH=/login.php"
+            printf '%s\n' "SITE_SERVICE_REQUESTS_PATH=/views/service_requests/index.php"
+            printf '%s\n' "SITE_USERNAME=${{ secrets.SITE_USERNAME }}"
+            printf '%s\n' "SITE_PASSWORD=${{ secrets.SITE_PASSWORD }}"
+            printf '%s\n' "DATABASE_PATH=../data/tgdevice.sqlite3"
+            printf '%s\n' "TIMEZONE=Europe/Moscow"
+            printf '%s\n' "REPORT_HOUR=08:00"
+          } > tgdevice/.env
 
       - name: Validate restored Telethon session
         working-directory: tgdevice
