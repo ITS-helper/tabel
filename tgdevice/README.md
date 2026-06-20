@@ -91,6 +91,9 @@ py -3 -m tgdevice.main report --date 2026-06-17 --send
 `TELEGRAM_REPORT_CHAT_ID` may contain one destination or several destinations separated by commas.
 Supported forms: `-100...`, `-100.../4`, `https://t.me/c/.../4`.
 
+`TELEGRAM_SOURCE_CHAT_ID` supports the same chat/topic formats.
+Use a topic form when incidents live inside a forum topic instead of the main chat feed.
+
 Full daily run:
 
 ```powershell

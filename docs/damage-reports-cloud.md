@@ -33,6 +33,8 @@ Schedule: every day at `05:15 UTC`, which is `08:15 Europe/Moscow`.
 - `TELEGRAM_REPORT_CHAT_PERSONAL`
   Optional. Destination for manual test runs when `report_chat_target=personal`.
 - `TELEGRAM_SOURCE_CHAT_ID`
+  Supports `-100...`, `-100.../topic`, and `https://t.me/c/.../...`.
+  Use the topic form when source incidents are posted inside a forum topic.
 - `TELETHON_API_ID`
 - `TELETHON_API_HASH`
 - `TELETHON_STRING_SESSION`

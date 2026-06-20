@@ -70,13 +70,24 @@ class TelethonHistoryCollector:
         start_utc = day_start_local.astimezone(timezone.utc)
         end_utc = day_end_local.astimezone(timezone.utc)
 
+        source = self.settings.source_destination()
+        if not source:
+            raise RuntimeError("Missing required setting: TELEGRAM_SOURCE_CHAT_ID")
+
         processed = 0
+        scanned = 0
+        text_messages = 0
+        template_matches = 0
+        parse_errors = 0
         client = self._client()
         await client.connect()
         try:
             if not await client.is_user_authorized():
                 raise RuntimeError("Telethon session is not authorized. Run telethon_login.cmd first.")
-            entity = await client.get_entity(int(self.settings.telegram_source_chat_id))
+            entity = await client.get_entity(int(source.chat_id))
+            entity_name = getattr(entity, "title", None) or getattr(entity, "username", None) or str(source.chat_id)
+            topic_suffix = f", topic={source.message_thread_id}" if source.message_thread_id else ""
+            print(f"Importing Telegram history from {entity_name} ({source.chat_id}{topic_suffix})")
             async for message in client.iter_messages(entity, offset_date=end_utc):
                 if message.date is None:
                     continue
@@ -85,12 +96,20 @@ class TelethonHistoryCollector:
                     continue
                 if message_dt < start_utc:
                     break
-
-                text = message.message or ""
-                if not text.strip() or not looks_like_template_message(text):
+                if not self._message_matches_topic(message, source.message_thread_id):
                     continue
 
-                external_id = f"{self.settings.telegram_source_chat_id}:{message.id}"
+                scanned += 1
+
+                text = message.message or ""
+                if not text.strip():
+                    continue
+                text_messages += 1
+                if not looks_like_template_message(text):
+                    continue
+                template_matches += 1
+
+                external_id = f"{source.chat_id}:{message.id}"
                 fallback_created_at = message_dt.astimezone(tz).replace(tzinfo=None)
                 parsed = parse_telegram_incident(
                     text,
@@ -99,19 +118,39 @@ class TelethonHistoryCollector:
                 )
                 if parsed.incident:
                     self.db.upsert_incident(parsed.incident)
+                    processed += 1
                 elif parsed.error:
                     self.db.save_parse_error(
                         external_id=external_id,
-                        chat_id=self.settings.telegram_source_chat_id,
+                        chat_id=source.chat_id,
                         created_at=fallback_created_at,
                         error=parsed.error,
                         raw_text=text,
                     )
-                processed += 1
+                    parse_errors += 1
         finally:
             await client.disconnect()
 
+        print(
+            "Telegram import summary: "
+            f"scanned={scanned}, text={text_messages}, "
+            f"template_matches={template_matches}, imported={processed}, parse_errors={parse_errors}"
+        )
         return processed
+
+    @staticmethod
+    def _message_matches_topic(message, topic_id: int | None) -> bool:
+        if topic_id is None:
+            return True
+        if getattr(message, "id", None) == topic_id:
+            return True
+        reply_to = getattr(message, "reply_to", None)
+        if not reply_to:
+            return False
+        return (
+            getattr(reply_to, "reply_to_top_id", None) == topic_id
+            or getattr(reply_to, "reply_to_msg_id", None) == topic_id
+        )
 
     def _client(self) -> TelegramClient:
         session = (

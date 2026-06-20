@@ -50,6 +50,9 @@ class Settings:
                 result.append(destination)
         return result
 
+    def source_destination(self) -> TelegramDestination | None:
+        return _parse_report_destination(self.telegram_source_chat_id)
+
 
 def load_settings(env_path: str | None = None) -> Settings:
     load_dotenv(env_path)
