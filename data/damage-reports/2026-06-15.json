@@ -1,11 +1,11 @@
 {
   "date": "2026-06-15",
   "title": "Повреждения от 15.06.2026",
-  "generated_at": "2026-06-18T13:16:50",
+  "generated_at": "2026-06-20T17:14:23",
   "counts": {
-    "telegram": 3,
+    "telegram": 4,
     "site": 0,
-    "total_devices": 3
+    "total_devices": 4
   },
   "telegram": [
     {
@@ -17,6 +17,16 @@
       "uid_short": "ecfe",
       "issue_type": "Падение",
       "source_url": "https://t.me/c/1169689924/263215"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:263235",
+      "created_at": "2026-06-15T19:18:45",
+      "time": "19:18",
+      "uid": "281311fefff7a608",
+      "uid_short": "2813",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/263235"
     },
     {
       "source": "telegram",
