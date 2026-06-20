@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   "use strict";
 
   /** Прямой прокси (часто недоступен без VPN из‑за блокировки *.workers.dev) */
@@ -41,7 +41,6 @@
   const BLE_GENPLAN_META_URL = "data/ble-genplan-meta.json";
   const BLE_SATELLITE_TILES_META_URL = "data/ble-satellite-tiles-meta.json";
   const M_PER_DEG_LAT = 111320;
-  const BLE_MAP_ACCESS_PASSWORD = "VELES_2024";
   const BLE_OFFLINE_MARKER_EDITS_KEY = "ww-ble-offline-marker-edits";
   const BLE_FIELD_SYNC_STATE_KEY = "ww-ble-field-sync-state";
   const BLE_FIELD_PACK_FETCH_TIMEOUT_MS = 25 * 60 * 1000;
@@ -8717,47 +8716,6 @@ if(cards.length)selectIdx(0);
   }
 
   let bleMapAppStarted = false;
-  let bleMapAccessGranted = false;
-
-  function isBleMapAccessUnlocked() {
-    return bleMapAccessGranted;
-  }
-
-  function unlockBleMapAccess() {
-    bleMapAccessGranted = true;
-    try {
-      sessionStorage.removeItem("ww-ble-map-access");
-    } catch {
-      /* ignore */
-    }
-  }
-
-  function hideBleMapAccessGate() {
-    const gate = document.getElementById("bleMapAccessGate");
-    if (!gate) return;
-    gate.classList.remove("is-active");
-    gate.hidden = true;
-    gate.setAttribute("aria-hidden", "true");
-  }
-
-  function showBleMapAccessGate() {
-    const gate = document.getElementById("bleMapAccessGate");
-    if (!gate) return;
-    gate.hidden = false;
-    gate.removeAttribute("hidden");
-    gate.classList.add("is-active");
-    gate.removeAttribute("aria-hidden");
-  }
-
-  function normalizeBleMapAccessPassword(raw) {
-    return String(raw || "")
-      .trim()
-      .replace(/\u00a0/g, " ");
-  }
-
-  function isBleMapAccessPasswordOk(raw) {
-    return normalizeBleMapAccessPassword(raw) === BLE_MAP_ACCESS_PASSWORD;
-  }
 
   function startBleMapApp() {
     if (bleMapAppStarted) return;
@@ -8778,40 +8736,9 @@ if(cards.length)selectIdx(0);
     scheduleBleMapAutoRefresh();
   }
 
-  function bindBleMapAccessGate(onUnlocked) {
-    const gate = document.getElementById("bleMapAccessGate");
-    const form = document.getElementById("bleMapAccessForm");
-    const input = document.getElementById("bleMapAccessInput");
-    const err = document.getElementById("bleMapAccessErr");
-    if (!gate || !form) {
-      onUnlocked();
-      return;
-    }
-    if (isBleMapAccessUnlocked()) {
-      hideBleMapAccessGate();
-      onUnlocked();
-      return;
-    }
-    showBleMapAccessGate();
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      if (isBleMapAccessPasswordOk(input?.value)) {
-        unlockBleMapAccess();
-        hideBleMapAccessGate();
-        if (err) err.textContent = "";
-        onUnlocked();
-        return;
-      }
-      if (err) err.textContent = "Неверный пароль";
-      input?.focus();
-      input?.select();
-    });
-    window.setTimeout(() => input?.focus(), 80);
-  }
 
   function bootBleMapPage() {
-    if (isBleNativeApp()) startBleMapApp();
-    else bindBleMapAccessGate(() => startBleMapApp());
+    startBleMapApp();
   }
 
   if (document.readyState === "loading") {
