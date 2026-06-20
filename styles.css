@@ -499,6 +499,7 @@ body {
 }
 
 .app-tabel-entry-btn .header__btn-text--long,
+.app-damage-entry-btn .header__btn-text--long,
 .app-blemap-entry-btn .header__btn-text--long {
   font-family: Oswald, sans-serif;
   font-size: 0.78em;
@@ -509,6 +510,7 @@ body {
 
 @media (max-width: 768px) {
   .app-tabel-entry-btn .header__btn-text--long,
+  .app-damage-entry-btn .header__btn-text--long,
   .app-blemap-entry-btn .header__btn-text--long {
     display: none;
   }
