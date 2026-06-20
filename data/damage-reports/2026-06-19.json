@@ -1,55 +1,14 @@
 {
   "date": "2026-06-19",
   "title": "Повреждения от 19.06.2026",
-  "generated_at": "2026-06-20T08:09:17",
+  "generated_at": "2026-06-20T16:28:21",
   "counts": {
-    "telegram": 3,
-    "site": 9,
-    "total_devices": 12
+    "telegram": 0,
+    "site": 8,
+    "total_devices": 8
   },
-  "telegram": [
-    {
-      "source": "telegram",
-      "external_id": "-1001169689924:263959",
-      "created_at": "2026-06-19T01:23:00",
-      "time": "01:23",
-      "uid": "281811fefff7a608",
-      "uid_short": "2818",
-      "issue_type": "Зависшая_смена",
-      "source_url": "https://t.me/c/1169689924/263959"
-    },
-    {
-      "source": "telegram",
-      "external_id": "-1001169689924:263960",
-      "created_at": "2026-06-19T01:44:08",
-      "time": "01:44",
-      "uid": "18fb10fefff7a608",
-      "uid_short": "18fb",
-      "issue_type": "Падение",
-      "source_url": "https://t.me/c/1169689924/263960"
-    },
-    {
-      "source": "telegram",
-      "external_id": "-1001169689924:263968",
-      "created_at": "2026-06-19T04:50:00",
-      "time": "04:50",
-      "uid": "182111fefff7a608",
-      "uid_short": "1821",
-      "issue_type": "Падение",
-      "source_url": "https://t.me/c/1169689924/263968"
-    }
-  ],
+  "telegram": [],
   "site": [
-    {
-      "source": "site",
-      "external_id": "SR-20260619-0001",
-      "created_at": "2026-06-19T03:37:00",
-      "time": "03:37",
-      "uid": "281811fefff7a608",
-      "uid_short": "2818",
-      "issue_type": "Дисплей",
-      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2956"
-    },
     {
       "source": "site",
       "external_id": "SR-20260619-0002",
