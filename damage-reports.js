@@ -71,6 +71,14 @@
         await exportAllReports();
       });
     }
+
+    const repeatBtn = document.getElementById("damageReportsRepeatBtn");
+    if (repeatBtn && !repeatBtn.dataset.bound) {
+      repeatBtn.dataset.bound = "1";
+      repeatBtn.addEventListener("click", async () => {
+        await exportRepeatDevicesReport();
+      });
+    }
   }
 
   function renderIncidentList(items, emptyLabel) {
@@ -193,6 +201,119 @@
     }
   }
 
+  function buildRepeatDeviceEntries(reports) {
+    const devices = new Map();
+    for (const report of reports) {
+      const date = report?.date || "";
+      for (const item of [...(report?.telegram || []), ...(report?.site || [])]) {
+        if (!item?.uid) continue;
+        let entry = devices.get(item.uid);
+        if (!entry) {
+          entry = {
+            uid: item.uid,
+            uid_short: item.uid_short || item.uid.slice(0, 4),
+            incidents: [],
+          };
+          devices.set(item.uid, entry);
+        }
+        entry.incidents.push({
+          date,
+          time: item.time || "",
+          source: item.source || "",
+          issue_type: item.issue_type || "",
+          source_url: item.source_url || "",
+        });
+      }
+    }
+
+    return [...devices.values()]
+      .filter((entry) => entry.incidents.length >= 2)
+      .map((entry) => {
+        const dates = [...new Set(entry.incidents.map((item) => item.date).filter(Boolean))];
+        return {
+          ...entry,
+          occurrences: entry.incidents.length,
+          unique_dates: dates.length,
+          dates,
+        };
+      })
+      .sort((left, right) => {
+        if (right.occurrences !== left.occurrences) return right.occurrences - left.occurrences;
+        return left.uid_short.localeCompare(right.uid_short, "ru");
+      });
+  }
+
+  function buildRepeatDevicesText(entries) {
+    const lines = [
+      "Устройства, встречавшиеся в отчетах 2+ раза",
+      "",
+      `Всего устройств: ${entries.length}`,
+      "",
+    ];
+
+    if (!entries.length) {
+      lines.push("Повторов не найдено.");
+      return lines.join("\n");
+    }
+
+    for (const entry of entries) {
+      lines.push(
+        `${entry.uid_short} | ${entry.uid} | инцидентов: ${entry.occurrences} | дат: ${entry.unique_dates}`
+      );
+      for (const incident of entry.incidents) {
+        lines.push(
+          `- ${incident.date} ${incident.time} | ${incident.source} | ${incident.issue_type} | ${incident.source_url}`.trim()
+        );
+      }
+      lines.push("");
+    }
+
+    return lines.join("\n").trim();
+  }
+
+  async function exportRepeatDevicesReport() {
+    const dates = getDates();
+    if (!dates.length) {
+      setStatus("Нет отчетов для поиска повторов.");
+      return;
+    }
+
+    setStatus("Собираю повторные устройства по всем отчетам...");
+    try {
+      const reports = await Promise.all(dates.map(({ date }) => fetchReport(date)));
+      const entries = buildRepeatDeviceEntries(reports);
+      const text = buildRepeatDevicesText(entries);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadTextFile(`damage-repeat-devices-${stamp}.txt`, text);
+      setStatus(
+        entries.length
+          ? `Повторные устройства выгружены: ${entries.length}.`
+          : "Повторные устройства не найдены."
+      );
+    } catch (error) {
+      console.error(error);
+      setStatus("Не удалось собрать повторные устройства.");
+    }
+  }
+
+  function selfCheckRepeatDeviceEntries() {
+    const result = buildRepeatDeviceEntries([
+      {
+        date: "2026-06-01",
+        telegram: [{ uid: "abc", uid_short: "abc", source: "telegram", issue_type: "Падение" }],
+        site: [{ uid: "xyz", uid_short: "xyz", source: "site", issue_type: "Батарея" }],
+      },
+      {
+        date: "2026-06-02",
+        telegram: [{ uid: "abc", uid_short: "abc", source: "telegram", issue_type: "Падение" }],
+        site: [],
+      },
+    ]);
+    console.assert(result.length === 1, "repeat-device self-check failed: count");
+    console.assert(result[0].uid === "abc", "repeat-device self-check failed: uid");
+    console.assert(result[0].occurrences === 2, "repeat-device self-check failed: occurrences");
+  }
+
   function renderReport() {
     const mount = document.getElementById("damageReportsMount");
     const title = document.getElementById("damageReportsTitle");
@@ -306,4 +427,6 @@
       return initDamageReports();
     },
   };
+
+  selfCheckRepeatDeviceEntries();
 })(typeof window !== "undefined" ? window : globalThis);
