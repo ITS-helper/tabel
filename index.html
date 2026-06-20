@@ -605,6 +605,23 @@
       </div>
     </dialog>
   </div>
+  <div class="site-gate" id="siteGateOverlay" hidden>
+    <div class="site-gate__panel">
+      <p class="site-gate__eyebrow">Work Watch</p>
+      <h2 class="site-gate__title">Доступ к сайту</h2>
+      <p class="site-gate__hint" id="siteGateHint">
+        Введите пароль, чтобы открыть сайт.
+      </p>
+      <p class="site-gate__err" id="siteGateErr" hidden></p>
+      <label class="edit-pwd-dialog__label">
+        <span class="edit-pwd-dialog__label-text">Пароль</span>
+        <input type="password" id="siteGatePasswordInput" class="edit-pwd-dialog__input" autocomplete="current-password" />
+      </label>
+      <div class="site-gate__actions">
+        <button type="button" class="btn btn--primary" id="siteGateSubmitBtn">Открыть сайт</button>
+      </div>
+    </div>
+  </div>
   <script src="scripts/parsed-employees-2026-h1.js"></script>
   <script src="zone-placement.js"></script>
   <script src="curator-pairing.js"></script>

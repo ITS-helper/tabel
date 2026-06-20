@@ -90,8 +90,10 @@ const STORAGE_SECTION_ASSIGN = "ww-section-overrides";
 const STORAGE_SECTION_TITLES = "ww-section-titles";
 /** Сессия входа (sessionStorage): токен и роль после workwatch_login в Supabase */
 const STORAGE_AUTH_SESSION = "ww-auth-session";
+const STORAGE_SITE_GATE_SESSION = "ww-site-gate-session";
 const AUTH_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const AUTH_DEFAULT_EMPLOYEE_PASSWORD = "12345678";
+const SITE_GATE_LOGIN = "sitegate";
 
 const AUTH_TRANSLIT = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
@@ -115,6 +117,7 @@ const GOOGLE_SHEET_FETCH_FN = "google-sheet-fetch";
 
 let supabasePushTimer = null;
 let googleSheetSyncInFlight = false;
+let appBootstrapped = false;
 
 function loadLegendIncludeNoShifts() {
   try {
@@ -1186,6 +1189,48 @@ function getAuthSession() {
   }
 }
 
+function getSiteGateSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_SITE_GATE_SESSION);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s?.token) return null;
+    const exp = s.expiresAt ? new Date(s.expiresAt).getTime() : 0;
+    if (exp && Date.now() > exp) {
+      clearSiteGateSession();
+      return null;
+    }
+    return s;
+  } catch (_) {
+    return null;
+  }
+}
+
+function setSiteGateSession(payload) {
+  const expiresAt =
+    payload.expires_at ||
+    new Date(Date.now() + AUTH_SESSION_MAX_AGE_MS).toISOString();
+  const s = {
+    token: payload.token,
+    login: payload.login || SITE_GATE_LOGIN,
+    expiresAt,
+  };
+  try {
+    localStorage.setItem(STORAGE_SITE_GATE_SESSION, JSON.stringify(s));
+  } catch (_) {}
+}
+
+function clearSiteGateSession() {
+  try {
+    localStorage.removeItem(STORAGE_SITE_GATE_SESSION);
+  } catch (_) {}
+}
+
+function normalizeAuthRole(payload) {
+  const login = String(payload?.login || "").trim().toLowerCase();
+  return login === SITE_GATE_LOGIN ? "viewer" : payload?.role;
+}
+
 function setAuthSession(payload) {
   const expiresAt =
     payload.expires_at ||
@@ -1193,7 +1238,7 @@ function setAuthSession(payload) {
   const s = {
     token: payload.token,
     login: payload.login,
-    role: payload.role,
+    role: normalizeAuthRole(payload),
     employeeName: payload.employee_name || null,
     expiresAt,
     mustChangePassword: !!payload.must_change_password,
@@ -1228,6 +1273,7 @@ function canEditEmployeeSchedule(empName) {
   if (!isEditSessionUnlocked() || isArchiveView() || state.mode !== "edit") return false;
   const s = getAuthSession();
   if (!s) return false;
+  if (s.role === "viewer") return false;
   if (s.role === "admin") return true;
   if (sectionIdForEmployee(s.employeeName) === "ust") return false;
   return s.employeeName === empName;
@@ -1274,6 +1320,22 @@ async function supabaseRpcLogin(login, password) {
       p_login: login,
       p_password: password,
       p_ip: "web",
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.message || data?.hint || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+async function supabaseRpcSiteGateCheck(token) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/workwatch_site_gate_check`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: supabaseRestHeaders({ Prefer: "return=representation" }),
+    body: JSON.stringify({
+      p_token: token,
     }),
   });
   const data = await res.json().catch(() => ({}));
@@ -1420,6 +1482,162 @@ function changePasswordErrorMessageRu(errCode) {
   }
 }
 
+function setSiteGateState(stateValue) {
+  const overlay = document.getElementById("siteGateOverlay");
+  document.body.dataset.siteGate = stateValue;
+  if (overlay) overlay.hidden = stateValue === "unlocked";
+}
+
+function showSiteGateError(message) {
+  const err = document.getElementById("siteGateErr");
+  if (!err) return;
+  err.textContent = message;
+  err.hidden = !message;
+}
+
+function setSiteGateHint(message) {
+  const hint = document.getElementById("siteGateHint");
+  if (hint) hint.textContent = message;
+}
+
+function focusSiteGateInput() {
+  const input = document.getElementById("siteGatePasswordInput");
+  if (input) setTimeout(() => input.focus(), 0);
+}
+
+function openSiteGatePrompt() {
+  const input = document.getElementById("siteGatePasswordInput");
+  if (input) input.value = "";
+  showSiteGateError("");
+  setSiteGateHint("Введите пароль, чтобы открыть сайт.");
+  setSiteGateState("locked");
+  focusSiteGateInput();
+}
+
+function unlockSiteGate() {
+  showSiteGateError("");
+  setSiteGateState("unlocked");
+}
+
+function finishInit() {
+  if (appBootstrapped) return;
+  appBootstrapped = true;
+  syncAuthChrome();
+  buildMonthSelect();
+  buildSectionNav();
+  bindControls();
+  bindAuthLoginDialog();
+  bindChangePasswordDialog();
+  bindAuthMenu();
+  ensureAuthPasswordFlowOnLoad();
+  syncModeWithAuth();
+  bindStickyTableClick();
+  bindTeamDialog();
+  bindCollapsiblePanels();
+  syncCollapsiblePanels();
+  bindAppPageNav();
+  initZonePlacementModule();
+  initCuratorPairingModule();
+  reconcileDuplicateAddedEmployees();
+  reconcileStaleEmptyScheduleOverrides();
+  render();
+  void initRemoteSync();
+}
+
+async function ensureSiteGateAccess() {
+  const saved = getSiteGateSession();
+  if (!saved?.token) {
+    openSiteGatePrompt();
+    return false;
+  }
+  setSiteGateHint("Проверяю доступ...");
+  showSiteGateError("");
+  setSiteGateState("checking");
+  try {
+    const data = await supabaseRpcSiteGateCheck(saved.token);
+    if (!data?.ok) {
+      clearSiteGateSession();
+      openSiteGatePrompt();
+      return false;
+    }
+    unlockSiteGate();
+    return true;
+  } catch (e) {
+    const msg = String(e?.message || e || "");
+    clearSiteGateSession();
+    if (msg.includes("workwatch_site_gate_check") || msg.includes("Could not find")) {
+      showSiteGateError("Проверка доступа не настроена в Supabase. Выполните supabase-auth.sql и scripts/site-gate-user.sql.");
+    } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+      showSiteGateError("Не удалось проверить доступ. Откройте сайт по http(s) и проверьте интернет.");
+    } else {
+      showSiteGateError(msg.length > 140 ? "Ошибка проверки доступа. Откройте консоль браузера (F12) для деталей." : msg);
+    }
+    setSiteGateHint("Введите пароль, чтобы открыть сайт.");
+    setSiteGateState("locked");
+    focusSiteGateInput();
+    return false;
+  }
+}
+
+function bindSiteGate() {
+  const input = document.getElementById("siteGatePasswordInput");
+  const submit = document.getElementById("siteGateSubmitBtn");
+  if (!input || !submit || submit.dataset.bound === "1") return;
+  submit.dataset.bound = "1";
+
+  const tryUnlock = async () => {
+    const password = input.value;
+    if (!password) {
+      showSiteGateError("Введите пароль.");
+      input.focus();
+      return;
+    }
+    submit.disabled = true;
+    showSiteGateError("");
+    setSiteGateHint("Проверяю пароль...");
+    try {
+      const data = await supabaseRpcLogin(SITE_GATE_LOGIN, password);
+      if (!data?.ok) {
+        showSiteGateError(authErrorMessageRu(data?.error));
+        setSiteGateHint("Введите пароль, чтобы открыть сайт.");
+        input.select();
+        return;
+      }
+      if (data.must_change_password) {
+        showSiteGateError("Учётка входа на сайт настроена неверно: для неё нельзя требовать смену пароля.");
+        setSiteGateHint("Введите пароль, чтобы открыть сайт.");
+        return;
+      }
+      setSiteGateSession(data);
+      input.value = "";
+      unlockSiteGate();
+      finishInit();
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (msg.includes("workwatch_login") || msg.includes("Could not find")) {
+        showSiteGateError("Сервис входа не настроен. Выполните supabase-auth.sql в Supabase.");
+      } else if (msg.includes("crypt") || msg.includes("pgcrypto")) {
+        showSiteGateError("В Supabase не включено расширение pgcrypto. После включения снова выполните supabase-auth.sql.");
+      } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        showSiteGateError("Ошибка сети. Откройте сайт по http(s) и проверьте интернет.");
+      } else {
+        showSiteGateError(msg.length > 140 ? "Ошибка входа. Откройте консоль браузера (F12) для деталей." : msg);
+      }
+      setSiteGateHint("Введите пароль, чтобы открыть сайт.");
+    } finally {
+      submit.disabled = false;
+    }
+  };
+
+  submit.addEventListener("click", () => void tryUnlock());
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void tryUnlock();
+    }
+  });
+}
+
 let authMenuOpen = false;
 
 function closeAuthMenu() {
@@ -1451,9 +1669,11 @@ function syncModeWithAuth() {
     return;
   }
   const s = getAuthSession();
-  if (s && !s.mustChangePassword) {
+  if (s && !s.mustChangePassword && s.role !== "viewer") {
     if (state.mode !== "edit") applyMode("edit");
   } else if (!s && state.mode !== "view") {
+    applyMode("view");
+  } else if (s?.role === "viewer" && state.mode !== "view") {
     applyMode("view");
   }
 }
@@ -3291,28 +3511,12 @@ function bindAppPageNav() {
   });
 }
 
-function init() {
+async function init() {
   applyTheme(state.theme);
-  syncAuthChrome();
-  buildMonthSelect();
-  buildSectionNav();
-  bindControls();
-  bindAuthLoginDialog();
-  bindChangePasswordDialog();
-  bindAuthMenu();
-  ensureAuthPasswordFlowOnLoad();
-  syncModeWithAuth();
-  bindStickyTableClick();
-  bindTeamDialog();
-  bindCollapsiblePanels();
-  syncCollapsiblePanels();
-  bindAppPageNav();
-  initZonePlacementModule();
-  initCuratorPairingModule();
-  reconcileDuplicateAddedEmployees();
-  reconcileStaleEmptyScheduleOverrides();
-  render();
-  void initRemoteSync();
+  bindSiteGate();
+  const gateOk = await ensureSiteGateAccess();
+  if (!gateOk) return;
+  finishInit();
 }
 
 /** Клик по заголовку закреплённого столбца — скрыть (−) */
@@ -4139,4 +4343,4 @@ function exportFor1C() {
   URL.revokeObjectURL(a.href);
 }
 
-init();
+void init();

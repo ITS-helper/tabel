@@ -333,8 +333,44 @@ begin
 end;
 $$;
 
+create or replace function public.workwatch_site_gate_check(p_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_login text;
+  v_expires timestamptz;
+begin
+  if p_token is null then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  select s.login, s.expires_at
+    into v_login, v_expires
+  from public.workwatch_sessions s
+  where s.token = p_token and s.expires_at > now();
+
+  if v_login is null then
+    return jsonb_build_object('ok', false, 'error', 'invalid_session');
+  end if;
+
+  if v_login <> 'sitegate' then
+    return jsonb_build_object('ok', false, 'error', 'forbidden');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'login', v_login,
+    'expires_at', v_expires
+  );
+end;
+$$;
+
 grant execute on function public.workwatch_login(text, text, text) to anon, authenticated;
 grant execute on function public.workwatch_change_password(uuid, text, text) to anon, authenticated;
 grant execute on function public.workwatch_admin_reset_employee_auth(uuid, text, text) to anon, authenticated;
 grant execute on function public.workwatch_logout(uuid) to anon, authenticated;
+grant execute on function public.workwatch_site_gate_check(uuid) to anon, authenticated;
 grant execute on function public.workwatch_prune_login_attempts() to anon, authenticated;
