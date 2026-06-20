@@ -2009,6 +2009,10 @@ body[data-site-gate="checking"] #app {
   backdrop-filter: blur(10px);
 }
 
+.site-gate[hidden] {
+  display: none !important;
+}
+
 .site-gate__panel {
   width: min(420px, 100%);
   background: var(--surface);
