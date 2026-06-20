@@ -14,6 +14,8 @@ DATE_FORMATS = (
     "%d.%m.%y %H:%M",
 )
 
+IDENTIFIER_PATTERN = r"(?:uid|eui)\s*[-: ]\s*([a-z0-9]+)"
+
 
 @dataclass(slots=True)
 class ParsedTelegramMessage:
@@ -41,7 +43,7 @@ def looks_like_template_message(text: str) -> bool:
         return False
     if not lines[0].startswith("#"):
         return False
-    return any(re.search(r"uid\s*[-: ]\s*[a-z0-9]+", line, flags=re.IGNORECASE) for line in lines)
+    return any(re.search(IDENTIFIER_PATTERN, line, flags=re.IGNORECASE) for line in lines)
 
 
 def parse_telegram_incident(
@@ -61,7 +63,7 @@ def parse_telegram_incident(
     except ValueError:
         created_at = fallback_created_at
 
-    uid_match = re.search(r"uid\s*[-: ]\s*([a-z0-9]+)", lines[2], flags=re.IGNORECASE)
+    uid_match = re.search(IDENTIFIER_PATTERN, lines[2], flags=re.IGNORECASE)
     if not uid_match:
         return ParsedTelegramMessage(None, "Uid not found")
     uid = uid_match.group(1).lower()
@@ -106,7 +108,7 @@ def _extract_after_dash(value: str) -> str | None:
 
 
 def extract_uid_from_text(value: str) -> str | None:
-    match = re.search(r"uid\s*[-: ]\s*([a-z0-9]+)", value, flags=re.IGNORECASE)
+    match = re.search(IDENTIFIER_PATTERN, value, flags=re.IGNORECASE)
     if not match:
         return None
     return match.group(1).lower()
