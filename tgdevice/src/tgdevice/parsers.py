@@ -15,6 +15,7 @@ DATE_FORMATS = (
 )
 
 IDENTIFIER_PATTERN = r"(?:uid|eui)\s*[-: ]\s*([a-z0-9]+)"
+BARE_IDENTIFIER_PATTERN = r"\b([a-f0-9]{16})\b"
 
 
 @dataclass(slots=True)
@@ -43,7 +44,7 @@ def looks_like_template_message(text: str) -> bool:
         return False
     if not lines[0].startswith("#"):
         return False
-    return any(re.search(IDENTIFIER_PATTERN, line, flags=re.IGNORECASE) for line in lines)
+    return any(_extract_identifier(line) for line in lines)
 
 
 def parse_telegram_incident(
@@ -63,10 +64,9 @@ def parse_telegram_incident(
     except ValueError:
         created_at = fallback_created_at
 
-    uid_match = re.search(IDENTIFIER_PATTERN, lines[2], flags=re.IGNORECASE)
-    if not uid_match:
+    uid = _extract_identifier(lines[2])
+    if not uid:
         return ParsedTelegramMessage(None, "Uid not found")
-    uid = uid_match.group(1).lower()
 
     device_code = _extract_device_code(lines[3])
     employee_number = _extract_after_dash(lines[4])
@@ -102,13 +102,23 @@ def _extract_device_code(value: str) -> str | None:
 def _extract_after_dash(value: str) -> str | None:
     match = re.search(r"[-:]\s*(.+)$", value)
     if not match:
-        compact = value.replace(" ", "")
+        label_match = re.match(r"^[A-Za-zА-Яа-я]{1,3}\s+(.+)$", value.strip())
+        if label_match:
+            compact = label_match.group(1).replace(" ", "")
+        else:
+            compact = value.replace(" ", "")
         return compact or None
     return match.group(1).strip().replace(" ", "")
 
 
 def extract_uid_from_text(value: str) -> str | None:
+    return _extract_identifier(value)
+
+
+def _extract_identifier(value: str) -> str | None:
     match = re.search(IDENTIFIER_PATTERN, value, flags=re.IGNORECASE)
     if not match:
-        return None
+        match = re.search(BARE_IDENTIFIER_PATTERN, value, flags=re.IGNORECASE)
+        if not match:
+            return None
     return match.group(1).lower()
