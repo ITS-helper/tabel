@@ -63,6 +63,14 @@
         await copyCurrentReport();
       });
     }
+
+    const exportBtn = document.getElementById("damageReportsExportBtn");
+    if (exportBtn && !exportBtn.dataset.bound) {
+      exportBtn.dataset.bound = "1";
+      exportBtn.addEventListener("click", async () => {
+        await exportAllReports();
+      });
+    }
   }
 
   function renderIncidentList(items, emptyLabel) {
@@ -140,6 +148,51 @@
     }
   }
 
+  async function fetchReport(dateValue) {
+    const response = await fetch(`${REPORT_BASE}/${dateValue}.json`, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Report request failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  }
+
+  async function exportAllReports() {
+    const dates = getDates();
+    if (!dates.length) {
+      setStatus("\u041d\u0435\u0442 \u043e\u0442\u0447\u0435\u0442\u043e\u0432 \u0434\u043b\u044f \u0432\u044b\u0433\u0440\u0443\u0437\u043a\u0438.");
+      return;
+    }
+
+    setStatus("\u0421\u043e\u0431\u0438\u0440\u0430\u044e \u043f\u043e\u043b\u043d\u0443\u044e \u0431\u0430\u0437\u0443 \u043e\u0442\u0447\u0435\u0442\u043e\u0432...");
+    try {
+      const reports = await Promise.all(
+        dates.map(async ({ date }) => {
+          const report = await fetchReport(date);
+          return buildClipboardText(report);
+        })
+      );
+      const text = reports.join("\n\n====================\n\n");
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadTextFile(`damage-reports-all-${stamp}.txt`, text);
+      setStatus("\u041f\u043e\u043b\u043d\u0430\u044f \u0431\u0430\u0437\u0430 \u043e\u0442\u0447\u0435\u0442\u043e\u0432 \u0432\u044b\u0433\u0440\u0443\u0436\u0435\u043d\u0430.");
+    } catch (error) {
+      console.error(error);
+      setStatus("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0432\u044b\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u043f\u043e\u043b\u043d\u0443\u044e \u0431\u0430\u0437\u0443 \u043e\u0442\u0447\u0435\u0442\u043e\u0432.");
+    }
+  }
+
   function renderReport() {
     const mount = document.getElementById("damageReportsMount");
     const title = document.getElementById("damageReportsTitle");
@@ -213,11 +266,7 @@
     renderDateSelect();
     setStatus("\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044e \u043e\u0442\u0447\u0435\u0442...");
     try {
-      const response = await fetch(`${REPORT_BASE}/${dateValue}.json`, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`Report request failed: ${response.status}`);
-      }
-      state.activeReport = await response.json();
+      state.activeReport = await fetchReport(dateValue);
       renderReport();
       setStatus("");
     } catch (error) {
