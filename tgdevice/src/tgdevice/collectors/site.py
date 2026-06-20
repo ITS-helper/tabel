@@ -29,11 +29,25 @@ class SiteCollector:
     def collect_for_day(self, target_day: date) -> list[DeviceIncident]:
         self._login()
         url = urljoin(self.settings.site_base_url, self.settings.site_service_requests_path)
-        response = self.session.get(url, timeout=30)
-        response.raise_for_status()
-        incidents = self._parse_service_requests(response.text, target_day)
-        for incident in incidents:
-            self.db.upsert_incident(incident)
+        incidents: list[DeviceIncident] = []
+        page = 1
+
+        while True:
+            response = self.session.get(url, params={'page': page}, timeout=30)
+            response.raise_for_status()
+            page_incidents, oldest_day, has_next_page = self._parse_service_requests(
+                response.text,
+                target_day,
+                page,
+            )
+            for incident in page_incidents:
+                self.db.upsert_incident(incident)
+            incidents.extend(page_incidents)
+
+            if oldest_day is None or oldest_day < target_day or not has_next_page:
+                break
+            page += 1
+
         return incidents
 
     def _login(self) -> None:
@@ -75,9 +89,15 @@ class SiteCollector:
         if 'login.php' in post_response.url.lower() and 'logout' not in post_response.text.lower():
             raise RuntimeError('Site login failed. Check SITE_USERNAME and SITE_PASSWORD.')
 
-    def _parse_service_requests(self, html: str, target_day: date) -> list[DeviceIncident]:
+    def _parse_service_requests(
+        self,
+        html: str,
+        target_day: date,
+        current_page: int,
+    ) -> tuple[list[DeviceIncident], date | None, bool]:
         soup = BeautifulSoup(html, 'lxml')
         incidents: list[DeviceIncident] = []
+        oldest_day: date | None = None
 
         for table in soup.find_all('table'):
             headers = [cell.get_text(' ', strip=True) for cell in table.find_all('th')]
@@ -93,7 +113,14 @@ class SiteCollector:
 
                 values = [cell.get_text(' ', strip=True) for cell in cells]
                 created_at = self._parse_created_at(values[self.CREATED_INDEX])
-                if created_at is None or created_at.date() != target_day:
+                if created_at is None:
+                    continue
+
+                created_day = created_at.date()
+                if oldest_day is None or created_day < oldest_day:
+                    oldest_day = created_day
+
+                if created_day != target_day:
                     continue
 
                 uid = self._extract_uid(values[self.EUI_INDEX])
@@ -121,7 +148,7 @@ class SiteCollector:
                     )
                 )
 
-        return incidents
+        return incidents, oldest_day, self._has_next_page(soup, current_page)
 
     def _parse_created_at(self, value: str) -> datetime | None:
         value = value.strip()
@@ -153,3 +180,10 @@ class SiteCollector:
             return None
         requests_dir = urljoin(self.settings.site_base_url, 'views/service_requests/')
         return urljoin(requests_dir, link['href'])
+
+    def _has_next_page(self, soup: BeautifulSoup, current_page: int) -> bool:
+        next_page = f'page={current_page + 1}'
+        for link in soup.find_all('a', href=True):
+            if next_page in link['href']:
+                return True
+        return False

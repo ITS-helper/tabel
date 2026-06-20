@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-20T17:18:15",
+  "generated_at": "2026-06-20T22:06:00",
   "latest_date": "2026-06-19",
   "dates": [
     {
@@ -16,8 +16,8 @@
       "title": "Повреждения от 18.06.2026",
       "counts": {
         "telegram": 9,
-        "site": 0,
-        "total_devices": 9
+        "site": 21,
+        "total_devices": 30
       }
     },
     {
@@ -25,8 +25,8 @@
       "title": "Повреждения от 17.06.2026",
       "counts": {
         "telegram": 7,
-        "site": 0,
-        "total_devices": 7
+        "site": 5,
+        "total_devices": 12
       }
     },
     {
@@ -34,8 +34,8 @@
       "title": "Повреждения от 16.06.2026",
       "counts": {
         "telegram": 1,
-        "site": 0,
-        "total_devices": 1
+        "site": 16,
+        "total_devices": 17
       }
     },
     {
@@ -43,8 +43,8 @@
       "title": "Повреждения от 15.06.2026",
       "counts": {
         "telegram": 4,
-        "site": 0,
-        "total_devices": 4
+        "site": 8,
+        "total_devices": 12
       }
     }
   ]

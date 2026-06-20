@@ -1,11 +1,11 @@
 {
   "date": "2026-06-15",
   "title": "Повреждения от 15.06.2026",
-  "generated_at": "2026-06-20T17:15:45",
+  "generated_at": "2026-06-20T22:06:00",
   "counts": {
     "telegram": 4,
-    "site": 0,
-    "total_devices": 4
+    "site": 8,
+    "total_devices": 12
   },
   "telegram": [
     {
@@ -49,5 +49,86 @@
       "source_url": "https://t.me/c/1169689924/263240"
     }
   ],
-  "site": []
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0001",
+      "created_at": "2026-06-15T14:37:00",
+      "time": "14:37",
+      "uid": "c4fb10fefff7a608",
+      "uid_short": "c4fb",
+      "issue_type": "Неисправен дисплей",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2906"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0002",
+      "created_at": "2026-06-15T14:46:00",
+      "time": "14:46",
+      "uid": "242111fefff7a608",
+      "uid_short": "2421",
+      "issue_type": "Не включаются. Ранее пульсометр был недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2907"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0003",
+      "created_at": "2026-06-15T14:51:00",
+      "time": "14:51",
+      "uid": "002111fefff7a608",
+      "uid_short": "0021",
+      "issue_type": "Запала верхняя кнопка",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2908"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0004",
+      "created_at": "2026-06-15T15:00:00",
+      "time": "15:00",
+      "uid": "741c11fefff7a608",
+      "uid_short": "741c",
+      "issue_type": "Отвал дисплея при отправке данных",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2909"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0005",
+      "created_at": "2026-06-15T15:15:00",
+      "time": "15:15",
+      "uid": "b80811fefff7a608",
+      "uid_short": "b808",
+      "issue_type": "Не запускаются",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2910"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0006",
+      "created_at": "2026-06-15T15:19:00",
+      "time": "15:19",
+      "uid": "4c0911fefff7a608",
+      "uid_short": "4c09",
+      "issue_type": "Бесконечная перезагрузка",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2911"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0007",
+      "created_at": "2026-06-15T15:39:00",
+      "time": "15:39",
+      "uid": "887771fefff6b870",
+      "uid_short": "8877",
+      "issue_type": "Отсутствует средняя кнопка",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2912"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260615-0008",
+      "created_at": "2026-06-15T15:42:00",
+      "time": "15:42",
+      "uid": "70cd50feffbf1388",
+      "uid_short": "70cd",
+      "issue_type": "Запала средняя кнопка",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2913"
+    }
+  ]
 }

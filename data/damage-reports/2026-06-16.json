@@ -1,11 +1,11 @@
 {
   "date": "2026-06-16",
   "title": "Повреждения от 16.06.2026",
-  "generated_at": "2026-06-20T17:17:00",
+  "generated_at": "2026-06-20T22:06:00",
   "counts": {
     "telegram": 1,
-    "site": 0,
-    "total_devices": 1
+    "site": 16,
+    "total_devices": 17
   },
   "telegram": [
     {
@@ -19,5 +19,166 @@
       "source_url": "https://t.me/c/1169689924/263472"
     }
   ],
-  "site": []
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0001",
+      "created_at": "2026-06-16T07:51:00",
+      "time": "07:51",
+      "uid": "2cc550feffbf1388",
+      "uid_short": "2cc5",
+      "issue_type": "не могут выгрузить смену. перезагрузки не помогают",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2914"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0002",
+      "created_at": "2026-06-16T13:48:00",
+      "time": "13:48",
+      "uid": "2c0911fefff7a608",
+      "uid_short": "2c09",
+      "issue_type": "Ошибка открытия соединения при запуске смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2915"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0003",
+      "created_at": "2026-06-16T13:51:00",
+      "time": "13:51",
+      "uid": "441411fefff7a608",
+      "uid_short": "4414",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2916"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0004",
+      "created_at": "2026-06-16T13:56:00",
+      "time": "13:56",
+      "uid": "e00b11fefff7a608",
+      "uid_short": "e00b",
+      "issue_type": "Ранее кварц сопроцессора недоступен. Сейчас ошибка при выходе со смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2917"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0005",
+      "created_at": "2026-06-16T13:58:00",
+      "time": "13:58",
+      "uid": "4c6650feffbf1388",
+      "uid_short": "4c66",
+      "issue_type": "Дисплей неисправен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2918"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0006",
+      "created_at": "2026-06-16T14:02:00",
+      "time": "14:02",
+      "uid": "b01e11fefff7a608",
+      "uid_short": "b01e",
+      "issue_type": "Бесконечный ребут с ошибкой PB 0xFFFFFFF",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2919"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0007",
+      "created_at": "2026-06-16T14:14:00",
+      "time": "14:14",
+      "uid": "081b11fefff7a608",
+      "uid_short": "081b",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2920"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0008",
+      "created_at": "2026-06-16T14:17:00",
+      "time": "14:17",
+      "uid": "b00e11fefff7a608",
+      "uid_short": "b00e",
+      "issue_type": "Ошибка соединения при закрытии смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2921"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0009",
+      "created_at": "2026-06-16T14:25:00",
+      "time": "14:25",
+      "uid": "301411fefff7a608",
+      "uid_short": "3014",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2922"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0010",
+      "created_at": "2026-06-16T14:27:00",
+      "time": "14:27",
+      "uid": "c00611fefff7a608",
+      "uid_short": "c006",
+      "issue_type": "Пульсометр недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2923"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0011",
+      "created_at": "2026-06-16T14:33:00",
+      "time": "14:33",
+      "uid": "1c0111fefff7a608",
+      "uid_short": "1c01",
+      "issue_type": "Ошибка открытия соединения при открытии смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2924"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0012",
+      "created_at": "2026-06-16T14:35:00",
+      "time": "14:35",
+      "uid": "b01c11fefff7a608",
+      "uid_short": "b01c",
+      "issue_type": "Ошибка открытия соединения при закрытии смены",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2925"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0013",
+      "created_at": "2026-06-16T14:42:00",
+      "time": "14:42",
+      "uid": "50bc8cfeff29e748",
+      "uid_short": "50bc",
+      "issue_type": "Загрязнены контакты питания",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2926"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0014",
+      "created_at": "2026-06-16T14:44:00",
+      "time": "14:44",
+      "uid": "24fd10fefff7a608",
+      "uid_short": "24fd",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2927"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0015",
+      "created_at": "2026-06-16T14:45:00",
+      "time": "14:45",
+      "uid": "dc1b11fefff7a608",
+      "uid_short": "dc1b",
+      "issue_type": "Дисплей неисправен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2928"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260616-0016",
+      "created_at": "2026-06-16T14:47:00",
+      "time": "14:47",
+      "uid": "b80611fefff7a608",
+      "uid_short": "b806",
+      "issue_type": "Не включаются, не реагируют на среднюю кнопку",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2929"
+    }
+  ]
 }

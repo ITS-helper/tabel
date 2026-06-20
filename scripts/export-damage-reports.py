@@ -102,6 +102,26 @@ def _build_day_payload(day: str, day_incidents: list[Incident]) -> dict[str, Any
     }
 
 
+def _load_existing_day_payloads(output_dir: Path) -> dict[str, dict[str, Any]]:
+    payloads: dict[str, dict[str, Any]] = {}
+    if not output_dir.exists():
+        return payloads
+
+    for path in output_dir.glob("*.json"):
+        if path.name == "index.json":
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        day = str(payload.get("date") or path.stem).strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            payloads[day] = payload
+
+    return payloads
+
+
 def _normalize_source_url(source: str, source_url: str, external_id: str = "") -> str:
     value = (source_url or "").strip()
     if source == "telegram":
@@ -160,10 +180,21 @@ def export_reports(db_path: Path, output_dir: Path) -> None:
         by_day[item.day_key].append(item)
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    existing_payloads = _load_existing_day_payloads(output_dir)
     summaries_by_day = _load_existing_summaries(output_dir)
 
     for day in sorted(by_day.keys()):
         payload = _build_day_payload(day, by_day[day])
+        existing_payload = existing_payloads.get(day) or {}
+        if not payload["telegram"] and isinstance(existing_payload.get("telegram"), list):
+            payload["telegram"] = existing_payload["telegram"]
+        if not payload["site"] and isinstance(existing_payload.get("site"), list):
+            payload["site"] = existing_payload["site"]
+        payload["counts"] = {
+            "telegram": len(payload["telegram"]),
+            "site": len(payload["site"]),
+            "total_devices": len(payload["telegram"]) + len(payload["site"]),
+        }
         target = output_dir / f"{day}.json"
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         summaries_by_day[day] = {
