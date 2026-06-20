@@ -2071,10 +2071,10 @@ body[data-site-gate="checking"] #app {
   align-items: center;
   gap: 4px;
   max-width: 148px;
-  font-family: Oswald, sans-serif;
-  font-size: 0.78em;
+  font-family: inherit;
+  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
@@ -3621,7 +3621,7 @@ html.app--blemap-tab {
   .auth-menu__trigger {
     max-width: 96px;
     padding: 4px 8px;
-    font-size: 0.72em;
+    font-size: 0.75rem;
   }
 
   .header__row--bottom {
