@@ -1,0 +1,244 @@
+{
+  "date": "2026-06-20",
+  "title": "Повреждения от 20.06.2026",
+  "generated_at": "2026-06-21T08:19:54",
+  "counts": {
+    "telegram": 11,
+    "site": 12,
+    "total_devices": 23
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264100",
+      "created_at": "2026-06-20T00:23:00",
+      "time": "00:23",
+      "uid": "70fb10fefff7a608",
+      "uid_short": "70fb",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264100"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264101",
+      "created_at": "2026-06-20T08:22:00",
+      "time": "08:22",
+      "uid": "a41c11fefff7a608",
+      "uid_short": "a41c",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264101"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264103",
+      "created_at": "2026-06-20T11:12:00",
+      "time": "11:12",
+      "uid": "a41c11fefff7a608",
+      "uid_short": "a41c",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264103"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264102",
+      "created_at": "2026-06-20T12:32:00",
+      "time": "12:32",
+      "uid": "540411efff7a608",
+      "uid_short": "5404",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/264102"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264104",
+      "created_at": "2026-06-20T14:14:00",
+      "time": "14:14",
+      "uid": "a41c11fefff7a608",
+      "uid_short": "a41c",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264104"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264105",
+      "created_at": "2026-06-20T14:15:00",
+      "time": "14:15",
+      "uid": "ac1a11fefff7a608",
+      "uid_short": "ac1a",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/264105"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264107",
+      "created_at": "2026-06-20T14:20:00",
+      "time": "14:20",
+      "uid": "a8eca8feff1ad6b8",
+      "uid_short": "a8ec",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264107"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264116",
+      "created_at": "2026-06-20T14:20:00",
+      "time": "14:20",
+      "uid": "a8eca8feff1ad6b8",
+      "uid_short": "a8ec",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264116"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264106",
+      "created_at": "2026-06-20T14:21:00",
+      "time": "14:21",
+      "uid": "341311fefff7a608",
+      "uid_short": "3413",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264106"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264108",
+      "created_at": "2026-06-20T14:50:00",
+      "time": "14:50",
+      "uid": "141511fefff7a608",
+      "uid_short": "1415",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/264108"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264117",
+      "created_at": "2026-06-20T18:48:00",
+      "time": "18:48",
+      "uid": "a8eca8feff1ad6b8",
+      "uid_short": "a8ec",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264117"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0001",
+      "created_at": "2026-06-20T05:26:00",
+      "time": "05:26",
+      "uid": "781111fefff7a608",
+      "uid_short": "7811",
+      "issue_type": "Не включаются.",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2965"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0002",
+      "created_at": "2026-06-20T07:17:00",
+      "time": "07:17",
+      "uid": "c42150feffbf1388",
+      "uid_short": "c421",
+      "issue_type": "Не пишут данные о смене",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2966"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0003",
+      "created_at": "2026-06-20T12:24:00",
+      "time": "12:24",
+      "uid": "3c1411fefff7a608",
+      "uid_short": "3c14",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2967"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0004",
+      "created_at": "2026-06-20T12:44:00",
+      "time": "12:44",
+      "uid": "601111fefff7a608",
+      "uid_short": "6011",
+      "issue_type": "кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2968"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0005",
+      "created_at": "2026-06-20T12:50:00",
+      "time": "12:50",
+      "uid": "6cb38cfeff29e748",
+      "uid_short": "6cb3",
+      "issue_type": "неисправна батарея\nпри подключении к Wi-Fi часы отключаются.",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2969"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0006",
+      "created_at": "2026-06-20T12:50:00",
+      "time": "12:50",
+      "uid": "601711fefff7a608",
+      "uid_short": "6017",
+      "issue_type": "Выломан дисплей",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2970"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0007",
+      "created_at": "2026-06-20T12:54:00",
+      "time": "12:54",
+      "uid": "84fc10fefff7a608",
+      "uid_short": "84fc",
+      "issue_type": "дисплей неисправен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2971"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0008",
+      "created_at": "2026-06-20T13:03:00",
+      "time": "13:03",
+      "uid": "d0fb10fefff7a608",
+      "uid_short": "d0fb",
+      "issue_type": "кварц сопроцессора недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2972"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0009",
+      "created_at": "2026-06-20T13:06:00",
+      "time": "13:06",
+      "uid": "60b58cfeff29e748",
+      "uid_short": "60b5",
+      "issue_type": "неисправность батареи. \nпри отключении от зарядной станции выключаются, на кноп…",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2973"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0010",
+      "created_at": "2026-06-20T13:09:00",
+      "time": "13:09",
+      "uid": "d035cffeffe342a8",
+      "uid_short": "d035",
+      "issue_type": "неисправность батареи - отключение при снятии со станции. Вне зарядной станции н…",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2974"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0011",
+      "created_at": "2026-06-20T13:12:00",
+      "time": "13:12",
+      "uid": "044750feffbf1388",
+      "uid_short": "0447",
+      "issue_type": "неисправность батареи. \nпри попытке открыть смену отключаются",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2975"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260620-0012",
+      "created_at": "2026-06-20T13:14:00",
+      "time": "13:14",
+      "uid": "d42111fefff7a608",
+      "uid_short": "d421",
+      "issue_type": "Пульсометр недоступен, залипла верхняя кнопка",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2976"
+    }
+  ]
+}
