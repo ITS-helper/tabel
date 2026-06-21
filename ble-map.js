@@ -2039,6 +2039,10 @@
     return trimmed;
   }
 
+  function resolveZoneSavedName(zone, dirty) {
+    return normalizeZoneName(dirty?.savedName ?? zone?.name ?? "");
+  }
+
   function syncActiveZonePanelToDirty() {
     const zoneId = bleSelectedZoneId;
     if (zoneId == null) return;
@@ -2050,16 +2054,17 @@
     const zone = getZoneById(zoneId);
     const dirty = bleDirtyZones.get(zoneId);
     if (!zone && !dirty) return;
-    const prevName = normalizeZoneName(dirty?.name ?? zone?.name ?? "");
-    if (name === prevName && dirty) return;
+    const savedName = resolveZoneSavedName(zone, dirty);
+    if (name === savedName && dirty) return;
     const pts = dirty?.pts ?? zone?.pts ?? [];
     const desc = dirty?.description ?? zone?.description ?? null;
     const isNew = isNewZoneRecord(zoneId, dirty);
     bleDirtyZones.set(zoneId, {
       name,
+      savedName,
       description: desc,
       pts: pts.map((p) => [...p]),
-      nameChanged: isNew || name !== prevName,
+      nameChanged: (dirty?.nameChanged ?? false) || isNew || name !== savedName,
       isNew,
     });
     applyZoneNameToLocalState(zoneId, name);
@@ -2102,6 +2107,7 @@
     const prev = bleDirtyZones.get(id);
     bleDirtyZones.set(id, {
       name: resolveZoneRecordName(id, name ?? prev?.name),
+      savedName: resolveZoneSavedName(zone, prev),
       description: description ?? prev?.description ?? zone?.description ?? null,
       pts: pts.map((p) => [p[0], p[1]]),
       nameChanged: prev?.nameChanged ?? false,
@@ -2207,6 +2213,7 @@
     if (sourceDirty) {
       bleDirtyZones.set(id, {
         name: normalizeZoneName(zone.name),
+        savedName: resolveZoneSavedName(zone, sourceDirty),
         description: sourceDirty.description ?? zone.description ?? null,
         pts: sourceDirty.pts.map((p) => [...p]),
         nameChanged: false,
@@ -2224,6 +2231,7 @@
     bleZoneData.push(newZone);
     bleDirtyZones.set(tempId, {
       name: cloneName,
+      savedName: "",
       description: newZone.description,
       pts: clonedPts,
       isNew: true,
@@ -2246,14 +2254,15 @@
       const dirty = bleDirtyZones.get(id);
       const pts = dirty?.pts ?? zone?.pts ?? [];
       const desc = dirty?.description ?? zone?.description ?? null;
-      const prevName = normalizeZoneName(dirty?.name ?? zone?.name ?? "");
       const name = normalizeZoneName(input.value);
+      const savedName = resolveZoneSavedName(zone, dirty);
       const isNew = isNewZoneRecord(id, dirty);
       bleDirtyZones.set(id, {
         name,
+        savedName,
         description: desc,
         pts: pts.map((p) => [...p]),
-        nameChanged: isNew || name !== prevName,
+        nameChanged: (dirty?.nameChanged ?? false) || isNew || name !== savedName,
         isNew,
       });
       applyZoneNameToLocalState(id, name);
@@ -3553,7 +3562,10 @@
         }
       } else {
         const body = { points: ptsToApiPoints(pts) };
-        if (dirty.nameChanged) {
+        const savedName = normalizeZoneName(dirty.savedName);
+        const hasNameUpdate =
+          dirty.nameChanged || (!!savedName && normalizeZoneName(dirty.name) !== savedName);
+        if (hasNameUpdate) {
           const trimmed = normalizeZoneName(dirty.name);
           if (!trimmed) throw new Error(`У зоны ${zoneId} должно быть имя`);
           if (isZoneNameTaken(trimmed, zoneId)) {
@@ -3584,13 +3596,13 @@
         const z = bleZoneData.find((x) => x.id === zoneId);
         if (z) {
           z.pts = pts.map((p) => [...p]);
-          if (dirty.nameChanged && dirty.name !== undefined) z.name = normalizeZoneName(dirty.name);
+          if (hasNameUpdate && dirty.name !== undefined) z.name = normalizeZoneName(dirty.name);
           if (dirty.description !== undefined) z.description = dirty.description;
         }
         const entry = bleZoneLayers.get(zoneId);
         if (entry) {
           entry.data.pts = pts.map((p) => [...p]);
-          if (dirty.nameChanged && dirty.name !== undefined) {
+          if (hasNameUpdate && dirty.name !== undefined) {
             entry.data.name = normalizeZoneName(dirty.name);
           }
         }
