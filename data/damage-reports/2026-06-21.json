@@ -1,0 +1,94 @@
+{
+  "date": "2026-06-21",
+  "title": "Повреждения от 21.06.2026",
+  "generated_at": "2026-06-22T08:17:27",
+  "counts": {
+    "telegram": 3,
+    "site": 5,
+    "total_devices": 8
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264118",
+      "created_at": "2026-06-21T02:03:59",
+      "time": "02:03",
+      "uid": "a00211fefff7a608",
+      "uid_short": "a002",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/264118"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264119",
+      "created_at": "2026-06-21T07:32:00",
+      "time": "07:32",
+      "uid": "a8eca8feff1ad6b8",
+      "uid_short": "a8ec",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264119"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264141",
+      "created_at": "2026-06-21T21:50:00",
+      "time": "21:50",
+      "uid": "e81711fefff7a608",
+      "uid_short": "e817",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/264141"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260621-0001",
+      "created_at": "2026-06-21T09:54:00",
+      "time": "09:54",
+      "uid": "842111fefff7a608",
+      "uid_short": "8421",
+      "issue_type": "Не реагирует на среднюю кнопку",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2977"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260621-0002",
+      "created_at": "2026-06-21T23:32:00",
+      "time": "23:32",
+      "uid": "c02111fefff7a608",
+      "uid_short": "c021",
+      "issue_type": "Дефект дисплея",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2978"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260621-0003",
+      "created_at": "2026-06-21T23:35:00",
+      "time": "23:35",
+      "uid": "40b28cfeff29e748",
+      "uid_short": "40b2",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2979"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260621-0004",
+      "created_at": "2026-06-21T23:54:00",
+      "time": "23:54",
+      "uid": "140c11fefff7a608",
+      "uid_short": "140c",
+      "issue_type": "Неисправность дисплея",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2980"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260621-0005",
+      "created_at": "2026-06-21T23:59:00",
+      "time": "23:59",
+      "uid": "2cfe10fefff7a608",
+      "uid_short": "2cfe",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2981"
+    }
+  ]
+}
