@@ -3,6 +3,7 @@ name: Damage reports cloud refresh
 on:
   schedule:
     - cron: "15 5 * * *"
+    - cron: "45 5 * * *"
   workflow_dispatch:
     inputs:
       target_date:
@@ -68,7 +69,21 @@ jobs:
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
           echo "Using target date: $target_date"
 
+      - name: Skip if scheduled report already exists
+        id: existing-report
+        if: ${{ github.event_name == 'schedule' }}
+        shell: bash
+        run: |
+          report_path="data/damage-reports/${{ steps.target-date.outputs.target_date }}.json"
+          if git cat-file -e "HEAD:${report_path}" 2>/dev/null; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "Scheduled report already published for ${{ steps.target-date.outputs.target_date }}, skipping duplicate run."
+            exit 0
+          fi
+          echo "already_published=false" >> "$GITHUB_OUTPUT"
+
       - name: Write tgdevice env file
+        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
         shell: bash
         run: |
           if [ -z "${{ secrets.TELETHON_STRING_SESSION }}" ]; then
@@ -120,6 +135,7 @@ jobs:
           } > tgdevice/.env
 
       - name: Validate restored Telethon session
+        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
         working-directory: tgdevice
         shell: bash
         run: |
@@ -152,6 +168,7 @@ jobs:
           PY
 
       - name: Collect incidents and build report payloads
+        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
         working-directory: tgdevice
         shell: bash
         run: |
@@ -160,18 +177,20 @@ jobs:
           ../.venv/bin/python -m tgdevice.main fetch-site --date "${{ steps.target-date.outputs.target_date }}"
 
       - name: Send Telegram report
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.send_telegram == 'true' }}
+        if: ${{ steps.existing-report.outputs.already_published != 'true' && (github.event_name == 'schedule' || github.event.inputs.send_telegram == 'true') }}
         working-directory: tgdevice
         shell: bash
         run: |
           ../.venv/bin/python -m tgdevice.main report --date "${{ steps.target-date.outputs.target_date }}" --send
 
       - name: Export static JSON for Pages
+        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
         shell: bash
         run: |
           ./.venv/bin/python scripts/export-damage-reports.py --db data/tgdevice.sqlite3 --out data/damage-reports
 
       - name: Commit and push if reports changed
+        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
