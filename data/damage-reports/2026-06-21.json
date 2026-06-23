@@ -1,42 +1,22 @@
 {
   "date": "2026-06-21",
   "title": "Повреждения от 21.06.2026",
-  "generated_at": "2026-06-22T08:17:27",
+  "generated_at": "2026-06-23T09:28:21",
   "counts": {
-    "telegram": 3,
+    "telegram": 1,
     "site": 5,
-    "total_devices": 8
+    "total_devices": 6
   },
   "telegram": [
     {
       "source": "telegram",
-      "external_id": "-1001169689924:264118",
-      "created_at": "2026-06-21T02:03:59",
-      "time": "02:03",
-      "uid": "a00211fefff7a608",
-      "uid_short": "a002",
+      "external_id": "-1001169689924:264144",
+      "created_at": "2026-06-21T19:09:00",
+      "time": "19:09",
+      "uid": "4cfb10fefff7a608",
+      "uid_short": "4cfb",
       "issue_type": "Падение",
-      "source_url": "https://t.me/c/1169689924/264118"
-    },
-    {
-      "source": "telegram",
-      "external_id": "-1001169689924:264119",
-      "created_at": "2026-06-21T07:32:00",
-      "time": "07:32",
-      "uid": "a8eca8feff1ad6b8",
-      "uid_short": "a8ec",
-      "issue_type": "Зависшая_смена",
-      "source_url": "https://t.me/c/1169689924/264119"
-    },
-    {
-      "source": "telegram",
-      "external_id": "-1001169689924:264141",
-      "created_at": "2026-06-21T21:50:00",
-      "time": "21:50",
-      "uid": "e81711fefff7a608",
-      "uid_short": "e817",
-      "issue_type": "Падение",
-      "source_url": "https://t.me/c/1169689924/264141"
+      "source_url": "https://t.me/c/1169689924/264144"
     }
   ],
   "site": [

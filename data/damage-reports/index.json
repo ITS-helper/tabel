@@ -1,14 +1,23 @@
 {
-  "generated_at": "2026-06-22T08:17:27",
-  "latest_date": "2026-06-21",
+  "generated_at": "2026-06-23T09:28:21",
+  "latest_date": "2026-06-22",
   "dates": [
+    {
+      "date": "2026-06-22",
+      "title": "Повреждения от 22.06.2026",
+      "counts": {
+        "telegram": 3,
+        "site": 12,
+        "total_devices": 15
+      }
+    },
     {
       "date": "2026-06-21",
       "title": "Повреждения от 21.06.2026",
       "counts": {
-        "telegram": 3,
+        "telegram": 1,
         "site": 5,
-        "total_devices": 8
+        "total_devices": 6
       }
     },
     {

@@ -1,0 +1,164 @@
+{
+  "date": "2026-06-22",
+  "title": "Повреждения от 22.06.2026",
+  "generated_at": "2026-06-23T09:28:21",
+  "counts": {
+    "telegram": 3,
+    "site": 12,
+    "total_devices": 15
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264142",
+      "created_at": "2026-06-22T00:50:00",
+      "time": "00:50",
+      "uid": "0c1f11fefff7a608",
+      "uid_short": "0c1f",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264142"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264143",
+      "created_at": "2026-06-22T01:03:00",
+      "time": "01:03",
+      "uid": "ac0811fefff7a608",
+      "uid_short": "ac08",
+      "issue_type": "Падение",
+      "source_url": "https://t.me/c/1169689924/264143"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264190",
+      "created_at": "2026-06-22T14:10:00",
+      "time": "14:10",
+      "uid": "08fa10fefff7a608",
+      "uid_short": "08fa",
+      "issue_type": "Зависшая_смена",
+      "source_url": "https://t.me/c/1169689924/264190"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0001",
+      "created_at": "2026-06-22T00:06:00",
+      "time": "00:06",
+      "uid": "a0b98cfeff29e748",
+      "uid_short": "a0b9",
+      "issue_type": "Неисправность аккумулятора",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2982"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0002",
+      "created_at": "2026-06-22T00:08:00",
+      "time": "00:08",
+      "uid": "480d11fefff7a608",
+      "uid_short": "480d",
+      "issue_type": "Неисправность аккумулятора ( не успевают начать смену )",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2983"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0003",
+      "created_at": "2026-06-22T00:08:00",
+      "time": "00:08",
+      "uid": "980911fefff7a608",
+      "uid_short": "9809",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2984"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0004",
+      "created_at": "2026-06-22T00:10:00",
+      "time": "00:10",
+      "uid": "101511fefff7a608",
+      "uid_short": "1015",
+      "issue_type": "Не включаются",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2985"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0005",
+      "created_at": "2026-06-22T00:17:00",
+      "time": "00:17",
+      "uid": "c01b11fefff7a608",
+      "uid_short": "c01b",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2986"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0006",
+      "created_at": "2026-06-22T00:21:00",
+      "time": "00:21",
+      "uid": "d81811fefff7a608",
+      "uid_short": "d818",
+      "issue_type": "Не работает экран",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2987"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0007",
+      "created_at": "2026-06-22T00:25:00",
+      "time": "00:25",
+      "uid": "200d11fefff7a608",
+      "uid_short": "200d",
+      "issue_type": "кварц сопросессора недоступен + вечный ребут",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2988"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0008",
+      "created_at": "2026-06-22T00:26:00",
+      "time": "00:26",
+      "uid": "a8a98cfeff29e748",
+      "uid_short": "a8a9",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2989"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0009",
+      "created_at": "2026-06-22T00:28:00",
+      "time": "00:28",
+      "uid": "a8eca8feff1ad6b8",
+      "uid_short": "a8ec",
+      "issue_type": "Не включаются, предположительно проблемы с акб",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2990"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0010",
+      "created_at": "2026-06-22T10:21:00",
+      "time": "10:21",
+      "uid": "d00111fefff7a608",
+      "uid_short": "d001",
+      "issue_type": "Сломана крышка.",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2991"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0011",
+      "created_at": "2026-06-22T10:33:00",
+      "time": "10:33",
+      "uid": "a01d11fefff7a608",
+      "uid_short": "a01d",
+      "issue_type": "Вечный перезапуск, зависла смена.",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2992"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260622-0012",
+      "created_at": "2026-06-22T10:37:00",
+      "time": "10:37",
+      "uid": "ec0111fefff7a608",
+      "uid_short": "ec01",
+      "issue_type": "Кнопка залита краской.",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2993"
+    }
+  ]
+}
