@@ -106,6 +106,11 @@
     `;
   }
 
+  function formatEmployeeNumber(item) {
+    const value = String(item?.employee_number || "").trim();
+    return value ? ` | ТН ${value}` : "";
+  }
+
   function buildClipboardText(report) {
     if (!report) return "";
     const telegram = report.telegram || [];
@@ -122,7 +127,9 @@
 
     if (telegram.length) {
       for (const item of telegram) {
-        lines.push(`- | ${item.issue_type} | ${item.uid_short} | ${item.source_url || ""}`.trim());
+        lines.push(
+          `- | ${item.issue_type} | ${item.uid_short}${formatEmployeeNumber(item)} | ${item.source_url || ""}`.trim()
+        );
       }
     } else {
       lines.push("- \u043d\u0435\u0442");
@@ -132,13 +139,28 @@
     lines.push("\u0410\u043f\u043f\u0430\u0440\u0430\u0442\u043d\u044b\u0435:");
     if (site.length) {
       for (const item of site) {
-        lines.push(`- | ${item.issue_type} | ${item.uid_short} | ${item.source_url || ""}`.trim());
+        lines.push(
+          `- | ${item.issue_type} | ${item.uid_short}${formatEmployeeNumber(item)} | ${item.source_url || ""}`.trim()
+        );
       }
     } else {
       lines.push("- \u043d\u0435\u0442");
     }
 
     return lines.join("\n");
+  }
+
+  function selfCheckClipboardTextEmployeeNumber() {
+    const text = buildClipboardText({
+      title: "Повреждения от 24.06.2026",
+      counts: { telegram: 1, site: 1, total_devices: 2 },
+      telegram: [
+        { issue_type: "Падение", uid_short: "1234", employee_number: "5678", source_url: "https://t.me/c/1/2" },
+      ],
+      site: [{ issue_type: "Батарея", uid_short: "abcd", source_url: "https://device.workwatch.pro/x" }],
+    });
+    console.assert(text.includes("| 1234 | ТН 5678 |"), "clipboard self-check failed: employee number");
+    console.assert(!text.includes("| abcd | ТН"), "clipboard self-check failed: optional employee number");
   }
 
   async function copyCurrentReport() {
@@ -429,4 +451,5 @@
   };
 
   selfCheckRepeatDeviceEntries();
+  selfCheckClipboardTextEmployeeNumber();
 })(typeof window !== "undefined" ? window : globalThis);

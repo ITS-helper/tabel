@@ -18,6 +18,7 @@ class Incident:
     created_at: str
     uid: str
     issue_type: str
+    employee_number: str
     source_url: str
 
     @property
@@ -42,6 +43,7 @@ class Incident:
             "uid": self.uid,
             "uid_short": self.uid_short,
             "issue_type": self.issue_type,
+            "employee_number": self.employee_number,
             "source_url": _normalize_source_url(self.source, self.source_url, self.external_id),
         }
 
@@ -63,7 +65,8 @@ def _load_incidents(db_path: Path) -> list[Incident]:
         source_url_expr = "coalesce(source_url, '')" if "source_url" in columns else "''"
         rows = con.execute(
             f"""
-            select source, external_id, created_at, uid, issue_type, {source_url_expr}
+            select source, external_id, created_at, uid, issue_type,
+                   coalesce(employee_number, ''), {source_url_expr}
             from incidents
             where uid is not null and trim(uid) <> ''
             order by created_at asc, source asc, external_id asc
@@ -78,7 +81,8 @@ def _load_incidents(db_path: Path) -> list[Incident]:
             created_at=row[2],
             uid=row[3],
             issue_type=row[4],
-            source_url=row[5],
+            employee_number=row[5],
+            source_url=row[6],
         )
         for row in rows
     ]
@@ -217,7 +221,21 @@ def export_reports(db_path: Path, output_dir: Path) -> None:
     )
 
 
+def _self_check_employee_number_export() -> None:
+    payload = Incident(
+        source="telegram",
+        external_id="-1001:2",
+        created_at="2026-06-24T10:00:00",
+        uid="0123456789abcdef",
+        issue_type="incident",
+        employee_number="123456",
+        source_url="",
+    ).to_payload()
+    assert payload["employee_number"] == "123456"
+
+
 def main() -> None:
+    _self_check_employee_number_export()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--db",
