@@ -2,8 +2,8 @@ name: Damage reports cloud refresh
 
 on:
   schedule:
-    - cron: "15 5 * * *"
-    - cron: "45 5 * * *"
+    - cron: "5,20,35,50 5 * * *"
+    - cron: "5,20,35,50 6 * * *"
   workflow_dispatch:
     inputs:
       target_date:
@@ -47,6 +47,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Sync checkout to latest main
+        if: ${{ github.event_name == 'schedule' }}
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -69,39 +76,44 @@ jobs:
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
           echo "Using target date: $target_date"
 
-      - name: Classify scheduled run
-        id: schedule-kind
+      - name: Check Telegram sent marker
+        id: telegram-sent
         if: ${{ github.event_name == 'schedule' }}
         shell: bash
         run: |
-          if [ "${{ github.event.schedule }}" = "45 5 * * *" ]; then
-            echo "is_backup=true" >> "$GITHUB_OUTPUT"
-            echo "Scheduled backup run detected"
+          marker_path="data/damage-reports/.telegram-sent/${{ steps.target-date.outputs.target_date }}.txt"
+          if git cat-file -e "HEAD:${marker_path}" 2>/dev/null; then
+            echo "already_sent=true" >> "$GITHUB_OUTPUT"
+            echo "Telegram report already sent for ${{ steps.target-date.outputs.target_date }}."
           else
-            echo "is_backup=false" >> "$GITHUB_OUTPUT"
-            echo "Scheduled primary run detected"
+            echo "already_sent=false" >> "$GITHUB_OUTPUT"
+            echo "Telegram report has not been sent for ${{ steps.target-date.outputs.target_date }}."
           fi
 
-      - name: Skip if scheduled report already exists
-        id: existing-report
+      - name: Resolve scheduled run mode
+        id: run-mode
         if: ${{ github.event_name == 'schedule' }}
         shell: bash
         run: |
-          if [ "${{ steps.schedule-kind.outputs.is_backup }}" != "true" ]; then
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
-            echo "Primary scheduled run always continues to Telegram send."
+          if [ "${{ steps.telegram-sent.outputs.already_sent }}" = "true" ]; then
+            echo "skip_refresh=true" >> "$GITHUB_OUTPUT"
+            echo "send_telegram=false" >> "$GITHUB_OUTPUT"
+            echo "Scheduled retry skipped because the Telegram marker exists."
             exit 0
           fi
+
+          echo "send_telegram=true" >> "$GITHUB_OUTPUT"
           report_path="data/damage-reports/${{ steps.target-date.outputs.target_date }}.json"
           if git cat-file -e "HEAD:${report_path}" 2>/dev/null; then
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
-            echo "Backup scheduled run found published report for ${{ steps.target-date.outputs.target_date }}, skipping duplicate refresh."
-            exit 0
+            echo "skip_refresh=true" >> "$GITHUB_OUTPUT"
+            echo "Published JSON exists; this run will only send Telegram and write the marker."
+          else
+            echo "skip_refresh=false" >> "$GITHUB_OUTPUT"
+            echo "No published JSON exists; this run will refresh data, send Telegram, and write the marker."
           fi
-          echo "already_published=false" >> "$GITHUB_OUTPUT"
 
       - name: Write tgdevice env file
-        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
+        if: ${{ github.event_name != 'schedule' || steps.run-mode.outputs.send_telegram == 'true' || steps.run-mode.outputs.skip_refresh != 'true' }}
         shell: bash
         run: |
           if [ -z "${{ secrets.TELETHON_STRING_SESSION }}" ]; then
@@ -153,7 +165,7 @@ jobs:
           } > tgdevice/.env
 
       - name: Validate restored Telethon session
-        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
+        if: ${{ github.event_name != 'schedule' || steps.run-mode.outputs.send_telegram == 'true' || steps.run-mode.outputs.skip_refresh != 'true' }}
         working-directory: tgdevice
         shell: bash
         run: |
@@ -186,7 +198,7 @@ jobs:
           PY
 
       - name: Collect incidents and build report payloads
-        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
+        if: ${{ github.event_name != 'schedule' || steps.run-mode.outputs.skip_refresh != 'true' }}
         working-directory: tgdevice
         shell: bash
         run: |
@@ -195,20 +207,33 @@ jobs:
           ../.venv/bin/python -m tgdevice.main fetch-site --date "${{ steps.target-date.outputs.target_date }}"
 
       - name: Send Telegram report
-        if: ${{ steps.existing-report.outputs.already_published != 'true' && (github.event_name == 'schedule' || github.event.inputs.send_telegram == 'true') }}
+        if: ${{ (github.event_name == 'schedule' && steps.run-mode.outputs.send_telegram == 'true') || (github.event_name != 'schedule' && github.event.inputs.send_telegram == 'true') }}
         working-directory: tgdevice
         shell: bash
         run: |
           ../.venv/bin/python -m tgdevice.main report --date "${{ steps.target-date.outputs.target_date }}" --send
 
       - name: Export static JSON for Pages
-        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
+        if: ${{ github.event_name != 'schedule' || steps.run-mode.outputs.skip_refresh != 'true' }}
         shell: bash
         run: |
           ./.venv/bin/python scripts/export-damage-reports.py --db data/tgdevice.sqlite3 --out data/damage-reports
 
+      - name: Mark Telegram report sent
+        if: ${{ github.event_name == 'schedule' && steps.run-mode.outputs.send_telegram == 'true' }}
+        shell: bash
+        run: |
+          marker_dir="data/damage-reports/.telegram-sent"
+          mkdir -p "$marker_dir"
+          {
+            echo "date=${{ steps.target-date.outputs.target_date }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "schedule=${{ github.event.schedule }}"
+            date -u +"sent_at=%Y-%m-%dT%H:%M:%SZ"
+          } > "$marker_dir/${{ steps.target-date.outputs.target_date }}.txt"
+
       - name: Commit and push if reports changed
-        if: ${{ steps.existing-report.outputs.already_published != 'true' }}
+        if: ${{ github.event_name != 'schedule' || steps.run-mode.outputs.send_telegram == 'true' || steps.run-mode.outputs.skip_refresh != 'true' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
