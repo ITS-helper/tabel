@@ -1,0 +1,212 @@
+{
+  "date": "2026-06-23",
+  "title": "Повреждения от 23.06.2026",
+  "generated_at": "2026-06-24T07:38:55",
+  "counts": {
+    "telegram": 5,
+    "site": 13,
+    "total_devices": 18
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264269",
+      "created_at": "2026-06-23T00:40:00",
+      "time": "00:40",
+      "uid": "1c1011fefff7a608",
+      "uid_short": "1c10",
+      "issue_type": "Падение",
+      "employee_number": "9677",
+      "source_url": "https://t.me/c/1169689924/264269"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264270",
+      "created_at": "2026-06-23T02:51:58",
+      "time": "02:51",
+      "uid": "d41a11fefff7a608",
+      "uid_short": "d41a",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "13104",
+      "source_url": "https://t.me/c/1169689924/264270"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264275",
+      "created_at": "2026-06-23T04:38:09",
+      "time": "04:38",
+      "uid": "040d11fefff7a608",
+      "uid_short": "040d",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "10737",
+      "source_url": "https://t.me/c/1169689924/264275"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264291",
+      "created_at": "2026-06-23T10:03:00",
+      "time": "10:03",
+      "uid": "280511fefff7a608",
+      "uid_short": "2805",
+      "issue_type": "Падение",
+      "employee_number": "2696",
+      "source_url": "https://t.me/c/1169689924/264291"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264438",
+      "created_at": "2026-06-23T15:19:46",
+      "time": "15:19",
+      "uid": "780c11fefff7a608",
+      "uid_short": "780c",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "9542",
+      "source_url": "https://t.me/c/1169689924/264438"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0001",
+      "created_at": "2026-06-23T00:29:00",
+      "time": "00:29",
+      "uid": "702011fefff7a608",
+      "uid_short": "7020",
+      "issue_type": "Дефект PIN контакта",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2994"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0002",
+      "created_at": "2026-06-23T01:05:00",
+      "time": "01:05",
+      "uid": "6c0c11fefff7a608",
+      "uid_short": "6c0c",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2995"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0003",
+      "created_at": "2026-06-23T02:24:00",
+      "time": "02:24",
+      "uid": "600411fefff7a608",
+      "uid_short": "6004",
+      "issue_type": "Не работает экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2996"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0004",
+      "created_at": "2026-06-23T02:25:00",
+      "time": "02:25",
+      "uid": "e01811fefff7a608",
+      "uid_short": "e018",
+      "issue_type": "пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2997"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0005",
+      "created_at": "2026-06-23T02:26:00",
+      "time": "02:26",
+      "uid": "980111fefff7a608",
+      "uid_short": "9801",
+      "issue_type": "admin\n22.06.2026 08:09\nзависшая смена всегда",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2998"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0006",
+      "created_at": "2026-06-23T02:38:00",
+      "time": "02:38",
+      "uid": "7cb98cfeff29e748",
+      "uid_short": "7cb9",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=2999"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0007",
+      "created_at": "2026-06-23T10:20:00",
+      "time": "10:20",
+      "uid": "5c0e11fefff7a608",
+      "uid_short": "5c0e",
+      "issue_type": "RTC недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3000"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0008",
+      "created_at": "2026-06-23T10:22:00",
+      "time": "10:22",
+      "uid": "c40a11fefff7a608",
+      "uid_short": "c40a",
+      "issue_type": "Кварц сорроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3001"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0009",
+      "created_at": "2026-06-23T10:30:00",
+      "time": "10:30",
+      "uid": "e8a88cfeff29e748",
+      "uid_short": "e8a8",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3002"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0010",
+      "created_at": "2026-06-23T10:34:00",
+      "time": "10:34",
+      "uid": "8cae8cfeff29e748",
+      "uid_short": "8cae",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3003"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0011",
+      "created_at": "2026-06-23T10:57:00",
+      "time": "10:57",
+      "uid": "1c1411fefff7a608",
+      "uid_short": "1c14",
+      "issue_type": "Кварц сорроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3004"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0012",
+      "created_at": "2026-06-23T11:01:00",
+      "time": "11:01",
+      "uid": "2ca58cfeff29e748",
+      "uid_short": "2ca5",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3005"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260623-0013",
+      "created_at": "2026-06-23T11:09:00",
+      "time": "11:09",
+      "uid": "fcac8cfeff29e748",
+      "uid_short": "fcac",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3006"
+    }
+  ]
+}
