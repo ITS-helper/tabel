@@ -1,4 +1,4 @@
-name: Damage reports cloud refresh
+name: Damage reports scheduled refresh
 
 on:
   schedule:
