@@ -1,0 +1,3 @@
+date=2026-06-23
+sent_manually=true
+note=Added after manual Telegram send to prevent scheduled duplicate.
