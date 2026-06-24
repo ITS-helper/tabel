@@ -69,15 +69,33 @@ jobs:
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
           echo "Using target date: $target_date"
 
+      - name: Classify scheduled run
+        id: schedule-kind
+        if: ${{ github.event_name == 'schedule' }}
+        shell: bash
+        run: |
+          if [ "${{ github.event.schedule }}" = "45 5 * * *" ]; then
+            echo "is_backup=true" >> "$GITHUB_OUTPUT"
+            echo "Scheduled backup run detected"
+          else
+            echo "is_backup=false" >> "$GITHUB_OUTPUT"
+            echo "Scheduled primary run detected"
+          fi
+
       - name: Skip if scheduled report already exists
         id: existing-report
         if: ${{ github.event_name == 'schedule' }}
         shell: bash
         run: |
+          if [ "${{ steps.schedule-kind.outputs.is_backup }}" != "true" ]; then
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            echo "Primary scheduled run always continues to Telegram send."
+            exit 0
+          fi
           report_path="data/damage-reports/${{ steps.target-date.outputs.target_date }}.json"
           if git cat-file -e "HEAD:${report_path}" 2>/dev/null; then
             echo "already_published=true" >> "$GITHUB_OUTPUT"
-            echo "Scheduled report already published for ${{ steps.target-date.outputs.target_date }}, skipping duplicate run."
+            echo "Backup scheduled run found published report for ${{ steps.target-date.outputs.target_date }}, skipping duplicate refresh."
             exit 0
           fi
           echo "already_published=false" >> "$GITHUB_OUTPUT"
