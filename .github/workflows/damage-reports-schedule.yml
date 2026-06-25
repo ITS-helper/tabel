@@ -1,6 +1,9 @@
 name: Damage reports scheduled refresh
 
 on:
+  schedule:
+    - cron: "5,20,35,50 5 * * *"
+    - cron: "5,20,35,50 6 * * *"
   workflow_dispatch:
     inputs:
       target_date:
