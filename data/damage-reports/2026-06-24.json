@@ -1,0 +1,91 @@
+{
+  "date": "2026-06-24",
+  "title": "Повреждения от 24.06.2026",
+  "generated_at": "2026-06-25T09:03:51",
+  "counts": {
+    "telegram": 3,
+    "site": 4,
+    "total_devices": 7
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264465",
+      "created_at": "2026-06-24T01:00:00",
+      "time": "01:00",
+      "uid": "6ceca8feff1ad6b8",
+      "uid_short": "6cec",
+      "issue_type": "Падение",
+      "employee_number": "12226",
+      "source_url": "https://t.me/c/1169689924/264465"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264487",
+      "created_at": "2026-06-24T09:25:00",
+      "time": "09:25",
+      "uid": "4cfb10fefff7a608",
+      "uid_short": "4cfb",
+      "issue_type": "Падение",
+      "employee_number": "13008",
+      "source_url": "https://t.me/c/1169689924/264487"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264516",
+      "created_at": "2026-06-24T10:39:55",
+      "time": "10:39",
+      "uid": "040a11fefff7a608",
+      "uid_short": "040a",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "4345",
+      "source_url": "https://t.me/c/1169689924/264516"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260624-0001",
+      "created_at": "2026-06-24T08:29:00",
+      "time": "08:29",
+      "uid": "a41811fefff7a608",
+      "uid_short": "a418",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3007"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260624-0002",
+      "created_at": "2026-06-24T08:31:00",
+      "time": "08:31",
+      "uid": "a8fd10fefff7a608",
+      "uid_short": "a8fd",
+      "issue_type": "Не стартует смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3008"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260624-0003",
+      "created_at": "2026-06-24T17:47:00",
+      "time": "17:47",
+      "uid": "300c11fefff7a608",
+      "uid_short": "300c",
+      "issue_type": "Площадка дисплея не прилегает к корпусу",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3009"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260624-0004",
+      "created_at": "2026-06-24T17:53:00",
+      "time": "17:53",
+      "uid": "c0fa10fefff7a608",
+      "uid_short": "c0fa",
+      "issue_type": "Неисправность дисплея. при открытии меню издают вибрацию и звуковой сигнал",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3010"
+    }
+  ]
+}
