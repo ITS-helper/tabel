@@ -1,0 +1,123 @@
+{
+  "date": "2026-06-25",
+  "title": "Повреждения от 25.06.2026",
+  "generated_at": "2026-06-26T09:13:19",
+  "counts": {
+    "telegram": 0,
+    "site": 10,
+    "total_devices": 10
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0001",
+      "created_at": "2026-06-25T04:21:00",
+      "time": "04:21",
+      "uid": "80fd10fefff7a608",
+      "uid_short": "80fd",
+      "issue_type": "Неисправен дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3011"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0002",
+      "created_at": "2026-06-25T04:56:00",
+      "time": "04:56",
+      "uid": "140011fefff7a608",
+      "uid_short": "1400",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3012"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0003",
+      "created_at": "2026-06-25T04:58:00",
+      "time": "04:58",
+      "uid": "a8a78cfeff29e748",
+      "uid_short": "a8a7",
+      "issue_type": "Дефект корпуса",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3013"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0004",
+      "created_at": "2026-06-25T04:58:00",
+      "time": "04:58",
+      "uid": "440b11fefff7a608",
+      "uid_short": "440b",
+      "issue_type": "Выключаются при снятии с зарядной станции",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3014"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0005",
+      "created_at": "2026-06-25T05:00:00",
+      "time": "05:00",
+      "uid": "c01a11fefff7a608",
+      "uid_short": "c01a",
+      "issue_type": "Не включаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3015"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0006",
+      "created_at": "2026-06-25T05:00:00",
+      "time": "05:00",
+      "uid": "f80b11fefff7a608",
+      "uid_short": "f80b",
+      "issue_type": "Дисплей неисправен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3016"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0007",
+      "created_at": "2026-06-25T05:02:00",
+      "time": "05:02",
+      "uid": "8cac8cfeff29e748",
+      "uid_short": "8cac",
+      "issue_type": "Выключаются после снятия с зарядной станции",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3017"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0008",
+      "created_at": "2026-06-25T05:03:00",
+      "time": "05:03",
+      "uid": "bc1b11fefff7a608",
+      "uid_short": "bc1b",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3018"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0009",
+      "created_at": "2026-06-25T05:08:00",
+      "time": "05:08",
+      "uid": "401711fefff7a608",
+      "uid_short": "4017",
+      "issue_type": "Нет контакта с зарядной станцией",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3019"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260625-0010",
+      "created_at": "2026-06-25T14:31:00",
+      "time": "14:31",
+      "uid": "20bb8cfeff29e748",
+      "uid_short": "20bb",
+      "issue_type": "ошибка выгрузки смены, сброс bb + fs-pb не помог.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3020"
+    }
+  ]
+}
