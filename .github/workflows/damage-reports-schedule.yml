@@ -106,7 +106,8 @@ jobs:
           report_path="data/damage-reports/${{ steps.target-date.outputs.target_date }}.json"
           if git cat-file -e "HEAD:${report_path}" 2>/dev/null; then
             echo "skip_refresh=true" >> "$GITHUB_OUTPUT"
-            echo "Published JSON exists; this run will only send Telegram and write the marker."
+            echo "send_telegram=false" >> "$GITHUB_OUTPUT"
+            echo "Published JSON exists; scheduled retry will skip refresh and not send Telegram from an empty runner DB."
           else
             echo "skip_refresh=false" >> "$GITHUB_OUTPUT"
             echo "No published JSON exists; this run will refresh data, send Telegram, and write the marker."
