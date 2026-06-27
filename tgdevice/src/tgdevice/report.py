@@ -18,6 +18,7 @@ TITLE = "\u041f\u043e\u0432\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u044f \u04
 SOFTWARE = "\u041f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u043d\u044b\u0435"
 HARDWARE = "\u0410\u043f\u043f\u0430\u0440\u0430\u0442\u043d\u044b\u0435"
 TOTAL = "\u0418\u0442\u043e\u0433\u043e \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432"
+MAX_LISTED_INCIDENTS = 30
 
 
 def build_daily_report_plain(db: Database, target_day: date) -> str:
@@ -36,13 +37,13 @@ def build_daily_report_plain(db: Database, target_day: date) -> str:
 
     if telegram_incidents:
         lines.append(f"{SOFTWARE}:")
-        for incident in telegram_incidents[:20]:
+        for incident in telegram_incidents[:MAX_LISTED_INCIDENTS]:
             lines.append(_format_label(incident))
         lines.append("")
 
     if site_incidents:
         lines.append(f"{HARDWARE}:")
-        for incident in site_incidents[:20]:
+        for incident in site_incidents[:MAX_LISTED_INCIDENTS]:
             lines.append(_format_label(incident))
         lines.append("")
 
@@ -66,13 +67,13 @@ def build_daily_report_html(db: Database, target_day: date) -> str:
 
     if telegram_incidents:
         lines.append(f"{SOFTWARE}:")
-        for incident in telegram_incidents[:20]:
+        for incident in telegram_incidents[:MAX_LISTED_INCIDENTS]:
             lines.append(_format_incident_html(incident))
         lines.append("")
 
     if site_incidents:
         lines.append(f"{HARDWARE}:")
-        for incident in site_incidents[:20]:
+        for incident in site_incidents[:MAX_LISTED_INCIDENTS]:
             lines.append(_format_incident_html(incident))
         lines.append("")
 
