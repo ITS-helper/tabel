@@ -1,0 +1,300 @@
+{
+  "date": "2026-06-26",
+  "title": "Повреждения от 26.06.2026",
+  "generated_at": "2026-06-27T09:01:49",
+  "counts": {
+    "telegram": 3,
+    "site": 23,
+    "total_devices": 26
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264830",
+      "created_at": "2026-06-26T22:09:23",
+      "time": "22:09",
+      "uid": "80fc10fefff7a608",
+      "uid_short": "80fc",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "13160",
+      "source_url": "https://t.me/c/1169689924/264830"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264831",
+      "created_at": "2026-06-26T22:18:52",
+      "time": "22:18",
+      "uid": "302111fefff7a608",
+      "uid_short": "3021",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "6009",
+      "source_url": "https://t.me/c/1169689924/264831"
+    },
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264832",
+      "created_at": "2026-06-26T22:26:17",
+      "time": "22:26",
+      "uid": "b8ff10fefff7a608",
+      "uid_short": "b8ff",
+      "issue_type": "Зависшая_смена",
+      "employee_number": "6704",
+      "source_url": "https://t.me/c/1169689924/264832"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0001",
+      "created_at": "2026-06-26T00:20:00",
+      "time": "00:20",
+      "uid": "400611fefff7a608",
+      "uid_short": "4006",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3021"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0002",
+      "created_at": "2026-06-26T00:22:00",
+      "time": "00:22",
+      "uid": "1cfd10fefff7a608",
+      "uid_short": "1cfd",
+      "issue_type": "Бесконечная перезагрузка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3022"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0003",
+      "created_at": "2026-06-26T00:23:00",
+      "time": "00:23",
+      "uid": "341311fefff7a608",
+      "uid_short": "3413",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3023"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0004",
+      "created_at": "2026-06-26T00:27:00",
+      "time": "00:27",
+      "uid": "040d11fefff7a608",
+      "uid_short": "040d",
+      "issue_type": "Квартира сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3024"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0005",
+      "created_at": "2026-06-26T00:27:00",
+      "time": "00:27",
+      "uid": "1c1ecffeffe342a8",
+      "uid_short": "1c1e",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3025"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0006",
+      "created_at": "2026-06-26T00:27:00",
+      "time": "00:27",
+      "uid": "a8fa10fefff7a608",
+      "uid_short": "a8fa",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3026"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0007",
+      "created_at": "2026-06-26T00:31:00",
+      "time": "00:31",
+      "uid": "e41611fefff7a608",
+      "uid_short": "e416",
+      "issue_type": "RTC недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3027"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0008",
+      "created_at": "2026-06-26T00:33:00",
+      "time": "00:33",
+      "uid": "90bc8cfeff29e748",
+      "uid_short": "90bc",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3028"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0009",
+      "created_at": "2026-06-26T00:39:00",
+      "time": "00:39",
+      "uid": "100611fefff7a608",
+      "uid_short": "1006",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3029"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0010",
+      "created_at": "2026-06-26T00:41:00",
+      "time": "00:41",
+      "uid": "ac1911fefff7a608",
+      "uid_short": "ac19",
+      "issue_type": "Быстрый разряд АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3030"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0011",
+      "created_at": "2026-06-26T00:41:00",
+      "time": "00:41",
+      "uid": "680211fefff7a608",
+      "uid_short": "6802",
+      "issue_type": "Короткое замыкание, нет контакта с зарядкой",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3031"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0012",
+      "created_at": "2026-06-26T00:43:00",
+      "time": "00:43",
+      "uid": "801611fefff7a608",
+      "uid_short": "8016",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3032"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0013",
+      "created_at": "2026-06-26T01:11:00",
+      "time": "01:11",
+      "uid": "f40911fefff7a608",
+      "uid_short": "f409",
+      "issue_type": "Бесконечная перезагрузка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3033"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0014",
+      "created_at": "2026-06-26T01:28:00",
+      "time": "01:28",
+      "uid": "501b11fefff7a608",
+      "uid_short": "501b",
+      "issue_type": "Ошибка подключения Wi-Fi",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3034"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0015",
+      "created_at": "2026-06-26T09:17:00",
+      "time": "09:17",
+      "uid": "a41311fefff7a608",
+      "uid_short": "a413",
+      "issue_type": "Акб",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3035"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0016",
+      "created_at": "2026-06-26T09:23:00",
+      "time": "09:23",
+      "uid": "04bc8cfeff29e748",
+      "uid_short": "04bc",
+      "issue_type": "Акб",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3036"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0017",
+      "created_at": "2026-06-26T09:31:00",
+      "time": "09:31",
+      "uid": "b8a98cfeff29e748",
+      "uid_short": "b8a9",
+      "issue_type": "Пульсометр",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3037"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0018",
+      "created_at": "2026-06-26T09:40:00",
+      "time": "09:40",
+      "uid": "6caf8cfeff29e748",
+      "uid_short": "6caf",
+      "issue_type": "Акб",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3038"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0019",
+      "created_at": "2026-06-26T09:45:00",
+      "time": "09:45",
+      "uid": "88fc10fefff7a608",
+      "uid_short": "88fc",
+      "issue_type": "Зависшая смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3039"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0020",
+      "created_at": "2026-06-26T09:59:00",
+      "time": "09:59",
+      "uid": "08fa10fefff7a608",
+      "uid_short": "08fa",
+      "issue_type": "Кварц",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3040"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0021",
+      "created_at": "2026-06-26T10:05:00",
+      "time": "10:05",
+      "uid": "34fd10fefff7a608",
+      "uid_short": "34fd",
+      "issue_type": "Зависшая смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3041"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0022",
+      "created_at": "2026-06-26T13:07:00",
+      "time": "13:07",
+      "uid": "a0a58cfeff29e748",
+      "uid_short": "a0a5",
+      "issue_type": "выключаются после зарядки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3042"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260626-0023",
+      "created_at": "2026-06-26T23:37:00",
+      "time": "23:37",
+      "uid": "54b78cfeff29e748",
+      "uid_short": "54b7",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3043"
+    }
+  ]
+}
