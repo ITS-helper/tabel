@@ -1,0 +1,178 @@
+{
+  "date": "2026-06-27",
+  "title": "Повреждения от 27.06.2026",
+  "generated_at": "2026-06-28T10:16:06",
+  "counts": {
+    "telegram": 0,
+    "site": 15,
+    "total_devices": 15
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0001",
+      "created_at": "2026-06-27T00:01:00",
+      "time": "00:01",
+      "uid": "340511fefff7a608",
+      "uid_short": "3405",
+      "issue_type": "Нет нижней кнопки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3044"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0002",
+      "created_at": "2026-06-27T00:13:00",
+      "time": "00:13",
+      "uid": "c4d650feffbf1388",
+      "uid_short": "c4d6",
+      "issue_type": "Нет нижней кнопки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3045"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0003",
+      "created_at": "2026-06-27T12:24:00",
+      "time": "12:24",
+      "uid": "dc1011fefff7a608",
+      "uid_short": "dc10",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3046"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0004",
+      "created_at": "2026-06-27T12:27:00",
+      "time": "12:27",
+      "uid": "501211fefff7a608",
+      "uid_short": "5012",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3047"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0005",
+      "created_at": "2026-06-27T12:29:00",
+      "time": "12:29",
+      "uid": "e81811fefff7a608",
+      "uid_short": "e818",
+      "issue_type": "RTC недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3048"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0006",
+      "created_at": "2026-06-27T12:35:00",
+      "time": "12:35",
+      "uid": "302111fefff7a608",
+      "uid_short": "3021",
+      "issue_type": "Кварц сорроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3049"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0007",
+      "created_at": "2026-06-27T12:39:00",
+      "time": "12:39",
+      "uid": "a4b28cfeff29e748",
+      "uid_short": "a4b2",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3050"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0008",
+      "created_at": "2026-06-27T12:51:00",
+      "time": "12:51",
+      "uid": "60aa8cfeff29e748",
+      "uid_short": "60aa",
+      "issue_type": "Ошибка выгрузки смены. Файл пустой",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3051"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0009",
+      "created_at": "2026-06-27T13:01:00",
+      "time": "13:01",
+      "uid": "f41f11fefff7a608",
+      "uid_short": "f41f",
+      "issue_type": "Ошибка подключения Wi-Fi",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3052"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0010",
+      "created_at": "2026-06-27T13:05:00",
+      "time": "13:05",
+      "uid": "b81111fefff7a608",
+      "uid_short": "b811",
+      "issue_type": "Повреждение дисплея",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3053"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0011",
+      "created_at": "2026-06-27T13:11:00",
+      "time": "13:11",
+      "uid": "0c2111fefff7a608",
+      "uid_short": "0c21",
+      "issue_type": "Кварц сорроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3054"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0012",
+      "created_at": "2026-06-27T13:17:00",
+      "time": "13:17",
+      "uid": "6caf8cfeff29e748",
+      "uid_short": "6caf",
+      "issue_type": "АКБ. Серийный номер стёрт",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3055"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0013",
+      "created_at": "2026-06-27T13:30:00",
+      "time": "13:30",
+      "uid": "c47b4ffeffbf1388",
+      "uid_short": "c47b",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3056"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0014",
+      "created_at": "2026-06-27T13:58:00",
+      "time": "13:58",
+      "uid": "0c1f11fefff7a608",
+      "uid_short": "0c1f",
+      "issue_type": "Кварц сорроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3057"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260627-0015",
+      "created_at": "2026-06-27T14:05:00",
+      "time": "14:05",
+      "uid": "0c0911fefff7a608",
+      "uid_short": "0c09",
+      "issue_type": "Зависшая смена. Перезагрузка.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3058"
+    }
+  ]
+}
