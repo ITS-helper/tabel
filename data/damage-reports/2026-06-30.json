@@ -1,0 +1,124 @@
+{
+  "date": "2026-06-30",
+  "title": "Повреждения от 30.06.2026",
+  "generated_at": "2026-07-01T08:57:25",
+  "counts": {
+    "telegram": 1,
+    "site": 9,
+    "total_devices": 10
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:264975",
+      "created_at": "2026-06-30T11:51:50",
+      "time": "11:51",
+      "uid": "c41211fefff7a608",
+      "uid_short": "c412",
+      "issue_type": "Падение",
+      "employee_number": "7859",
+      "source_url": "https://t.me/c/1169689924/264975"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0001",
+      "created_at": "2026-06-30T12:43:00",
+      "time": "12:43",
+      "uid": "780c11fefff7a608",
+      "uid_short": "780c",
+      "issue_type": "Неисправен дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3084"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0002",
+      "created_at": "2026-06-30T12:49:00",
+      "time": "12:49",
+      "uid": "b81311fefff7a608",
+      "uid_short": "b813",
+      "issue_type": "Кварц сопроцессора недоступен, неисправна средняя кнопка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3085"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0003",
+      "created_at": "2026-06-30T13:08:00",
+      "time": "13:08",
+      "uid": "30fe10fefff7a608",
+      "uid_short": "30fe",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3086"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0004",
+      "created_at": "2026-06-30T13:18:00",
+      "time": "13:18",
+      "uid": "381c11fefff7a608",
+      "uid_short": "381c",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3087"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0005",
+      "created_at": "2026-06-30T13:29:00",
+      "time": "13:29",
+      "uid": "fc0511fefff7a608",
+      "uid_short": "fc05",
+      "issue_type": "Flash недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3088"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0006",
+      "created_at": "2026-06-30T13:53:00",
+      "time": "13:53",
+      "uid": "441811fefff7a608",
+      "uid_short": "4418",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3089"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0007",
+      "created_at": "2026-06-30T14:18:00",
+      "time": "14:18",
+      "uid": "fc0711fefff7a608",
+      "uid_short": "fc07",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3090"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0008",
+      "created_at": "2026-06-30T14:35:00",
+      "time": "14:35",
+      "uid": "880211fefff7a608",
+      "uid_short": "8802",
+      "issue_type": "не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3091"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260630-0009",
+      "created_at": "2026-06-30T14:45:00",
+      "time": "14:45",
+      "uid": "4cfb10fefff7a608",
+      "uid_short": "4cfb",
+      "issue_type": "Дисплей дробит изображение после перезагрузки при выходе на смену, перезагрузка …",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3092"
+    }
+  ]
+}
