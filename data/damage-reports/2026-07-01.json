@@ -1,0 +1,124 @@
+{
+  "date": "2026-07-01",
+  "title": "Повреждения от 01.07.2026",
+  "generated_at": "2026-07-02T12:46:49",
+  "counts": {
+    "telegram": 1,
+    "site": 9,
+    "total_devices": 10
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:265157",
+      "created_at": "2026-07-01T23:00:00",
+      "time": "23:00",
+      "uid": "44fe10fefff7a608",
+      "uid_short": "44fe",
+      "issue_type": "Падение",
+      "employee_number": "10892",
+      "source_url": "https://t.me/c/1169689924/265157"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0001",
+      "created_at": "2026-07-01T09:44:00",
+      "time": "09:44",
+      "uid": "f46350feffbf1388",
+      "uid_short": "f463",
+      "issue_type": "принесли с оторванным дисплеем",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3093"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0002",
+      "created_at": "2026-07-01T11:03:00",
+      "time": "11:03",
+      "uid": "b01011fefff7a608",
+      "uid_short": "b010",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3094"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0003",
+      "created_at": "2026-07-01T11:04:00",
+      "time": "11:04",
+      "uid": "641c11fefff7a608",
+      "uid_short": "641c",
+      "issue_type": "BLE/Lora недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3095"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0004",
+      "created_at": "2026-07-01T11:08:00",
+      "time": "11:08",
+      "uid": "880111fefff7a608",
+      "uid_short": "8801",
+      "issue_type": "RTC недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3096"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0005",
+      "created_at": "2026-07-01T11:12:00",
+      "time": "11:12",
+      "uid": "840a11fefff7a608",
+      "uid_short": "840a",
+      "issue_type": "Ошибка инициализации клиента при отправке смены",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3097"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0006",
+      "created_at": "2026-07-01T11:14:00",
+      "time": "11:14",
+      "uid": "000611fefff7a608",
+      "uid_short": "0006",
+      "issue_type": "Дисплей неисправен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3098"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0007",
+      "created_at": "2026-07-01T11:26:00",
+      "time": "11:26",
+      "uid": "a40c11fefff7a608",
+      "uid_short": "a40c",
+      "issue_type": "Ошибка инициализации клиента - смена не отправляется с первого раза, часто требу…",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3099"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0008",
+      "created_at": "2026-07-01T23:53:00",
+      "time": "23:53",
+      "uid": "c40611fefff7a608",
+      "uid_short": "c406",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3100"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260701-0009",
+      "created_at": "2026-07-01T23:54:00",
+      "time": "23:54",
+      "uid": "601911fefff7a608",
+      "uid_short": "6019",
+      "issue_type": "Дефект АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3101"
+    }
+  ]
+}
