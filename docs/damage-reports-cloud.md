@@ -4,7 +4,7 @@ The website remains a static GitHub Pages site. Background collection now moves 
 
 ## What runs in the cloud
 
-Workflow: [`.github/workflows/damage-reports-cron.yml`](../.github/workflows/damage-reports-cron.yml)
+Workflow: [`.github/workflows/damage-reports-schedule.yml`](../.github/workflows/damage-reports-schedule.yml)
 
 It does this:
 
@@ -15,7 +15,7 @@ It does this:
 5. Exports `data/damage-reports/*.json` for the static website.
 6. Commits refreshed JSON back to `main`, which republishes GitHub Pages.
 
-Schedule: every day at `05:15 UTC`, which is `08:15 Europe/Moscow`.
+Schedule (UTC, см. комментарии в workflow): **06:15** и резерв **07:30** — это **09:15** и **10:30** по Москве. Второй слот срабатывает только если первый ещё не отправил отчёт (marker в `.telegram-sent/`). Повторной рассылки в Telegram в тот же день нет.
 
 ## Required GitHub Secrets
 
@@ -57,7 +57,7 @@ Copy the printed string into the GitHub secret `TELETHON_STRING_SESSION`.
 
 ## Manual backfill
 
-Open GitHub Actions and run `Damage reports cloud refresh` manually.
+Open GitHub Actions and run **Damage reports scheduled refresh** manually.
 
 - `target_date`: `YYYY-MM-DD`
 - `report_chat_target`: `default`, `group`, `personal`, or `custom`
