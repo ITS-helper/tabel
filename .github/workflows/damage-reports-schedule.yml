@@ -6,9 +6,8 @@ on:
     paths:
       - ".github/workflows/damage-reports-schedule.yml"
   schedule:
-    # UTC → Europe/Moscow (UTC+3): 06:15 = 09:15, 07:30 = 10:30 (backup if GitHub delays)
-    - cron: "15 6 * * *"
-    - cron: "30 7 * * *"
+    # UTC → Europe/Moscow (UTC+3): 07:00 = 10:00
+    - cron: "0 7 * * *"
   workflow_dispatch:
     inputs:
       target_date:
@@ -34,6 +33,11 @@ on:
         required: false
         default: true
         type: boolean
+      force_resend:
+        description: "Ignore send marker and allow a second Telegram message for the same date (manual only)."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -41,7 +45,7 @@ permissions:
 
 concurrency:
   group: damage-reports-cron
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   refresh-damage-reports:
@@ -51,9 +55,11 @@ jobs:
       TZ: Europe/Moscow
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Sync checkout to latest main
-        if: ${{ github.event_name == 'schedule' }}
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
         shell: bash
         run: |
           git fetch origin main
@@ -81,18 +87,27 @@ jobs:
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
           echo "Using target date: $target_date"
 
-      - name: Resolve scheduled run mode
+      - name: Check Telegram send marker on origin
         id: run-mode
-        if: ${{ github.event_name == 'schedule' }}
         shell: bash
         run: |
-          marker_path="data/damage-reports/.telegram-sent/${{ steps.target-date.outputs.target_date }}.txt"
-          if git cat-file -e "HEAD:${marker_path}" 2>/dev/null; then
+          set -euo pipefail
+          target_date="${{ steps.target-date.outputs.target_date }}"
+          marker_path="data/damage-reports/.telegram-sent/${target_date}.txt"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Manual run — data refresh allowed; Telegram guarded separately."
+            exit 0
+          fi
+
+          git fetch origin main --quiet
+          if git cat-file -e "origin/main:${marker_path}" 2>/dev/null; then
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Telegram already sent for ${{ steps.target-date.outputs.target_date }} — nothing to do."
+            echo "Telegram already sent for ${target_date} (marker on origin/main)."
           else
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Morning run: collect data, send Telegram, export JSON, write marker."
+            echo "No send marker on origin/main for ${target_date}."
           fi
 
       - name: Note workflow-only push
@@ -100,7 +115,7 @@ jobs:
         run: echo "Workflow file updated on main — schedule re-registered; no report run on push."
 
       - name: Write tgdevice env file
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true') }}
+        if: ${{ steps.run-mode.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         shell: bash
         run: |
           if [ -z "${{ secrets.TELETHON_STRING_SESSION }}" ]; then
@@ -129,12 +144,14 @@ jobs:
               exit 1
               ;;
           esac
-          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$report_chat_target" ]; then
-            echo "Missing TELEGRAM_REPORT_CHAT_ID or TELEGRAM_REPORT_CHAT_IDS secret for scheduled send." >&2
-            exit 1
+          wants_telegram="false"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            wants_telegram="true"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.send_telegram }}" = "true" ]; then
+            wants_telegram="true"
           fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.send_telegram }}" = "true" ] && [ -z "$report_chat_target" ]; then
-            echo "Selected Telegram destination is empty. Check report_chat_target input and related secrets." >&2
+          if [ "$wants_telegram" = "true" ] && [ -z "$report_chat_target" ]; then
+            echo "Telegram destination is empty. Check secrets or report_chat_target input." >&2
             exit 1
           fi
           {
@@ -156,7 +173,7 @@ jobs:
           } > tgdevice/.env
 
       - name: Validate restored Telethon session
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true') }}
+        if: ${{ steps.run-mode.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         working-directory: tgdevice
         shell: bash
         run: |
@@ -189,7 +206,7 @@ jobs:
           PY
 
       - name: Collect incidents and build report payloads
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true') }}
+        if: ${{ steps.run-mode.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         working-directory: tgdevice
         shell: bash
         run: |
@@ -197,45 +214,125 @@ jobs:
           ../.venv/bin/python -m tgdevice.main import-history --date "${{ steps.target-date.outputs.target_date }}"
           ../.venv/bin/python -m tgdevice.main fetch-site --date "${{ steps.target-date.outputs.target_date }}"
 
+      - name: Claim Telegram send slot on origin
+        id: telegram-claim
+        if: ${{ steps.run-mode.outputs.should_run == 'true' && ((github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.send_telegram == 'true')) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_date="${{ steps.target-date.outputs.target_date }}"
+          marker_path="data/damage-reports/.telegram-sent/${target_date}.txt"
+          force_resend="${{ github.event.inputs.force_resend }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          skip_if_marker_present() {
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$force_resend" = "true" ]; then
+              return 1
+            fi
+            git fetch origin main --quiet
+            git cat-file -e "origin/main:${marker_path}" 2>/dev/null
+          }
+
+          if skip_if_marker_present; then
+            echo "Marker already on origin/main — will NOT send Telegram."
+            echo "send=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main --quiet
+            git checkout -B main origin/main
+
+            if skip_if_marker_present; then
+              echo "Marker appeared on main — will NOT send Telegram."
+              echo "send=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            mkdir -p "data/damage-reports/.telegram-sent"
+            {
+              echo "date=${target_date}"
+              echo "status=claimed"
+              echo "run_id=${{ github.run_id }}"
+              date -u +"claimed_at=%Y-%m-%dT%H:%M:%SZ"
+            } > "$marker_path"
+
+            git add "$marker_path"
+            git commit -m "chore: claim damage report telegram for ${target_date}"
+
+            if git push origin HEAD:main; then
+              echo "Claimed Telegram send slot for ${target_date}"
+              echo "send=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Push rejected (attempt ${attempt}), another run may have claimed first — retrying..."
+            sleep 2
+          done
+
+          if skip_if_marker_present; then
+            echo "Another run claimed the marker — will NOT send Telegram."
+            echo "send=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Failed to claim Telegram send slot" >&2
+          echo "send=false" >> "$GITHUB_OUTPUT"
+          exit 1
+
       - name: Send Telegram report
-        if: ${{ (github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.send_telegram == 'true') }}
+        if: ${{ steps.telegram-claim.outputs.send == 'true' }}
         working-directory: tgdevice
         shell: bash
         run: |
           ../.venv/bin/python -m tgdevice.main report --date "${{ steps.target-date.outputs.target_date }}" --send
 
+      - name: Finalize Telegram send marker
+        if: ${{ steps.telegram-claim.outputs.send == 'true' }}
+        shell: bash
+        run: |
+          target_date="${{ steps.target-date.outputs.target_date }}"
+          marker_path="data/damage-reports/.telegram-sent/${target_date}.txt"
+          {
+            echo "date=${target_date}"
+            echo "status=sent"
+            echo "run_id=${{ github.run_id }}"
+            date -u +"sent_at=%Y-%m-%dT%H:%M:%SZ"
+          } > "$marker_path"
+
       - name: Export static JSON for Pages
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true') }}
+        if: ${{ steps.run-mode.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         shell: bash
         run: |
           ./.venv/bin/python scripts/export-damage-reports.py --db data/tgdevice.sqlite3 --out data/damage-reports
 
-      - name: Mark Telegram report sent
-        if: ${{ github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true' }}
-        shell: bash
-        run: |
-          marker_dir="data/damage-reports/.telegram-sent"
-          mkdir -p "$marker_dir"
-          {
-            echo "date=${{ steps.target-date.outputs.target_date }}"
-            echo "run_id=${{ github.run_id }}"
-            echo "schedule=${{ github.event.schedule }}"
-            date -u +"sent_at=%Y-%m-%dT%H:%M:%SZ"
-          } > "$marker_dir/${{ steps.target-date.outputs.target_date }}.txt"
-
       - name: Commit and push if reports changed
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true') }}
+        if: ${{ steps.run-mode.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          target_date="${{ steps.target-date.outputs.target_date }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main --quiet
+          git checkout -B main origin/main
           git add data/damage-reports
           if git diff --cached --quiet; then
             echo "Damage reports unchanged"
             exit 0
           fi
-          git commit -m "chore: refresh damage reports for ${{ steps.target-date.outputs.target_date }}"
-          git push origin HEAD:main
-          gh workflow run pages.yml --ref main
+          git commit -m "chore: refresh damage reports for ${target_date}"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              gh workflow run pages.yml --ref main
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}), rebasing on origin/main..."
+            git pull --rebase origin main
+          done
+          echo "Failed to push damage reports" >&2
+          exit 1

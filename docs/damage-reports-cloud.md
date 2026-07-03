@@ -15,7 +15,9 @@ It does this:
 5. Exports `data/damage-reports/*.json` for the static website.
 6. Commits refreshed JSON back to `main`, which republishes GitHub Pages.
 
-Schedule (UTC, см. комментарии в workflow): **06:15** и резерв **07:30** — это **09:15** и **10:30** по Москве. Второй слот срабатывает только если первый ещё не отправил отчёт (marker в `.telegram-sent/`). Повторной рассылки в Telegram в тот же день нет.
+Schedule (UTC): **07:00** = **10:00** по Москве, один раз в сутки.
+
+Повторной отправки в Telegram нет: перед отправкой в `origin/main` пишется marker в `data/damage-reports/.telegram-sent/` (claim). Параллельные запуски отменяются (`concurrency`). Ручной повтор — только с `force_resend=true`.
 
 ## Required GitHub Secrets
 
@@ -63,6 +65,7 @@ Open GitHub Actions and run **Damage reports scheduled refresh** manually.
 - `report_chat_target`: `default`, `group`, `personal`, or `custom`
 - `custom_report_chat`: custom destination for `report_chat_target=custom`
 - `send_telegram`: `true` or `false`
+- `force_resend`: `true` only if you deliberately need a second Telegram message for the same date (default `false`)
 
 Destination formats:
 
