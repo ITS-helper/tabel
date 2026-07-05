@@ -1,0 +1,201 @@
+{
+  "date": "2026-07-04",
+  "title": "Повреждения от 04.07.2026",
+  "generated_at": "2026-07-05T12:36:14",
+  "counts": {
+    "telegram": 1,
+    "site": 16,
+    "total_devices": 17
+  },
+  "telegram": [
+    {
+      "source": "telegram",
+      "external_id": "-1001169689924:265565",
+      "created_at": "2026-07-04T07:20:00",
+      "time": "07:20",
+      "uid": "c41211fefff7a608",
+      "uid_short": "c412",
+      "issue_type": "Падение",
+      "employee_number": "12895",
+      "source_url": "https://t.me/c/1169689924/265565"
+    }
+  ],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0001",
+      "created_at": "2026-07-04T04:47:00",
+      "time": "04:47",
+      "uid": "a8fc10fefff7a608",
+      "uid_short": "a8fc",
+      "issue_type": "Не работает дисплей, на задней крышке стёрт серийный номер",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3128"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0002",
+      "created_at": "2026-07-04T14:26:00",
+      "time": "14:26",
+      "uid": "34fe10fefff7a608",
+      "uid_short": "34fe",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3129"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0003",
+      "created_at": "2026-07-04T14:32:00",
+      "time": "14:32",
+      "uid": "e00011fefff7a608",
+      "uid_short": "e000",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3130"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0004",
+      "created_at": "2026-07-04T14:36:00",
+      "time": "14:36",
+      "uid": "7cfc10fefff7a608",
+      "uid_short": "7cfc",
+      "issue_type": "Flash недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3131"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0005",
+      "created_at": "2026-07-04T14:40:00",
+      "time": "14:40",
+      "uid": "08ab8cfeff29e748",
+      "uid_short": "08ab",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3132"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0006",
+      "created_at": "2026-07-04T14:59:00",
+      "time": "14:59",
+      "uid": "780911fefff7a608",
+      "uid_short": "7809",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3133"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0007",
+      "created_at": "2026-07-04T15:01:00",
+      "time": "15:01",
+      "uid": "141211fefff7a608",
+      "uid_short": "1412",
+      "issue_type": "Повреждение дисплея",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3134"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0008",
+      "created_at": "2026-07-04T15:09:00",
+      "time": "15:09",
+      "uid": "b41111fefff7a608",
+      "uid_short": "b411",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3135"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0009",
+      "created_at": "2026-07-04T15:13:00",
+      "time": "15:13",
+      "uid": "70fb10fefff7a608",
+      "uid_short": "70fb",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3136"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0010",
+      "created_at": "2026-07-04T15:16:00",
+      "time": "15:16",
+      "uid": "e80811fefff7a608",
+      "uid_short": "e808",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3137"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0011",
+      "created_at": "2026-07-04T15:23:00",
+      "time": "15:23",
+      "uid": "68b38cfeff29e748",
+      "uid_short": "68b3",
+      "issue_type": "NFC не считывает карты",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3138"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0012",
+      "created_at": "2026-07-04T15:27:00",
+      "time": "15:27",
+      "uid": "00ff10fefff7a608",
+      "uid_short": "00ff",
+      "issue_type": "бесконечная перезагрузка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3139"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0013",
+      "created_at": "2026-07-04T15:30:00",
+      "time": "15:30",
+      "uid": "700b11fefff7a608",
+      "uid_short": "700b",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3140"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0014",
+      "created_at": "2026-07-04T15:34:00",
+      "time": "15:34",
+      "uid": "080c11fefff7a608",
+      "uid_short": "080c",
+      "issue_type": "не запускаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3141"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0015",
+      "created_at": "2026-07-04T23:25:00",
+      "time": "23:25",
+      "uid": "eca98cfeff29e748",
+      "uid_short": "eca9",
+      "issue_type": "При снятии с зарядки тухнет экран\nНе видно ТН на задней крышке",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3142"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260704-0016",
+      "created_at": "2026-07-04T23:31:00",
+      "time": "23:31",
+      "uid": "080011fefff7a608",
+      "uid_short": "0800",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3143"
+    }
+  ]
+}
