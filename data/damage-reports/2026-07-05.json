@@ -1,0 +1,167 @@
+{
+  "date": "2026-07-05",
+  "title": "Повреждения от 05.07.2026",
+  "generated_at": "2026-07-06T14:23:37",
+  "counts": {
+    "telegram": 0,
+    "site": 14,
+    "total_devices": 14
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0001",
+      "created_at": "2026-07-05T14:13:00",
+      "time": "14:13",
+      "uid": "240c11fefff7a608",
+      "uid_short": "240c",
+      "issue_type": "Кварц сопроцессора",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3144"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0002",
+      "created_at": "2026-07-05T14:18:00",
+      "time": "14:18",
+      "uid": "240c11fefff7a608",
+      "uid_short": "240c",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3145"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0003",
+      "created_at": "2026-07-05T14:21:00",
+      "time": "14:21",
+      "uid": "44fa10fefff7a608",
+      "uid_short": "44fa",
+      "issue_type": "Дисплей не работает",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3146"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0004",
+      "created_at": "2026-07-05T14:24:00",
+      "time": "14:24",
+      "uid": "10ff10fefff7a608",
+      "uid_short": "10ff",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3147"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0005",
+      "created_at": "2026-07-05T14:27:00",
+      "time": "14:27",
+      "uid": "001a11fefff7a608",
+      "uid_short": "001a",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3148"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0006",
+      "created_at": "2026-07-05T14:31:00",
+      "time": "14:31",
+      "uid": "641e11fefff7a608",
+      "uid_short": "641e",
+      "issue_type": "Выключается, когда снимаешь с зарядки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3149"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0007",
+      "created_at": "2026-07-05T14:35:00",
+      "time": "14:35",
+      "uid": "842211fefff7a608",
+      "uid_short": "8422",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3150"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0008",
+      "created_at": "2026-07-05T14:38:00",
+      "time": "14:38",
+      "uid": "6c0511fefff7a608",
+      "uid_short": "6c05",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3151"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0009",
+      "created_at": "2026-07-05T14:41:00",
+      "time": "14:41",
+      "uid": "280811fefff7a608",
+      "uid_short": "2808",
+      "issue_type": "Не включается",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3152"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0010",
+      "created_at": "2026-07-05T14:46:00",
+      "time": "14:46",
+      "uid": "10fb10fefff7a608",
+      "uid_short": "10fb",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3153"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0011",
+      "created_at": "2026-07-05T22:56:00",
+      "time": "22:56",
+      "uid": "480011fefff7a608",
+      "uid_short": "4800",
+      "issue_type": "Дефект дисплея",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3154"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0012",
+      "created_at": "2026-07-05T23:14:00",
+      "time": "23:14",
+      "uid": "a40811fefff7a608",
+      "uid_short": "a408",
+      "issue_type": "Не включаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3155"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0013",
+      "created_at": "2026-07-05T23:35:00",
+      "time": "23:35",
+      "uid": "081e11fefff7a608",
+      "uid_short": "081e",
+      "issue_type": "Дефект задней крышки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3156"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260705-0014",
+      "created_at": "2026-07-05T23:37:00",
+      "time": "23:37",
+      "uid": "442111fefff7a608",
+      "uid_short": "4421",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3157"
+    }
+  ]
+}
