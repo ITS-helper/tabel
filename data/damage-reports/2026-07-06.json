@@ -1,0 +1,233 @@
+{
+  "date": "2026-07-06",
+  "title": "Повреждения от 06.07.2026",
+  "generated_at": "2026-07-07T13:20:10",
+  "counts": {
+    "telegram": 0,
+    "site": 20,
+    "total_devices": 20
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0001",
+      "created_at": "2026-07-06T00:29:00",
+      "time": "00:29",
+      "uid": "480911fefff7a608",
+      "uid_short": "4809",
+      "issue_type": "ПО часов не предлагает выйти на смену при снятии со станции заряда",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3158"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0002",
+      "created_at": "2026-07-06T00:48:00",
+      "time": "00:48",
+      "uid": "24ff10fefff7a608",
+      "uid_short": "24ff",
+      "issue_type": "Цикличная перезагрузка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3159"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0003",
+      "created_at": "2026-07-06T12:39:00",
+      "time": "12:39",
+      "uid": "8c0011fefff7a608",
+      "uid_short": "8c00",
+      "issue_type": "бесконечный перезапуск",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3160"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0004",
+      "created_at": "2026-07-06T12:52:00",
+      "time": "12:52",
+      "uid": "341411fefff7a608",
+      "uid_short": "3414",
+      "issue_type": "Самопроизвольное выключение",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3161"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0005",
+      "created_at": "2026-07-06T12:52:00",
+      "time": "12:52",
+      "uid": "ccff10fefff7a608",
+      "uid_short": "ccff",
+      "issue_type": "неисправность АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3162"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0006",
+      "created_at": "2026-07-06T12:59:00",
+      "time": "12:59",
+      "uid": "f40c11fefff7a608",
+      "uid_short": "f40c",
+      "issue_type": "не подключаются к wi-fi",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3163"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0007",
+      "created_at": "2026-07-06T13:05:00",
+      "time": "13:05",
+      "uid": "500011fefff7a608",
+      "uid_short": "5000",
+      "issue_type": "зависают после запуска",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3164"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0008",
+      "created_at": "2026-07-06T13:07:00",
+      "time": "13:07",
+      "uid": "e01011fefff7a608",
+      "uid_short": "e010",
+      "issue_type": "неисправность дисплея",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3165"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0009",
+      "created_at": "2026-07-06T13:09:00",
+      "time": "13:09",
+      "uid": "f81811fefff7a608",
+      "uid_short": "f818",
+      "issue_type": "Не работает nfc",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3166"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0010",
+      "created_at": "2026-07-06T13:16:00",
+      "time": "13:16",
+      "uid": "3c1511fefff7a608",
+      "uid_short": "3c15",
+      "issue_type": "SRAM недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3167"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0011",
+      "created_at": "2026-07-06T13:16:00",
+      "time": "13:16",
+      "uid": "08a58cfeff29e748",
+      "uid_short": "08a5",
+      "issue_type": "неисправность дисплея",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3168"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0012",
+      "created_at": "2026-07-06T13:28:00",
+      "time": "13:28",
+      "uid": "944850feffbf1388",
+      "uid_short": "9448",
+      "issue_type": "неисправность дисплея",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3169"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0013",
+      "created_at": "2026-07-06T13:29:00",
+      "time": "13:29",
+      "uid": "7cfb10fefff7a608",
+      "uid_short": "7cfb",
+      "issue_type": "Не включаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3170"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0014",
+      "created_at": "2026-07-06T13:30:00",
+      "time": "13:30",
+      "uid": "14fd10fefff7a608",
+      "uid_short": "14fd",
+      "issue_type": "неисправность АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3171"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0015",
+      "created_at": "2026-07-06T13:32:00",
+      "time": "13:32",
+      "uid": "d81311fefff7a608",
+      "uid_short": "d813",
+      "issue_type": "Не включаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3172"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0016",
+      "created_at": "2026-07-06T13:38:00",
+      "time": "13:38",
+      "uid": "141b11fefff7a608",
+      "uid_short": "141b",
+      "issue_type": "Не работают кнопки вверх/вниз",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3173"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0017",
+      "created_at": "2026-07-06T23:02:00",
+      "time": "23:02",
+      "uid": "acbd8cfeff29e748",
+      "uid_short": "acbd",
+      "issue_type": "Не работает экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3174"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0018",
+      "created_at": "2026-07-06T23:08:00",
+      "time": "23:08",
+      "uid": "ac0b11fefff7a608",
+      "uid_short": "ac0b",
+      "issue_type": "RTC недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3175"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0019",
+      "created_at": "2026-07-06T23:16:00",
+      "time": "23:16",
+      "uid": "4c1f11fefff7a608",
+      "uid_short": "4c1f",
+      "issue_type": "Не работает экран, не закрывалась смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3176"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260706-0020",
+      "created_at": "2026-07-06T23:26:00",
+      "time": "23:26",
+      "uid": "30fa10fefff7a608",
+      "uid_short": "30fa",
+      "issue_type": "Не работал экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3177"
+    }
+  ]
+}
