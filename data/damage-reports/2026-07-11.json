@@ -1,0 +1,233 @@
+{
+  "date": "2026-07-11",
+  "title": "Повреждения от 11.07.2026",
+  "generated_at": "2026-07-12T11:58:46",
+  "counts": {
+    "telegram": 0,
+    "site": 20,
+    "total_devices": 20
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0001",
+      "created_at": "2026-07-11T12:36:00",
+      "time": "12:36",
+      "uid": "44fd10fefff7a608",
+      "uid_short": "44fd",
+      "issue_type": "Не работает NFC",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3243"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0002",
+      "created_at": "2026-07-11T12:45:00",
+      "time": "12:45",
+      "uid": "d41d11fefff7a608",
+      "uid_short": "d41d",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3244"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0003",
+      "created_at": "2026-07-11T12:54:00",
+      "time": "12:54",
+      "uid": "c40911fefff7a608",
+      "uid_short": "c409",
+      "issue_type": "Не включаются, ни на что не реагируют",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3245"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0004",
+      "created_at": "2026-07-11T12:56:00",
+      "time": "12:56",
+      "uid": "300811fefff7a608",
+      "uid_short": "3008",
+      "issue_type": "Не включаются, ни на что не реагируют.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3246"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0005",
+      "created_at": "2026-07-11T16:11:00",
+      "time": "16:11",
+      "uid": "ec1a11fefff7a608",
+      "uid_short": "ec1a",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3247"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0006",
+      "created_at": "2026-07-11T16:16:00",
+      "time": "16:16",
+      "uid": "300f11fefff7a608",
+      "uid_short": "300f",
+      "issue_type": "Системная ошибка, ребут не помогает",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3248"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0007",
+      "created_at": "2026-07-11T16:35:00",
+      "time": "16:35",
+      "uid": "9c0411fefff7a608",
+      "uid_short": "9c04",
+      "issue_type": "Зависания при старте смены, ребут не помогает",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3249"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0008",
+      "created_at": "2026-07-11T16:40:00",
+      "time": "16:40",
+      "uid": "b41511fefff7a608",
+      "uid_short": "b415",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3250"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0009",
+      "created_at": "2026-07-11T16:43:00",
+      "time": "16:43",
+      "uid": "881911fefff7a608",
+      "uid_short": "8819",
+      "issue_type": "Отклеился дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3251"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0010",
+      "created_at": "2026-07-11T17:14:00",
+      "time": "17:14",
+      "uid": "300a11fefff7a608",
+      "uid_short": "300a",
+      "issue_type": "Дисплей дробит изображение после перезагрузки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3252"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0011",
+      "created_at": "2026-07-11T17:20:00",
+      "time": "17:20",
+      "uid": "a01311fefff7a608",
+      "uid_short": "a013",
+      "issue_type": "Отклеился дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3253"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0012",
+      "created_at": "2026-07-11T17:24:00",
+      "time": "17:24",
+      "uid": "600611fefff7a608",
+      "uid_short": "6006",
+      "issue_type": "Не работает NFC",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3254"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0013",
+      "created_at": "2026-07-11T17:26:00",
+      "time": "17:26",
+      "uid": "480711fefff7a608",
+      "uid_short": "4807",
+      "issue_type": "Не работает NFC",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3255"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0014",
+      "created_at": "2026-07-11T22:45:00",
+      "time": "22:45",
+      "uid": "902211fefff7a608",
+      "uid_short": "9022",
+      "issue_type": "Не работал экран / не закрывалась смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3256"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0015",
+      "created_at": "2026-07-11T22:46:00",
+      "time": "22:46",
+      "uid": "042011fefff7a608",
+      "uid_short": "0420",
+      "issue_type": "Сломан дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3257"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0016",
+      "created_at": "2026-07-11T22:46:00",
+      "time": "22:46",
+      "uid": "c41211fefff7a608",
+      "uid_short": "c412",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3258"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0017",
+      "created_at": "2026-07-11T22:48:00",
+      "time": "22:48",
+      "uid": "20fd10fefff7a608",
+      "uid_short": "20fd",
+      "issue_type": "Часы уходят на хард ребут при запуске смены ( не запуская ее )",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3259"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0018",
+      "created_at": "2026-07-11T22:53:00",
+      "time": "22:53",
+      "uid": "641511fefff7a608",
+      "uid_short": "6415",
+      "issue_type": "Не работал экран / не закрывалась смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3260"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0019",
+      "created_at": "2026-07-11T23:00:00",
+      "time": "23:00",
+      "uid": "880711fefff7a608",
+      "uid_short": "8807",
+      "issue_type": "Не работал экран / не закрывалась смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3261"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260711-0020",
+      "created_at": "2026-07-11T23:05:00",
+      "time": "23:05",
+      "uid": "980911fefff7a608",
+      "uid_short": "9809",
+      "issue_type": "Перезапуск / не запускается смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3262"
+    }
+  ]
+}
