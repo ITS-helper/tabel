@@ -1,0 +1,123 @@
+{
+  "date": "2026-07-12",
+  "title": "Повреждения от 12.07.2026",
+  "generated_at": "2026-07-13T13:17:24",
+  "counts": {
+    "telegram": 0,
+    "site": 10,
+    "total_devices": 10
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0001",
+      "created_at": "2026-07-12T17:12:00",
+      "time": "17:12",
+      "uid": "781211fefff7a608",
+      "uid_short": "7812",
+      "issue_type": "Постоянный перезапуск",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3263"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0002",
+      "created_at": "2026-07-12T17:22:00",
+      "time": "17:22",
+      "uid": "542111fefff7a608",
+      "uid_short": "5421",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3264"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0003",
+      "created_at": "2026-07-12T17:25:00",
+      "time": "17:25",
+      "uid": "841811fefff7a608",
+      "uid_short": "8418",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3265"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0004",
+      "created_at": "2026-07-12T17:29:00",
+      "time": "17:29",
+      "uid": "f01e11fefff7a608",
+      "uid_short": "f01e",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3266"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0005",
+      "created_at": "2026-07-12T17:31:00",
+      "time": "17:31",
+      "uid": "3cfa10fefff7a608",
+      "uid_short": "3cfa",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3267"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0006",
+      "created_at": "2026-07-12T17:37:00",
+      "time": "17:37",
+      "uid": "000d11fefff7a608",
+      "uid_short": "000d",
+      "issue_type": "Не включаются, лампа стенда зеленая",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3268"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0007",
+      "created_at": "2026-07-12T17:41:00",
+      "time": "17:41",
+      "uid": "600811fefff7a608",
+      "uid_short": "6008",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3269"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0008",
+      "created_at": "2026-07-12T22:36:00",
+      "time": "22:36",
+      "uid": "680511fefff7a608",
+      "uid_short": "6805",
+      "issue_type": "Сломана задняя крышка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3270"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0009",
+      "created_at": "2026-07-12T22:41:00",
+      "time": "22:41",
+      "uid": "ec1311fefff7a608",
+      "uid_short": "ec13",
+      "issue_type": "Не работал экран / не закрывалась смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3271"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260712-0010",
+      "created_at": "2026-07-12T22:46:00",
+      "time": "22:46",
+      "uid": "1c1211fefff7a608",
+      "uid_short": "1c12",
+      "issue_type": "Не работал экран / не закрывалась смена",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3272"
+    }
+  ]
+}
