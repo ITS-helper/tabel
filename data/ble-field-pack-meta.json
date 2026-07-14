@@ -1,12 +1,12 @@
 {
   "packUrl": "https://github.com/ITS-helper/tabel/releases/download/ble-pack-latest/ble-field-pack.zip",
-  "updated_at": "2026-07-14T03:31:20.290Z",
+  "updated_at": "2026-07-14T08:27:32.150Z",
   "company_id": 1,
   "markerCount": 996,
   "photosOk": 1965,
   "photosFail": 2,
-  "bytesTotal": 157985309,
-  "zipBytes": 157985309,
+  "bytesTotal": 157999173,
+  "zipBytes": 157999173,
   "tagOnly": false,
   "releaseTag": "ble-pack-latest"
 }
