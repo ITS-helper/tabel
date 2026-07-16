@@ -1,0 +1,4 @@
+date=2026-07-15
+status=claimed
+run_id=29486042430
+claimed_at=2026-07-16T09:09:06Z
