@@ -1,0 +1,178 @@
+{
+  "date": "2026-07-17",
+  "title": "Повреждения от 17.07.2026",
+  "generated_at": "2026-07-18T11:44:08",
+  "counts": {
+    "telegram": 0,
+    "site": 15,
+    "total_devices": 15
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0001",
+      "created_at": "2026-07-17T04:28:00",
+      "time": "04:28",
+      "uid": "04fa10fefff7a608",
+      "uid_short": "04fa",
+      "issue_type": "бесконечный перезапуск",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3329"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0002",
+      "created_at": "2026-07-17T09:28:00",
+      "time": "09:28",
+      "uid": "fcb58cfeff29e748",
+      "uid_short": "fcb5",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3330"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0003",
+      "created_at": "2026-07-17T09:46:00",
+      "time": "09:46",
+      "uid": "64d850feffbf1388",
+      "uid_short": "64d8",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3331"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0004",
+      "created_at": "2026-07-17T09:47:00",
+      "time": "09:47",
+      "uid": "902850feffbf1388",
+      "uid_short": "9028",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3332"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0005",
+      "created_at": "2026-07-17T09:49:00",
+      "time": "09:49",
+      "uid": "48ad8cfeff29e748",
+      "uid_short": "48ad",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3333"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0006",
+      "created_at": "2026-07-17T09:51:00",
+      "time": "09:51",
+      "uid": "3cb08cfeff29e748",
+      "uid_short": "3cb0",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3334"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0007",
+      "created_at": "2026-07-17T09:53:00",
+      "time": "09:53",
+      "uid": "30ae8cfeff29e748",
+      "uid_short": "30ae",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3335"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0008",
+      "created_at": "2026-07-17T10:07:00",
+      "time": "10:07",
+      "uid": "34ae8cfeff29e748",
+      "uid_short": "34ae",
+      "issue_type": "Экран отошел от корпуса",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3336"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0009",
+      "created_at": "2026-07-17T21:48:00",
+      "time": "21:48",
+      "uid": "ac0e11fefff7a608",
+      "uid_short": "ac0e",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3337"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0010",
+      "created_at": "2026-07-17T22:29:00",
+      "time": "22:29",
+      "uid": "781f11fefff7a608",
+      "uid_short": "781f",
+      "issue_type": "Пульсометр недоступен / не работают кнопки ( верхняя и нижняя)",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3338"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0011",
+      "created_at": "2026-07-17T22:35:00",
+      "time": "22:35",
+      "uid": "f8b48cfeff29e748",
+      "uid_short": "f8b4",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3339"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0012",
+      "created_at": "2026-07-17T22:39:00",
+      "time": "22:39",
+      "uid": "dc0011fefff7a608",
+      "uid_short": "dc00",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3340"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0013",
+      "created_at": "2026-07-17T22:46:00",
+      "time": "22:46",
+      "uid": "501711fefff7a608",
+      "uid_short": "5017",
+      "issue_type": "При прикладывание пропуска, тухнет экран / скачет заряд на дисплее",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3341"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0014",
+      "created_at": "2026-07-17T22:54:00",
+      "time": "22:54",
+      "uid": "181111fefff7a608",
+      "uid_short": "1811",
+      "issue_type": "Разбит экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3342"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260717-0015",
+      "created_at": "2026-07-17T22:58:00",
+      "time": "22:58",
+      "uid": "88b98cfeff29e748",
+      "uid_short": "88b9",
+      "issue_type": "При снятии с зарядки тухнет экран",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3343"
+    }
+  ]
+}
