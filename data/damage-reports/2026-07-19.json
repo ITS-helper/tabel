@@ -1,0 +1,46 @@
+{
+  "date": "2026-07-19",
+  "title": "Повреждения от 19.07.2026",
+  "generated_at": "2026-07-20T12:50:58",
+  "counts": {
+    "telegram": 0,
+    "site": 3,
+    "total_devices": 3
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260719-0001",
+      "created_at": "2026-07-19T17:09:00",
+      "time": "17:09",
+      "uid": "80a98cfeff29e748",
+      "uid_short": "80a9",
+      "issue_type": "Неисправен аккумулятор. При снятии с зарядки отключаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3353"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260719-0002",
+      "created_at": "2026-07-19T17:15:00",
+      "time": "17:15",
+      "uid": "ec0c11fefff7a608",
+      "uid_short": "ec0c",
+      "issue_type": "Дисплей неисправен.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3354"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260719-0003",
+      "created_at": "2026-07-19T17:31:00",
+      "time": "17:31",
+      "uid": "c0ad8cfeff29e748",
+      "uid_short": "c0ad",
+      "issue_type": "Проблема с аккумулятором. При включении, работают около 3-5 секунд, после выключ…",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3355"
+    }
+  ]
+}
