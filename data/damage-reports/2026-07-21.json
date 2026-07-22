@@ -1,0 +1,156 @@
+{
+  "date": "2026-07-21",
+  "title": "Повреждения от 21.07.2026",
+  "generated_at": "2026-07-22T12:23:00",
+  "counts": {
+    "telegram": 0,
+    "site": 13,
+    "total_devices": 13
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0001",
+      "created_at": "2026-07-21T02:11:00",
+      "time": "02:11",
+      "uid": "60732dfeff958b0c",
+      "uid_short": "6073",
+      "issue_type": "Проблема с питанием. Показывает заряд 2% - 100%.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3364"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0002",
+      "created_at": "2026-07-21T02:16:00",
+      "time": "02:16",
+      "uid": "700c11fefff7a608",
+      "uid_short": "700c",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3365"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0003",
+      "created_at": "2026-07-21T15:15:00",
+      "time": "15:15",
+      "uid": "ec0311fefff7a608",
+      "uid_short": "ec03",
+      "issue_type": "Проблема с АКБ. Во время зарядки процент заряда скачет с 4% до 100% и обратно",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3366"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0004",
+      "created_at": "2026-07-21T15:28:00",
+      "time": "15:28",
+      "uid": "e00e11fefff7a608",
+      "uid_short": "e00e",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3367"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0005",
+      "created_at": "2026-07-21T15:34:00",
+      "time": "15:34",
+      "uid": "340811fefff7a608",
+      "uid_short": "3408",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3368"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0006",
+      "created_at": "2026-07-21T15:39:00",
+      "time": "15:39",
+      "uid": "bc1d11fefff7a608",
+      "uid_short": "bc1d",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3369"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0007",
+      "created_at": "2026-07-21T15:43:00",
+      "time": "15:43",
+      "uid": "b4fd10fefff7a608",
+      "uid_short": "b4fd",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3370"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0008",
+      "created_at": "2026-07-21T15:55:00",
+      "time": "15:55",
+      "uid": "0cfb10fefff7a608",
+      "uid_short": "0cfb",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3371"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0009",
+      "created_at": "2026-07-21T16:03:00",
+      "time": "16:03",
+      "uid": "28fe10fefff7a608",
+      "uid_short": "28fe",
+      "issue_type": "Постоянная вибрация после снятия с зарядки",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3372"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0010",
+      "created_at": "2026-07-21T16:14:00",
+      "time": "16:14",
+      "uid": "d80f11fefff7a608",
+      "uid_short": "d80f",
+      "issue_type": "Системная ошибка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3373"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0011",
+      "created_at": "2026-07-21T16:59:00",
+      "time": "16:59",
+      "uid": "842011fefff7a608",
+      "uid_short": "8420",
+      "issue_type": "Кварц сопроцессора недоступен, затерт серийный номер",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3374"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0012",
+      "created_at": "2026-07-21T21:19:00",
+      "time": "21:19",
+      "uid": "181d11fefff7a608",
+      "uid_short": "181d",
+      "issue_type": "Не работает дисплей, западает средняя кнопка.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3375"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260721-0013",
+      "created_at": "2026-07-21T21:21:00",
+      "time": "21:21",
+      "uid": "78fa10fefff7a608",
+      "uid_short": "78fa",
+      "issue_type": "Вечный перезапуск.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3376"
+    }
+  ]
+}
