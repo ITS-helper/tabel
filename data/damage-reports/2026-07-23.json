@@ -1,0 +1,68 @@
+{
+  "date": "2026-07-23",
+  "title": "Повреждения от 23.07.2026",
+  "generated_at": "2026-07-24T12:15:35",
+  "counts": {
+    "telegram": 0,
+    "site": 5,
+    "total_devices": 5
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260723-0001",
+      "created_at": "2026-07-23T23:25:00",
+      "time": "23:25",
+      "uid": "6c2111fefff7a608",
+      "uid_short": "6c21",
+      "issue_type": "Не включаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3385"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260723-0002",
+      "created_at": "2026-07-23T23:28:00",
+      "time": "23:28",
+      "uid": "400911fefff7a608",
+      "uid_short": "4009",
+      "issue_type": "Половина дисплея сломана",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3386"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260723-0003",
+      "created_at": "2026-07-23T23:31:00",
+      "time": "23:31",
+      "uid": "801711fefff7a608",
+      "uid_short": "8017",
+      "issue_type": "Часть дисплея сломана",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3387"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260723-0004",
+      "created_at": "2026-07-23T23:43:00",
+      "time": "23:43",
+      "uid": "a8fd10fefff7a608",
+      "uid_short": "a8fd",
+      "issue_type": "Не работает средняя кнопка, выкл после снятия с зарядной станции",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3388"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260723-0005",
+      "created_at": "2026-07-23T23:47:00",
+      "time": "23:47",
+      "uid": "e01d11fefff7a608",
+      "uid_short": "e01d",
+      "issue_type": "Не вкл",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3389"
+    }
+  ]
+}
