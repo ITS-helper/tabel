@@ -1,0 +1,123 @@
+{
+  "date": "2026-07-25",
+  "title": "Повреждения от 25.07.2026",
+  "generated_at": "2026-07-26T12:08:25",
+  "counts": {
+    "telegram": 0,
+    "site": 10,
+    "total_devices": 10
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0001",
+      "created_at": "2026-07-25T15:21:00",
+      "time": "15:21",
+      "uid": "c80e11fefff7a608",
+      "uid_short": "c80e",
+      "issue_type": "Датчик надетости недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3401"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0002",
+      "created_at": "2026-07-25T15:25:00",
+      "time": "15:25",
+      "uid": "4cac8cfeff29e748",
+      "uid_short": "4cac",
+      "issue_type": "Неисправность акб. Отключается при снятии со стенда",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3402"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0003",
+      "created_at": "2026-07-25T15:26:00",
+      "time": "15:26",
+      "uid": "a80511fefff7a608",
+      "uid_short": "a805",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3403"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0004",
+      "created_at": "2026-07-25T15:30:00",
+      "time": "15:30",
+      "uid": "440f11fefff7a608",
+      "uid_short": "440f",
+      "issue_type": "Бесконечная перезагрузка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3404"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0005",
+      "created_at": "2026-07-25T15:53:00",
+      "time": "15:53",
+      "uid": "a40011fefff7a608",
+      "uid_short": "a400",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3405"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0006",
+      "created_at": "2026-07-25T15:59:00",
+      "time": "15:59",
+      "uid": "78bd8cfeff29e748",
+      "uid_short": "78bd",
+      "issue_type": "Проблема с АКБ, при отключении от зарядки выключается",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3406"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0007",
+      "created_at": "2026-07-25T16:21:00",
+      "time": "16:21",
+      "uid": "e83150feffbf1388",
+      "uid_short": "e831",
+      "issue_type": "Ошибка выгрузки смены, отправляемый файл пустой",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3407"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0008",
+      "created_at": "2026-07-25T16:28:00",
+      "time": "16:28",
+      "uid": "80fc10fefff7a608",
+      "uid_short": "80fc",
+      "issue_type": "Пульсометр недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3408"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0009",
+      "created_at": "2026-07-25T16:35:00",
+      "time": "16:35",
+      "uid": "40bd8cfeff29e748",
+      "uid_short": "40bd",
+      "issue_type": "Отклеился дисплей, проблема с АКБ (при отключении зарядки выключается)",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3409"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260725-0010",
+      "created_at": "2026-07-25T16:39:00",
+      "time": "16:39",
+      "uid": "341311fefff7a608",
+      "uid_short": "3413",
+      "issue_type": "Бесконечный перезапуск",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3410"
+    }
+  ]
+}
