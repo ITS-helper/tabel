@@ -1,0 +1,123 @@
+{
+  "date": "2026-07-27",
+  "title": "Повреждения от 27.07.2026",
+  "generated_at": "2026-07-28T12:31:38",
+  "counts": {
+    "telegram": 0,
+    "site": 10,
+    "total_devices": 10
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0001",
+      "created_at": "2026-07-27T15:42:00",
+      "time": "15:42",
+      "uid": "501811fefff7a608",
+      "uid_short": "5018",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3427"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0002",
+      "created_at": "2026-07-27T15:45:00",
+      "time": "15:45",
+      "uid": "d41911fefff7a608",
+      "uid_short": "d419",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3428"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0003",
+      "created_at": "2026-07-27T15:47:00",
+      "time": "15:47",
+      "uid": "882c72fefff6b870",
+      "uid_short": "882c",
+      "issue_type": "Корпус вскрыт. Экран не работает.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3429"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0004",
+      "created_at": "2026-07-27T15:50:00",
+      "time": "15:50",
+      "uid": "780811fefff7a608",
+      "uid_short": "7808",
+      "issue_type": "При снятии с док станции выключаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3430"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0005",
+      "created_at": "2026-07-27T16:00:00",
+      "time": "16:00",
+      "uid": "f00711fefff7a608",
+      "uid_short": "f007",
+      "issue_type": "Бесконечная перезагрузка. Не включаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3431"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0006",
+      "created_at": "2026-07-27T22:13:00",
+      "time": "22:13",
+      "uid": "08b98cfeff29e748",
+      "uid_short": "08b9",
+      "issue_type": "АКБ, заряд со 100% на 0%",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3432"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0007",
+      "created_at": "2026-07-27T22:20:00",
+      "time": "22:20",
+      "uid": "3cfd10fefff7a608",
+      "uid_short": "3cfd",
+      "issue_type": "АКБ, со 100% на 0%",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3433"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0008",
+      "created_at": "2026-07-27T22:22:00",
+      "time": "22:22",
+      "uid": "481411fefff7a608",
+      "uid_short": "4814",
+      "issue_type": "Сломана задняя крышка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3434"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0009",
+      "created_at": "2026-07-27T22:29:00",
+      "time": "22:29",
+      "uid": "88ba8cfeff29e748",
+      "uid_short": "88ba",
+      "issue_type": "АКБ",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3435"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260727-0010",
+      "created_at": "2026-07-27T22:34:00",
+      "time": "22:34",
+      "uid": "c41d11fefff7a608",
+      "uid_short": "c41d",
+      "issue_type": "Сломана, крышка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3436"
+    }
+  ]
+}
