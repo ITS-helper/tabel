@@ -1,0 +1,123 @@
+{
+  "date": "2026-07-28",
+  "title": "Повреждения от 28.07.2026",
+  "generated_at": "2026-07-29T12:33:19",
+  "counts": {
+    "telegram": 0,
+    "site": 10,
+    "total_devices": 10
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0001",
+      "created_at": "2026-07-28T13:23:00",
+      "time": "13:23",
+      "uid": "40ad8cfeff29e748",
+      "uid_short": "40ad",
+      "issue_type": "Умер Аккумулятор",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3437"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0002",
+      "created_at": "2026-07-28T13:24:00",
+      "time": "13:24",
+      "uid": "20b68cfeff29e748",
+      "uid_short": "20b6",
+      "issue_type": "Не пишут данные о смене",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3438"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0003",
+      "created_at": "2026-07-28T13:25:00",
+      "time": "13:25",
+      "uid": "ccaf8cfeff29e748",
+      "uid_short": "ccaf",
+      "issue_type": "Умер Аккумулятор",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3439"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0004",
+      "created_at": "2026-07-28T13:25:00",
+      "time": "13:25",
+      "uid": "74b18cfeff29e748",
+      "uid_short": "74b1",
+      "issue_type": "Умер Аккумулятор",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3440"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0005",
+      "created_at": "2026-07-28T16:22:00",
+      "time": "16:22",
+      "uid": "9c1911fefff7a608",
+      "uid_short": "9c19",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3441"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0006",
+      "created_at": "2026-07-28T16:24:00",
+      "time": "16:24",
+      "uid": "b80c11fefff7a608",
+      "uid_short": "b80c",
+      "issue_type": "Залипла центральная кнопка включения.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3442"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0007",
+      "created_at": "2026-07-28T16:26:00",
+      "time": "16:26",
+      "uid": "8cfb10fefff7a608",
+      "uid_short": "8cfb",
+      "issue_type": "Проблема с АКБ. Не включаются часы при зажатии центральной кнопки.",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3443"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0008",
+      "created_at": "2026-07-28T16:28:00",
+      "time": "16:28",
+      "uid": "c00511fefff7a608",
+      "uid_short": "c005",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3444"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0009",
+      "created_at": "2026-07-28T16:31:00",
+      "time": "16:31",
+      "uid": "280d11fefff7a608",
+      "uid_short": "280d",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3445"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260728-0010",
+      "created_at": "2026-07-28T23:54:00",
+      "time": "23:54",
+      "uid": "501811fefff7a608",
+      "uid_short": "5018",
+      "issue_type": "Кварц сопроцессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3446"
+    }
+  ]
+}
