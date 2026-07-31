@@ -1,0 +1,277 @@
+{
+  "date": "2026-07-30",
+  "title": "Повреждения от 30.07.2026",
+  "generated_at": "2026-07-31T12:38:07",
+  "counts": {
+    "telegram": 0,
+    "site": 24,
+    "total_devices": 24
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0001",
+      "created_at": "2026-07-30T10:25:00",
+      "time": "10:25",
+      "uid": "c81411fefff7a608",
+      "uid_short": "c814",
+      "issue_type": "Дисплей неисправен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3461"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0002",
+      "created_at": "2026-07-30T10:27:00",
+      "time": "10:27",
+      "uid": "64fb10fefff7a608",
+      "uid_short": "64fb",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3462"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0003",
+      "created_at": "2026-07-30T10:31:00",
+      "time": "10:31",
+      "uid": "5cff10fefff7a608",
+      "uid_short": "5cff",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3463"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0004",
+      "created_at": "2026-07-30T10:37:00",
+      "time": "10:37",
+      "uid": "f01811fefff7a608",
+      "uid_short": "f018",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3464"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0005",
+      "created_at": "2026-07-30T10:38:00",
+      "time": "10:38",
+      "uid": "64fa10fefff7a608",
+      "uid_short": "64fa",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3465"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0006",
+      "created_at": "2026-07-30T10:41:00",
+      "time": "10:41",
+      "uid": "f41011fefff7a608",
+      "uid_short": "f410",
+      "issue_type": "Кварц сопроцессора недоступен + заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3466"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0007",
+      "created_at": "2026-07-30T10:46:00",
+      "time": "10:46",
+      "uid": "081611fefff7a608",
+      "uid_short": "0816",
+      "issue_type": "Дисплей неисправен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3467"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0008",
+      "created_at": "2026-07-30T10:49:00",
+      "time": "10:49",
+      "uid": "901411fefff7a608",
+      "uid_short": "9014",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3468"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0009",
+      "created_at": "2026-07-30T10:53:00",
+      "time": "10:53",
+      "uid": "2ca78cfeff29e748",
+      "uid_short": "2ca7",
+      "issue_type": "Отключается при запуске смены",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3469"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0010",
+      "created_at": "2026-07-30T14:10:00",
+      "time": "14:10",
+      "uid": "94fb10fefff7a608",
+      "uid_short": "94fb",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3470"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0011",
+      "created_at": "2026-07-30T14:13:00",
+      "time": "14:13",
+      "uid": "442211fefff7a608",
+      "uid_short": "4422",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3471"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0012",
+      "created_at": "2026-07-30T18:23:00",
+      "time": "18:23",
+      "uid": "ecfe10fefff7a608",
+      "uid_short": "ecfe",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3472"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0013",
+      "created_at": "2026-07-30T18:28:00",
+      "time": "18:28",
+      "uid": "ecfe10fefff7a608",
+      "uid_short": "ecfe",
+      "issue_type": "Заявка на перепайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3473"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0014",
+      "created_at": "2026-07-30T18:30:00",
+      "time": "18:30",
+      "uid": "980a11fefff7a608",
+      "uid_short": "980a",
+      "issue_type": "Дисплей неисправен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3474"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0015",
+      "created_at": "2026-07-30T22:58:00",
+      "time": "22:58",
+      "uid": "ec0511fefff7a608",
+      "uid_short": "ec05",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3475"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0016",
+      "created_at": "2026-07-30T23:03:00",
+      "time": "23:03",
+      "uid": "341011fefff7a608",
+      "uid_short": "3410",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3476"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0017",
+      "created_at": "2026-07-30T23:07:00",
+      "time": "23:07",
+      "uid": "200711fefff7a608",
+      "uid_short": "2007",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3477"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0018",
+      "created_at": "2026-07-30T23:09:00",
+      "time": "23:09",
+      "uid": "181811fefff7a608",
+      "uid_short": "1818",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3478"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0019",
+      "created_at": "2026-07-30T23:11:00",
+      "time": "23:11",
+      "uid": "a81e11fefff7a608",
+      "uid_short": "a81e",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3479"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0020",
+      "created_at": "2026-07-30T23:20:00",
+      "time": "23:20",
+      "uid": "bc1511fefff7a608",
+      "uid_short": "bc15",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3480"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0021",
+      "created_at": "2026-07-30T23:24:00",
+      "time": "23:24",
+      "uid": "101511fefff7a608",
+      "uid_short": "1015",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3481"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0022",
+      "created_at": "2026-07-30T23:34:00",
+      "time": "23:34",
+      "uid": "d01011fefff7a608",
+      "uid_short": "d010",
+      "issue_type": "На пропайку",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3482"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0023",
+      "created_at": "2026-07-30T23:42:00",
+      "time": "23:42",
+      "uid": "900f11fefff7a608",
+      "uid_short": "900f",
+      "issue_type": "Кварц процессор недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3483"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260730-0024",
+      "created_at": "2026-07-30T23:45:00",
+      "time": "23:45",
+      "uid": "1c1611fefff7a608",
+      "uid_short": "1c16",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3484"
+    }
+  ]
+}
