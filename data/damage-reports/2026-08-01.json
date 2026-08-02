@@ -1,0 +1,101 @@
+{
+  "date": "2026-08-01",
+  "title": "Повреждения от 01.08.2026",
+  "generated_at": "2026-08-02T12:05:23",
+  "counts": {
+    "telegram": 0,
+    "site": 8,
+    "total_devices": 8
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0001",
+      "created_at": "2026-08-01T13:55:00",
+      "time": "13:55",
+      "uid": "601f11fefff7a608",
+      "uid_short": "601f",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3547"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0002",
+      "created_at": "2026-08-01T13:58:00",
+      "time": "13:58",
+      "uid": "381811fefff7a608",
+      "uid_short": "3818",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3548"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0003",
+      "created_at": "2026-08-01T14:05:00",
+      "time": "14:05",
+      "uid": "801f11fefff7a608",
+      "uid_short": "801f",
+      "issue_type": "Проблема с АКБ. На зарядке процент заряда скачет, при снятии с зарядки зарядки у…",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3549"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0004",
+      "created_at": "2026-08-01T14:09:00",
+      "time": "14:09",
+      "uid": "781b11fefff7a608",
+      "uid_short": "781b",
+      "issue_type": "Кварц сопроцессора недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3550"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0005",
+      "created_at": "2026-08-01T21:54:00",
+      "time": "21:54",
+      "uid": "f82011fefff7a608",
+      "uid_short": "f820",
+      "issue_type": "Сломана крышка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3551"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0006",
+      "created_at": "2026-08-01T22:02:00",
+      "time": "22:02",
+      "uid": "f82011fefff7a608",
+      "uid_short": "f820",
+      "issue_type": "Сломана крышка",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3552"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0007",
+      "created_at": "2026-08-01T22:03:00",
+      "time": "22:03",
+      "uid": "3c0111fefff7a608",
+      "uid_short": "3c01",
+      "issue_type": "Дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3553"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260801-0008",
+      "created_at": "2026-08-01T22:09:00",
+      "time": "22:09",
+      "uid": "a41311fefff7a608",
+      "uid_short": "a413",
+      "issue_type": "Flash недоступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3554"
+    }
+  ]
+}
