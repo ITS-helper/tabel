@@ -1,0 +1,79 @@
+{
+  "date": "2026-08-02",
+  "title": "Повреждения от 02.08.2026",
+  "generated_at": "2026-08-03T13:33:41",
+  "counts": {
+    "telegram": 0,
+    "site": 6,
+    "total_devices": 6
+  },
+  "telegram": [],
+  "site": [
+    {
+      "source": "site",
+      "external_id": "SR-20260802-0001",
+      "created_at": "2026-08-02T21:17:00",
+      "time": "21:17",
+      "uid": "340a11fefff7a608",
+      "uid_short": "340a",
+      "issue_type": "Не работает дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3555"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260802-0002",
+      "created_at": "2026-08-02T21:18:00",
+      "time": "21:18",
+      "uid": "7c0911fefff7a608",
+      "uid_short": "7c09",
+      "issue_type": "Кварц процессор не доступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3556"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260802-0003",
+      "created_at": "2026-08-02T21:22:00",
+      "time": "21:22",
+      "uid": "600811fefff7a608",
+      "uid_short": "6008",
+      "issue_type": "АКБ, часы выключаются",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3557"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260802-0004",
+      "created_at": "2026-08-02T21:24:00",
+      "time": "21:24",
+      "uid": "000c11fefff7a608",
+      "uid_short": "000c",
+      "issue_type": "Не работает дисплей, намеренно затерли (W2)",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3558"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260802-0005",
+      "created_at": "2026-08-02T21:28:00",
+      "time": "21:28",
+      "uid": "8c1111fefff7a608",
+      "uid_short": "8c11",
+      "issue_type": "Кварц сопроцессор не доступен",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3559"
+    },
+    {
+      "source": "site",
+      "external_id": "SR-20260802-0006",
+      "created_at": "2026-08-02T21:32:00",
+      "time": "21:32",
+      "uid": "380711fefff7a608",
+      "uid_short": "3807",
+      "issue_type": "Дисплей",
+      "employee_number": "",
+      "source_url": "https://device.workwatch.pro/views/service_requests/view.php?id=3560"
+    }
+  ]
+}

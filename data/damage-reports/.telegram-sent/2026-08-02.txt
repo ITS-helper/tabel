@@ -1,4 +1,4 @@
 date=2026-08-02
-status=claimed
+status=sent
 run_id=30806014291
-claimed_at=2026-08-03T10:33:38Z
+sent_at=2026-08-03T10:33:41Z
